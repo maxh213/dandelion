@@ -1,0 +1,43 @@
+[git]
+base = "origin/master"
+
+[agent]
+backend = "agy"
+model = "gemini-3.1-pro-high"
+effort = "high"
+
+# [practices]
+# enabled = true
+
+[perf]
+setup = "npm ci --silent"
+
+[ts]
+root = "."
+source = "src"
+tsconfig = "tsconfig.json"
+crap_max = 4
+runner = "vitest"
+
+[sonar]
+project_key = "allowance"
+project_name = "allowance"
+exclusions = []
+
+[deadcode]
+min_confidence = 60
+ts_kinds = ["files", "exports", "types"]
+
+[docs]
+files = ["README.md"]
+routes_file = "README.md"
+sources = ["src"]
+path_prefixes = ["src/", "tasks/", "qa/"]
+ignore_env = []
+
+[comments]
+paths = ["src"]
+
+[qa]
+cmd = "node qa/e2e.mjs"
+cwd = "."
