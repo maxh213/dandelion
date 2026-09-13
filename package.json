@@ -1,0 +1,21 @@
+{
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
+    "@types/node": "^26.5.1",
+    "@vitest/coverage-v8": "^5.0.0",
+    "dependency-cruiser": "^18.2.0",
+    "eslint": "^10.10.0",
+    "knip": "^6.35.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.0"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "vitest run",
+    "qa": "node qa/e2e.mjs"
+  }
+}

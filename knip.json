@@ -1,0 +1,5 @@
+{
+  "entry": ["qa/**/*.mjs", "src/**/*.test.ts"],
+  "project": ["src/**/*.ts", "qa/**/*.mjs"],
+  "ignoreDependencies": ["dependency-cruiser"]
+}
