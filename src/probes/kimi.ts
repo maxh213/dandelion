@@ -94,7 +94,7 @@ function fieldOf(value: unknown, key: string): unknown {
 }
 
 function isCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  return Number.isFinite(value) && Number(value) >= 0;
 }
 
 function percentOf(entry: unknown): number | undefined {

@@ -1,3 +1,6 @@
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { runApp, realCommandRunner, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, LaunchedProcess, Launcher, ProbeIo } from '../probes/index.ts';
@@ -295,8 +298,33 @@ describe('real kimi launcher', () => {
     const child = await launchNode('console.log("ready"); setInterval(() => {}, 1000)');
     await outputContaining(child, 'ready');
     expect(child.hasExited()).toBe(false);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     await child.stop();
     expect(child.hasExited()).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('can be stopped again after its log dir is gone', async () => {
+    const child = await launchNode('');
+    await child.stop();
+    await expect(child.stop()).resolves.toBeUndefined();
+  });
+
+  it('leaves no log dir and no open descriptor when the binary is missing', async () => {
+    const openDescriptors = () => readdirSync('/proc/self/fd').length;
+    const scratch = mkdtempSync(join(tmpdir(), 'allowance-test-'));
+    vi.stubEnv('TMPDIR', scratch);
+    try {
+      await realIo.launcher.launch('thiscommanddoesnotexist', []);
+      const before = openDescriptors();
+      await realIo.launcher.launch('thiscommanddoesnotexist', []);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(openDescriptors()).toBe(before);
+      expect(readdirSync(scratch)).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(scratch, { recursive: true, force: true });
+    }
   });
 
   it('kills a child that ignores SIGTERM after 5 seconds', async () => {
