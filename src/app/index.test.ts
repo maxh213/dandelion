@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { runApp, realCommandRunner, realIo } from './index.ts';
+import { runApp, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
@@ -874,28 +874,28 @@ describe('wiring', () => {
   });
 
   it('realCommandRunner executes commands successfully', async () => {
-    const result = await realCommandRunner.run('node', ['-e', 'console.log("hello")'], 2000);
+    const result = await realIo.runner.run('node', ['-e', 'console.log("hello")'], 2000);
     expect(result.stdout).toContain('hello');
     expect(result.failure).toBeUndefined();
   });
 
   it('realCommandRunner reports a missing binary', async () => {
-    const result = await realCommandRunner.run('thiscommanddoesnotexist', [], 2000);
+    const result = await realIo.runner.run('thiscommanddoesnotexist', [], 2000);
     expect(result.failure).toBe('missing');
   });
 
   it('realCommandRunner reports a timeout', async () => {
-    const result = await realCommandRunner.run('node', ['-e', 'setTimeout(() => {}, 5000)'], 100);
+    const result = await realIo.runner.run('node', ['-e', 'setTimeout(() => {}, 5000)'], 100);
     expect(result.failure).toBe('timeout');
   });
 
   it('realCommandRunner reports a non-zero exit', async () => {
-    const result = await realCommandRunner.run('node', ['-e', 'process.exit(2)'], 2000);
+    const result = await realIo.runner.run('node', ['-e', 'process.exit(2)'], 2000);
     expect(result.failure).toBe('exit');
   });
 
   it('realCommandRunner reports a self-inflicted SIGTERM as an exit', async () => {
-    const result = await realCommandRunner.run('node', ['-e', 'process.kill(process.pid, "SIGTERM")'], 2000);
+    const result = await realIo.runner.run('node', ['-e', 'process.kill(process.pid, "SIGTERM")'], 2000);
     expect(result.failure).toBe('exit');
   });
 });

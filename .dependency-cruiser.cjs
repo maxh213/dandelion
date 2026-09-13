@@ -38,6 +38,13 @@ module.exports = {
       to: { path: '^src/probes/' }
     },
     {
+      name: 'cli-skeleton-run-only-by-index',
+      severity: 'error',
+      comment: 'Probe definitions and codex take only types from cli.ts (CliProbe, the CommandRunner port); only probes/index.ts runs probeCli',
+      from: { path: '^src/probes/', pathNot: ['^src/probes/index\\.ts$', '\\.test\\.ts$'] },
+      to: { path: '^src/probes/cli\\.ts$', dependencyTypesNot: ['type-only'] }
+    },
+    {
       name: 'app-imported-only-by-main',
       severity: 'error',
       comment: 'The app composes probes, render and the real IO; only the main entry and tests reach it',
@@ -54,9 +61,9 @@ module.exports = {
     {
       name: 'io-only-in-app',
       severity: 'error',
-      comment: 'Filesystem, OS and network modules live only at the app edge, behind the injected Launcher and Fetcher',
+      comment: 'Filesystem, OS, network and stream modules live only at the app edge, behind the injected Launcher, Fetcher, FileReader and RpcSpawner; probes see child stdout only as lines',
       from: { path: '^src/', pathNot: ['^src/app/index\\.ts$', '\\.test\\.ts$'] },
-      to: { path: '^(node:)?(fs|fs/promises|os|net|http|https|http2|dgram|dns|tls)$' }
+      to: { path: '^(node:)?(fs|fs/promises|os|net|http|https|http2|dgram|dns|tls|readline|readline/promises|stream|stream/promises)$' }
     },
     {
       name: 'main-is-the-entry',

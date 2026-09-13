@@ -20,7 +20,7 @@ import {
 } from '../probes/index.ts';
 import { renderDashboard } from '../render/index.ts';
 
-export type { CommandRunner, ProbeIo } from '../probes/index.ts';
+export type { ProbeIo } from '../probes/index.ts';
 
 const KILL_GRACE_MS = 5000;
 
@@ -39,7 +39,7 @@ function toRunnerResult(error: ExecException | null, stdout: string, stderr: str
   return { stdout, stderr, failure: failureOf(error) };
 }
 
-export const realCommandRunner: CommandRunner = {
+const realCommandRunner: CommandRunner = {
   run(command, args, timeoutMs) {
     return new Promise((resolve) => {
       execFile(command, args, { timeout: timeoutMs }, (error, stdout, stderr) => {
