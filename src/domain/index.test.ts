@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatCountdown } from './helpers.ts';
+import { formatCountdown } from './index.ts';
 
 describe('formatCountdown', () => {
   it('formats days and hours', () => {

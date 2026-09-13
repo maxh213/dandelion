@@ -1,4 +1,4 @@
-import type { Balance, ProviderUsage } from '../domain/types.ts';
+import type { Balance, ProviderUsage } from '../domain/index.ts';
 
 const WIDTH = 72;
 const GAUGE_CELLS = 20;

@@ -1,6 +1,8 @@
 import { execFile, type ExecException } from 'node:child_process';
-import { probeKilo, type CommandRunner, type CommandRunnerResult } from '../probes/kilo.ts';
-import { renderDashboard } from '../render/terminal.ts';
+import { probeProviders, type CommandRunner, type CommandRunnerResult } from '../probes/index.ts';
+import { renderDashboard } from '../render/index.ts';
+
+export type { CommandRunner } from '../probes/index.ts';
 
 function exitCode(error: ExecException): number {
   return typeof error.code === 'number' ? error.code : 1;
@@ -30,7 +32,7 @@ export async function runApp(
   env: Record<string, string | undefined>,
   now: string
 ): Promise<string> {
-  const kiloUsage = await probeKilo(runner, now, env);
+  const usages = await probeProviders(runner, now, env);
   const noColor = env['NO_COLOR'] !== undefined;
-  return renderDashboard([kiloUsage], noColor, now);
+  return renderDashboard(usages, noColor, now);
 }

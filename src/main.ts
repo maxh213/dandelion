@@ -1,7 +1,5 @@
-import { runApp, RealCommandRunner } from './app/wiring.ts';
+import { runApp, RealCommandRunner, type CommandRunner } from './app/index.ts';
 import { fileURLToPath } from 'node:url';
-
-type CommandRunner = Parameters<typeof runApp>[0];
 
 export async function main(
   runner: CommandRunner,

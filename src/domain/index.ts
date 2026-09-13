@@ -1,3 +1,26 @@
+type UsageWindow = {
+  label: string;
+  usedPct: number;
+  resetsAt?: string;
+};
+
+export type Balance = {
+  amount: number;
+  currency: string;
+  reference?: number;
+};
+
+export type ProviderUsage = {
+  id: string;
+  displayName: string;
+  planLabel?: string;
+  windows: UsageWindow[];
+  balance?: Balance;
+  fetchedAt: string;
+  status: 'ok' | 'unavailable' | 'error';
+  reason?: string;
+};
+
 const MS_PER_MINUTE = 60 * 1000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 

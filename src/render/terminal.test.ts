@@ -8,7 +8,7 @@ import {
   renderPanelUnavailable,
   renderDashboard
 } from './terminal.ts';
-import type { ProviderUsage } from '../domain/types.ts';
+import type { ProviderUsage } from '../domain/index.ts';
 
 describe('terminal renderer', () => {
   it('renders banner', () => {

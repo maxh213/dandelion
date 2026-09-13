@@ -1,16 +1,5 @@
-import type { ProviderUsage, Balance } from '../domain/types.ts';
-
-export interface CommandRunnerResult {
-  code: number;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-  error?: Error;
-}
-
-export interface CommandRunner {
-  run(command: string, args: string[], timeoutMs: number): Promise<CommandRunnerResult>;
-}
+import type { ProviderUsage, Balance } from '../domain/index.ts';
+import type { CommandRunner, CommandRunnerResult } from './runner.ts';
 
 const PROFILE_TIMEOUT_MS = 20000;
 const DEFAULT_REFERENCE = 20;

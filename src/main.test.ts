@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
-import type { CommandRunner } from './probes/kilo.ts';
+import type { CommandRunner } from './app/index.ts';
 
-vi.mock('./app/wiring.ts', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./app/wiring.ts')>();
+vi.mock('./app/index.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./app/index.ts')>();
   class StubRunner implements CommandRunner {
     async run() {
       return { code: 0, stdout: 'Balance: $14.15', stderr: '', timedOut: false };

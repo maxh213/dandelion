@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { runApp, RealCommandRunner } from './wiring.ts';
-import type { CommandRunner, CommandRunnerResult } from '../probes/kilo.ts';
+import { runApp, RealCommandRunner } from './index.ts';
+import type { CommandRunner, CommandRunnerResult } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';

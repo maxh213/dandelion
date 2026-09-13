@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { probeKilo, type CommandRunner, type CommandRunnerResult } from './kilo.ts';
+import { probeKilo } from './kilo.ts';
+import type { CommandRunner, CommandRunnerResult } from './runner.ts';
 
 class MockRunner implements CommandRunner {
   result: CommandRunnerResult;
