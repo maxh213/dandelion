@@ -12,41 +12,40 @@ export interface CommandRunner {
   run(command: string, args: string[], timeoutMs: number): Promise<CommandRunnerResult>;
 }
 
-function parseReference(refEnv: string | undefined): number | undefined {
-  if (refEnv === undefined) return 20;
-  if (refEnv === '') return undefined;
-  return parseFloat(refEnv);
+const PROFILE_TIMEOUT_MS = 20000;
+const DEFAULT_REFERENCE = 20;
+const BALANCE_LINE = /Balance:\s*\$([0-9.]+)/;
+
+function parseReference(rawReference: string | undefined): number | undefined {
+  if (rawReference === undefined) return DEFAULT_REFERENCE;
+  if (rawReference === '') return undefined;
+  return Number.parseFloat(rawReference);
 }
 
-function isEnoent(error?: Error): boolean {
+function isMissingBinary(error?: Error): boolean {
   if (!error) return false;
   return error.message.includes('ENOENT');
 }
 
 function hasFailed(result: CommandRunnerResult): boolean {
-  if (result.code !== 0) return true;
-  if (result.error) return true;
-  return false;
+  return result.code !== 0 || result.error !== undefined;
 }
 
-function checkRunnerError(result: CommandRunnerResult): string | undefined {
-  if (isEnoent(result.error)) return 'kilo CLI not found in PATH';
+function runFailureReason(result: CommandRunnerResult): string | undefined {
+  if (isMissingBinary(result.error)) return 'kilo CLI not found in PATH';
   if (result.timedOut) return 'Command timed out after 20s';
   if (hasFailed(result)) return 'Command failed or timed out';
   return undefined;
 }
 
-function parseBalance(stdout: string, refEnv: string | undefined): { balance?: Balance; reason?: string } {
-  const match = stdout.match(/Balance:\s*\$([0-9.]+)/);
-  if (!match) return { reason: 'Could not parse balance from output' };
+function parseBalance(stdout: string, rawReference: string | undefined): Balance | undefined {
+  const match = BALANCE_LINE.exec(stdout);
+  if (!match) return undefined;
 
-  const amount = parseFloat(match[1]);
-  const reference = parseReference(refEnv);
-
-  const balance: Balance = { amount, currency: '$' };
+  const balance: Balance = { amount: Number.parseFloat(match[1]), currency: '$' };
+  const reference = parseReference(rawReference);
   if (reference !== undefined) balance.reference = reference;
-
-  return { balance };
+  return balance;
 }
 
 export async function probeKilo(
@@ -54,18 +53,14 @@ export async function probeKilo(
   now: string,
   env: Record<string, string | undefined>
 ): Promise<ProviderUsage> {
-  const result = await runner.run('kilo', ['profile'], 20000);
-  const baseUsage = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: now };
+  const result = await runner.run('kilo', ['profile'], PROFILE_TIMEOUT_MS);
+  const usage = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: now };
 
-  const errReason = checkRunnerError(result);
-  if (errReason) {
-    return { ...baseUsage, status: 'unavailable', reason: errReason };
-  }
+  const failure = runFailureReason(result);
+  if (failure) return { ...usage, status: 'unavailable', reason: failure };
 
-  const { balance, reason } = parseBalance(result.stdout, env['ALLOWANCE_KILO_REFERENCE']);
-  if (reason) {
-    return { ...baseUsage, status: 'unavailable', reason };
-  }
+  const balance = parseBalance(result.stdout, env['ALLOWANCE_KILO_REFERENCE']);
+  if (!balance) return { ...usage, status: 'unavailable', reason: 'Could not parse balance from output' };
 
-  return { ...baseUsage, balance, status: 'ok' };
+  return { ...usage, balance, status: 'ok' };
 }

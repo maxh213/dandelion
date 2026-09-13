@@ -1,4 +1,23 @@
-import type { ProviderUsage } from '../domain/types.ts';
+import type { Balance, ProviderUsage } from '../domain/types.ts';
+
+const WIDTH = 72;
+const GAUGE_CELLS = 20;
+const BOLD = '\x1b[1m';
+const DIM = '\x1b[90m';
+const RESET = '\x1b[0m';
+
+function styled(text: string, code: string, noColor: boolean): string {
+  if (noColor) return text;
+  return `${code}${text}${RESET}`;
+}
+
+function dim(text: string, noColor: boolean): string {
+  return styled(text, DIM, noColor);
+}
+
+function repeatChar(char: string, count: number): string {
+  return char.repeat(Math.max(0, count));
+}
 
 function clockTime(instant: string): string {
   return `${instant.slice(11, 19)}Z`;
@@ -7,104 +26,67 @@ function clockTime(instant: string): string {
 export function renderBanner(instant: string, noColor: boolean): string {
   const title = 'ALLOWANCE';
   const time = clockTime(instant);
-  const spaces = 72 - title.length - time.length;
-  const line = `${title}${' '.repeat(Math.max(0, spaces))}${time}`;
-  if (noColor) return line;
-  return `\x1b[1m${line}\x1b[0m`;
-}
-
-function repeatChar(char: string, count: number): string {
-  let res = '';
-  for (let i = 0; i < count; i++) {
-    res += char;
-  }
-  return res;
-}
-
-function getRuleChar(noColor: boolean): string {
-  if (noColor) return '=';
-  return '━';
-}
-
-function dim(text: string, noColor: boolean): string {
-  if (noColor) return text;
-  return `\x1b[90m${text}\x1b[0m`;
+  const gap = repeatChar(' ', WIDTH - title.length - time.length);
+  return styled(`${title}${gap}${time}`, BOLD, noColor);
 }
 
 function plainRule(noColor: boolean): string {
-  return repeatChar(getRuleChar(noColor), 72);
+  return repeatChar(noColor ? '=' : '━', WIDTH);
 }
 
 export function renderRule(noColor: boolean): string {
   return dim(plainRule(noColor), noColor);
 }
 
+function gaugeCells(filledCells: number, noColor: boolean): string {
+  const [fillChar, emptyChar] = noColor ? ['#', '-'] : ['█', '░'];
+  return repeatChar(fillChar, filledCells) + repeatChar(emptyChar, GAUGE_CELLS - filledCells);
+}
+
 export function renderGauge(amount: number, reference: number, noColor: boolean): string {
-  const filledCells = Math.min(20, Math.round((amount / reference) * 20));
-  const emptyCells = 20 - filledCells;
-  
-  const fillChar = noColor ? '#' : '█';
-  const emptyChar = noColor ? '-' : '░';
-  
-  const filled = repeatChar(fillChar, filledCells);
-  const empty = repeatChar(emptyChar, emptyCells);
-  
-  return `${filled}${empty}`;
+  const filledCells = Math.min(GAUGE_CELLS, Math.round((amount / reference) * GAUGE_CELLS));
+  return gaugeCells(filledCells, noColor);
 }
 
 export function renderEmptyGauge(noColor: boolean): string {
-  const emptyChar = noColor ? '-' : '░';
-  return repeatChar(emptyChar, 20);
+  return gaugeCells(0, noColor);
 }
 
-function formatBalance(amount: number, currency: string): string {
-  return `${currency}${amount.toFixed(2)}`;
+function balanceGauge(balance: Balance, noColor: boolean): string {
+  if (balance.reference === undefined) return renderEmptyGauge(noColor);
+  return renderGauge(balance.amount, balance.reference, noColor);
 }
 
-function buildBalLine(usage: ProviderUsage, noColor: boolean): string {
-  let gauge = '';
-  let balText = '';
-  if (usage.balance) {
-    balText = formatBalance(usage.balance.amount, usage.balance.currency);
-    if (usage.balance.reference !== undefined) {
-      gauge = renderGauge(usage.balance.amount, usage.balance.reference, noColor);
-    } else {
-      gauge = renderEmptyGauge(noColor);
-    }
-  }
+function balanceLine(balance: Balance | undefined, noColor: boolean): string {
+  if (!balance) return ' '.padEnd(WIDTH);
+  const amount = `${balance.currency}${balance.amount.toFixed(2)}`;
+  return `${amount} ${balanceGauge(balance, noColor)}`.padEnd(WIDTH);
+}
 
-  const paddingLength = 72 - balText.length - gauge.length - 1;
-  const padding = repeatChar(' ', Math.max(0, paddingLength));
-  return `${balText} ${gauge}${padding}`;
+function caption(usage: ProviderUsage): string {
+  return `api balance · ${usage.displayName}`;
 }
 
 export function renderPanelOk(usage: ProviderUsage, noColor: boolean): string {
-  const rule = renderRule(noColor);
-  const name = usage.displayName;
-  const balLine = buildBalLine(usage, noColor);
-  const caption = `api balance · ${name}`;
-  const dimCaption = noColor ? caption : `\x1b[90m${caption}\x1b[0m`;
-  return `${rule}\n${name}\n${balLine}\n${dimCaption}`;
+  return [
+    renderRule(noColor),
+    usage.displayName,
+    balanceLine(usage.balance, noColor),
+    dim(caption(usage), noColor)
+  ].join('\n');
 }
 
 export function renderPanelUnavailable(usage: ProviderUsage, noColor: boolean): string {
-  const name = usage.displayName;
   const reason = usage.reason || 'Unknown error';
-  const caption = `api balance · ${name}`;
-  return dim(`${plainRule(noColor)}\n${name}\n${reason}\n${caption}`, noColor);
+  return dim([plainRule(noColor), usage.displayName, reason, caption(usage)].join('\n'), noColor);
+}
+
+function renderPanel(usage: ProviderUsage, noColor: boolean): string {
+  if (usage.status === 'ok') return renderPanelOk(usage, noColor);
+  return renderPanelUnavailable(usage, noColor);
 }
 
 export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string): string {
-  let out = renderBanner(now, noColor);
-  
-  for (const usage of usages) {
-    out += '\n';
-    if (usage.status === 'ok') {
-      out += renderPanelOk(usage, noColor);
-    } else {
-      out += renderPanelUnavailable(usage, noColor);
-    }
-  }
-  
-  return out;
+  const panels = usages.map((usage) => renderPanel(usage, noColor));
+  return [renderBanner(now, noColor), ...panels].join('\n');
 }

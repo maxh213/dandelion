@@ -15,7 +15,7 @@ describe('terminal renderer', () => {
     const banner = renderBanner('2026-09-13T10:00:00.000Z', true);
     expect(banner).toContain('ALLOWANCE');
     expect(banner).toContain('10:00:00Z');
-    expect(banner.length).toBe(72);
+    expect(banner).toHaveLength(72);
   });
 
   it('renders banner with color', () => {
@@ -24,7 +24,7 @@ describe('terminal renderer', () => {
   });
 
   it('renders rule', () => {
-    expect(renderRule(true).length).toBe(72);
+    expect(renderRule(true)).toHaveLength(72);
     expect(renderRule(false)).toContain('\x1b[90m');
   });
 

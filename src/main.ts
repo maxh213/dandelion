@@ -1,5 +1,5 @@
 import { runApp, RealCommandRunner } from './app/wiring.ts';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 
 type CommandRunner = Parameters<typeof runApp>[0];
 
