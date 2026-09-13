@@ -1,6 +1,6 @@
 # Allowance Dashboard
 
-Allowance is a terminal dashboard that shows how much of your AI allowances you have left: subscription usage windows for `claude`, `agy`, `kimi` and `grok`, and the API balance for `kilo`.
+Allowance is a terminal dashboard that shows how much of your AI allowances you have left: subscription usage windows for `claude`, `agy`, `kimi`, `grok` and `codex`, and the API balance for `kilo`.
 
 ## Providers
 
@@ -10,9 +10,10 @@ Panels always appear in this order. A provider whose CLI is missing, fails, time
 - `agy` - runs `agy -p "/usage"` (60s timeout) and shows each model group's windows; agy reports remaining percent, shown as used percent.
 - `kimi` (kimi code) - starts `kimi web --no-open --port <port>`, waits up to 20s for the token it prints, and reads `kimi web`'s local usage endpoint `/api/v1/oauth/usage` (10s request timeout). It shows the weekly window with a reset countdown and each rolling `5h` window. The server is then shut down with SIGTERM, then SIGKILL after 5s.
 - `grok` - reads the newest billing snapshot from `<grok home>/logs/unified.jsonl` without running grok, and shows the credits window with a reset countdown, the subscription tier and the snapshot's age. A snapshot older than 48h is shown dim as stale. Without a snapshot the panel says to run grok once.
+- `codex` - runs `codex login status` (15s timeout). Logged in with an API key, it shows "api-key billing · no usage windows", because API usage has no windows. Logged in with ChatGPT, it starts `codex app-server` and reads `account/rateLimits/read` over JSON-RPC on stdio (30s timeout), then shows the primary and secondary windows with a reset countdown. The server is then shut down with SIGTERM, then SIGKILL after 5s.
 - `kilo` (api balance) - runs `kilo profile` (20s timeout) and shows the balance against a reference.
 
-All five probes run in parallel. Window gauges are coloured by usage: below 50% calm, 50-79% warm, 80-94% hot, 95% and above critical.
+All six probes run in parallel. Window gauges are coloured by usage: below 50% calm, 50-79% warm, 80-94% hot, 95% and above critical.
 
 ## Run Commands
 

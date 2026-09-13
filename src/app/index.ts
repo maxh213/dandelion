@@ -1,8 +1,10 @@
-import { execFile, spawn, type ChildProcess, type ExecException } from 'node:child_process';
+import { execFile, spawn, type ChildProcess, type ChildProcessByStdio, type ExecException } from 'node:child_process';
 import { closeSync, mkdtempSync, openSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
+import type { Readable, Writable } from 'node:stream';
 import {
   probeProviders,
   type CommandRunner,
@@ -12,6 +14,8 @@ import {
   type LaunchedProcess,
   type Launcher,
   type ProbeIo,
+  type RpcChild,
+  type RpcSpawner,
   type RunFailure
 } from '../probes/index.ts';
 import { renderDashboard } from '../render/index.ts';
@@ -105,6 +109,25 @@ const realLauncher: Launcher = {
   }
 };
 
+function ignoreError(): void {
+  return undefined;
+}
+
+function rpcChild(child: ChildProcessByStdio<Writable, Readable, null>): RpcChild {
+  child.on('error', ignoreError);
+  child.stdin.on('error', ignoreError);
+  const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+  return {
+    lines: { [Symbol.asyncIterator]: () => lines },
+    send: (message) => child.stdin.write(`${message}\n`),
+    stop: () => terminate(child)
+  };
+}
+
+const realSpawner: RpcSpawner = {
+  spawn: (command, args) => rpcChild(spawn(command, args, { stdio: ['pipe', 'pipe', 'ignore'] }))
+};
+
 function isTimeout(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'TimeoutError';
 }
@@ -125,7 +148,7 @@ const realReader: FileReader = {
   read: (path) => readFile(path, 'utf8').catch(() => undefined)
 };
 
-export const realIo: ProbeIo = { runner: realCommandRunner, launcher: realLauncher, fetcher: realFetcher, reader: realReader };
+export const realIo: ProbeIo = { runner: realCommandRunner, launcher: realLauncher, fetcher: realFetcher, reader: realReader, spawner: realSpawner };
 
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
   const usages = await probeProviders(io, env, now);

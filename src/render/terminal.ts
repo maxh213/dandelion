@@ -115,7 +115,7 @@ type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
 type FailedUsage = Exclude<ProviderUsage, OkUsage>;
 
 function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow) => string): string[] {
-  if (usage.windows.length === 0) return [balanceLine(usage.balance, noColor)];
+  if (usage.windows.length === 0) return [usage.note ?? balanceLine(usage.balance, noColor)];
   return usage.windows.map(row);
 }
 

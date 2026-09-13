@@ -19,7 +19,7 @@ type ProviderIdentity = {
 };
 
 export type ProviderUsage =
-  | (ProviderIdentity & { status: 'ok'; balance?: Balance; snapshotAt?: string })
+  | (ProviderIdentity & { status: 'ok'; balance?: Balance; snapshotAt?: string; note?: string })
   | (ProviderIdentity & { status: 'unavailable' | 'error'; reason: string });
 
 const DATE_BEFORE_TIME = /\d-\d{2}-\d{2}T/;

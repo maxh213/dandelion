@@ -89,6 +89,12 @@ describe('terminal renderer', () => {
     expect(panel.split('\n')).toContain(' '.repeat(72));
   });
 
+  it('renders the note unpadded where window rows would be', () => {
+    const usage: ProviderUsage = { id: 'codex', displayName: 'codex', planLabel: 'codex', windows: [], fetchedAt: 'now', status: 'ok', note: 'api-key billing · no usage windows' };
+    expect(renderPanelOk(usage, true, NOW).split('\n')).toEqual(['='.repeat(72), 'codex', 'api-key billing · no usage windows', 'codex · codex']);
+    expect(renderPanelOk(usage, false, NOW)).toBe(`\x1b[90m${'━'.repeat(72)}${RESET}\ncodex\napi-key billing · no usage windows\n\x1b[90mcodex · codex${RESET}`);
+  });
+
   it('renders a caption of just the name when the plan is unknown', () => {
     const usage: ProviderUsage = { id: 'x', displayName: 'x', windows: [], fetchedAt: 'now', status: 'ok' };
     expect(renderPanelOk(usage, true, NOW).split('\n').at(-1)).toBe('x');

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { runApp, realCommandRunner, realIo } from './index.ts';
-import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo } from '../probes/index.ts';
+import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
@@ -46,8 +46,38 @@ const LONG_UNUSABLE = Array.from({ length: 50000 }, () => '{"msg":"billing: fetc
 const GROK_ENV = { ALLOWANCE_GROK_HOME: '/grok' };
 const NO_GROK = grokReader(undefined);
 
-function ioOf(runner: CommandRunner, launcher: Launcher = MISSING_KIMI, reader: FileReader = NO_GROK): ProbeIo {
-  return { runner, launcher, fetcher: KIMI_FETCHER, reader };
+const CODEX_CHATGPT: CommandRunnerResult = { stdout: '', stderr: 'Logged in using ChatGPT\n' };
+const CODEX_API_KEY: CommandRunnerResult = { stdout: '', stderr: 'Logged in using an API key - sk-proj-***n5zQA\n' };
+const CODEX_LIMITS = {
+  limitId: 'codex',
+  planType: 'plus',
+  primary: { usedPercent: 42, windowDurationMins: 300, resetsAt: 1789302600 },
+  secondary: { usedPercent: 86, windowDurationMins: 10080, resetsAt: 1789552800 }
+};
+
+function codexLines(limits: unknown = CODEX_LIMITS): string[] {
+  return [
+    '{"id":1,"result":{"userAgent":"fixture"}}',
+    '{"method":"remoteControl/status/changed","params":{"status":"disabled"}}',
+    JSON.stringify({ id: 2, result: { rateLimits: limits }, rateLimitsByLimitId: null })
+  ];
+}
+
+async function* linesOf(lines: string[]): AsyncIterable<string> {
+  yield* lines;
+}
+
+function codexSpawner(lines: string[] = codexLines(), spawned: string[][] = []): RpcSpawner {
+  return {
+    spawn: (command, args) => {
+      spawned.push([command, ...args]);
+      return { lines: linesOf(lines), send: () => undefined, stop: async () => undefined };
+    }
+  };
+}
+
+function ioOf(runner: CommandRunner, launcher: Launcher = MISSING_KIMI, reader: FileReader = NO_GROK, spawner = codexSpawner()): ProbeIo {
+  return { runner, launcher, fetcher: KIMI_FETCHER, reader, spawner };
 }
 
 function mockRunner(result: CommandRunnerResult): ProbeIo {
@@ -81,6 +111,7 @@ const AGY_USAGE = [
 const HAPPY: Record<string, CommandRunnerResult> = {
   claude: { stdout: CLAUDE_USAGE, stderr: '' },
   agy: { stdout: AGY_USAGE, stderr: '' },
+  codex: CODEX_CHATGPT,
   kilo: { stdout: PROFILE, stderr: '' }
 };
 const DIM = '\x1b[90m';
@@ -105,12 +136,12 @@ function panelOf(output: string, name: string): string[] {
 }
 
 describe('claude and agy windows', () => {
-  it('renders claude, agy, kimi, grok and kilo panels in fixed order with captions', async () => {
+  it('renders claude, agy, kimi, grok, codex and kilo panels in fixed order with captions', async () => {
     const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const lines = plain(output).split('\n');
     expect(lines[0]).toMatch(/^ALLOWANCE +10:00:00Z$/);
-    expect(lines.filter((line) => line === RULE)).toHaveLength(5);
-    expect(['claude', 'agy', 'kimi', 'grok', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25]);
+    expect(lines.filter((line) => line === RULE)).toHaveLength(6);
+    expect(['claude', 'agy', 'kimi', 'grok', 'codex', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25, 30]);
     expect(lines[1]).toBe(RULE);
     expect(panelOf(output, 'claude').at(-1)).toBe('claude code · claude');
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
@@ -216,14 +247,14 @@ describe('claude and agy windows', () => {
 
   it('runs the probes in parallel and keeps panel order', async () => {
     const release: (() => void)[] = [];
-    const resumeAllOnFourth = () => {
-      if (release.length === 4) release.reverse().forEach((resume) => resume());
+    const resumeAllOnFifth = () => {
+      if (release.length === 5) release.reverse().forEach((resume) => resume());
     };
     const runner: CommandRunner = {
       run: () =>
         new Promise((resolve) => {
           release.push(() => resolve({ stdout: '', stderr: '', failure: 'timeout' }));
-          resumeAllOnFourth();
+          resumeAllOnFifth();
         })
     };
     const silentKimi: LaunchedProcess = { output: async () => '', hasExited: () => true, stop: async () => undefined };
@@ -231,7 +262,7 @@ describe('claude and agy windows', () => {
       launch: () =>
         new Promise((resolve) => {
           release.push(() => resolve(silentKimi));
-          resumeAllOnFourth();
+          resumeAllOnFifth();
         })
     };
     const output = plain(await runApp(ioOf(runner, launcher), {}, NOW));
@@ -241,12 +272,13 @@ describe('claude and agy windows', () => {
         'agy\nCommand timed out after 60s\nagy · agy',
         'kimi\nkimi web exited without printing a token\nkimi code · kimi',
         'grok\nno grok billing snapshot — run grok once\ngrok · grok',
+        'codex\nCommand timed out after 15s\ncodex · codex',
         'kilo\nCommand timed out after 20s\napi balance · kilo'
       ].join(`\n${RULE}\n`)
     );
   });
 
-  it('renders five unavailable panels when no CLI is on the PATH and grok home is empty', async () => {
+  it('renders six unavailable panels when no CLI is on the PATH and grok home is empty', async () => {
     const output = await runApp(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW);
     expect(output).toContain(
       [
@@ -254,6 +286,7 @@ describe('claude and agy windows', () => {
         `${DIM}${RULE}\nagy\nagy CLI not found in PATH\nagy · agy\x1b[0m`,
         `${DIM}${RULE}\nkimi\nkimi CLI not found in PATH\nkimi code · kimi\x1b[0m`,
         `${DIM}${RULE}\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m`,
+        `${DIM}${RULE}\ncodex\ncodex CLI not found in PATH\ncodex · codex\x1b[0m`,
         `${DIM}${RULE}\nkilo\nkilo CLI not found in PATH\napi balance · kilo\x1b[0m`
       ].join('\n')
     );
@@ -309,7 +342,7 @@ describe('grok panel', () => {
       'snapshot 18h0m old',
       'SuperGrok Heavy · grok',
       '='.repeat(72),
-      'kilo'
+      'codex'
     ]);
     expect(lines.indexOf('kimi')).toBeLessThan(grok);
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
@@ -474,6 +507,174 @@ describe('real grok reader', () => {
     expect(tree(empty)).toEqual(emptyBefore);
     expect(await runApp(io, { ALLOWANCE_GROK_HOME: join(home, 'missing') }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
     expect(readdirSync(home).sort()).toEqual(['empty', 'logs']);
+  });
+});
+
+describe('codex panel', () => {
+  const CALM = '\x1b[32m';
+  const HOT = '\x1b[31m';
+  const codexIo = (codex: CommandRunnerResult, spawner = codexSpawner()) => ({ ...routedRunner({ codex }), spawner });
+
+  it('renders both ChatGPT rate-limit windows between grok and kilo', async () => {
+    const spawned: string[][] = [];
+    const output = await runApp(codexIo(CODEX_CHATGPT, codexSpawner(codexLines(), spawned)), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
+    const lines = output.split('\n');
+    expect(['claude', 'agy', 'kimi', 'grok', 'codex', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25, 30]);
+    expect(lines.slice(24, 30)).toEqual([
+      '='.repeat(72),
+      'codex',
+      '5h                                  ########------------  42% ↻ 2h30m',
+      'weekly                              #################---  86% ↻ 3d0h',
+      'codex · codex',
+      '='.repeat(72)
+    ]);
+    expect(spawned).toEqual([['codex', 'app-server']]);
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+  });
+
+  it('keeps the other panels unchanged next to codex', async () => {
+    const withCodex = await runApp(codexIo(CODEX_CHATGPT), GROK_ENV, NOW);
+    const withoutCodex = await runApp(codexIo({ stdout: '', stderr: '', failure: 'missing' }), GROK_ENV, NOW);
+    for (const name of ['claude', 'agy', 'kimi', 'grok', 'kilo']) expect(panelOf(withCodex, name)).toEqual(panelOf(withoutCodex, name));
+  });
+
+  it('colours the 5h window calm, the weekly window hot and the caption dim', async () => {
+    const output = await runApp(codexIo(CODEX_CHATGPT), GROK_ENV, NOW);
+    expect(output).toContain(
+      [
+        '\ncodex',
+        `${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 2h30m`,
+        `${'weekly'.padEnd(35)} ${HOT}${'█'.repeat(17)}${'░'.repeat(3)}\x1b[0m ${HOT} 86%\x1b[0m ↻ 3d0h`,
+        `${DIM}codex · codex\x1b[0m\n`
+      ].join('\n')
+    );
+  });
+
+  it('renders the API-key caption instead of rows without starting app-server', async () => {
+    const spawned: string[][] = [];
+    const io = codexIo(CODEX_API_KEY, codexSpawner(codexLines(), spawned));
+    expect(panelOf(await runApp(io, { NO_COLOR: '1' }, NOW), 'codex')).toEqual(['codex', 'api-key billing · no usage windows', 'codex · codex']);
+    const output = await runApp(io, {}, NOW);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\ncodex\napi-key billing · no usage windows\n${DIM}codex · codex\x1b[0m\n`);
+    expect(panelOf(output, 'codex').join('\n')).not.toMatch(/[█░%]/);
+    expect(spawned).toEqual([]);
+  });
+
+  it.each<[unknown, string]>([
+    [{ primary: { usedPercent: 33.5, windowDurationMins: 300 }, secondary: null }, '5h                                  #######-------------  34%'],
+    [{ primary: null, secondary: { usedPercent: 130, windowDurationMins: 10080, resetsAt: 'soon' } }, 'weekly                              #################### 130%'],
+    [{ primary: { usedPercent: 0, windowDurationMins: 1440, resetsAt: null } }, '1d                                  --------------------   0%'],
+    [{ primary: { usedPercent: 10, windowDurationMins: 90 }, secondary: { usedPercent: 'x' } }, '90m                                 ##------------------  10%'],
+    [{ primary: { usedPercent: 10 }, secondary: { usedPercent: -1, windowDurationMins: 300 } }, 'primary                             ##------------------  10%']
+  ])('renders rate limits %j as the single row "%s"', async (limits, row) => {
+    const output = await runApp(codexIo(CODEX_CHATGPT, codexSpawner(codexLines(limits))), { NO_COLOR: '1' }, NOW);
+    expect(panelOf(output, 'codex')).toEqual(['codex', row, 'codex · codex']);
+  });
+
+  it('ignores a non-JSON line and a rate-limits notification before the answer', async () => {
+    const notification = '{"method":"account/rateLimits/updated","params":{"rateLimits":{"primary":{"usedPercent":99,"windowDurationMins":300}}}}';
+    const output = await runApp(codexIo(CODEX_CHATGPT, codexSpawner(['not json', notification, ...codexLines()])), { NO_COLOR: '1' }, NOW);
+    expect(panelOf(output, 'codex').slice(1, 3).map((line) => line.split(/ +/).slice(0, 1).concat(line.match(/\d+%/) ?? []))).toEqual([['5h', '42%'], ['weekly', '86%']]);
+    expect(output).not.toContain('99%');
+  });
+
+  it.each<[string, CommandRunnerResult, string[], string]>([
+    ['a missing codex', { stdout: '', stderr: '', failure: 'missing' }, codexLines(), 'codex CLI not found in PATH'],
+    ['a logged-out codex', { stdout: '', stderr: 'Not logged in', failure: 'exit' }, codexLines(), 'codex is not logged in'],
+    ['a ChatGPT line with exit 1', { stdout: '', stderr: 'Logged in using ChatGPT', failure: 'exit' }, codexLines(), 'codex is not logged in'],
+    ['unknown login text', { stdout: 'hello', stderr: '' }, codexLines(), 'codex is not logged in'],
+    ['a hanging login', { stdout: '', stderr: '', failure: 'timeout' }, codexLines(), 'Command timed out after 15s'],
+    ['a JSON-RPC error', CODEX_CHATGPT, ['{"error":{"code":-32600,"message":"chatgpt authentication required to read rate limits"},"id":2}'], 'chatgpt authentication required to read rate limits'],
+    ['a JSON-RPC error without a message', CODEX_CHATGPT, ['{"error":{"code":-32600},"id":2}'], 'codex app-server error'],
+    ['an app-server that exits at once', CODEX_CHATGPT, [], 'codex app-server exited without answering'],
+    ['null rate limits', CODEX_CHATGPT, ['{"id":2,"result":{"rateLimits":{"primary":null,"secondary":null}}}'], 'Could not parse rate limits from response'],
+    ['a null result', CODEX_CHATGPT, ['{"id":2,"result":null}'], 'Could not parse rate limits from response']
+  ])('renders a dim codex panel for %s while the others render normally', async (_case, login, lines, reason) => {
+    const output = await runApp(codexIo(login, codexSpawner(lines)), GROK_ENV, NOW);
+    expect(output).toContain(`${DIM}${RULE}\ncodex\n${reason}\ncodex · codex\x1b[0m\n`);
+    expect(panelOf(output, 'claude')).toHaveLength(5);
+    expect(panelOf(output, 'grok')).toHaveLength(4);
+    expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
+    expect(plain(output).split('\n').filter((line) => /^(claude|agy|kimi|grok|codex|kilo)$/.test(line))).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'kilo']);
+  });
+});
+
+describe('real codex app-server spawner', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function spawnNode(script: string): RpcChild {
+    return realIo.spawner.spawn(process.execPath, ['-e', script]);
+  }
+
+  async function linesUntil(child: RpcChild, last: string): Promise<string[]> {
+    const seen: string[] = [];
+    for await (const line of child.lines) {
+      seen.push(line);
+      if (line === last) break;
+    }
+    return seen;
+  }
+
+  it('keeps lines printed before the first read and delivers each sent message as a line', async () => {
+    const child = spawnNode('console.log("ready"); require("node:readline").createInterface({ input: process.stdin }).on("line", (l) => console.log("got " + l))');
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    child.send('{"id":1}');
+    child.send('{"id":2}');
+    expect(await linesUntil(child, 'got {"id":2}')).toEqual(['ready', 'got {"id":1}', 'got {"id":2}']);
+    await child.stop();
+  });
+
+  it('ends the lines when the child exits', async () => {
+    const child = spawnNode('console.log("a"); console.log("b")');
+    expect(await linesUntil(child, 'never')).toEqual(['a', 'b']);
+    await child.stop();
+  });
+
+  it('ends the lines, ignores sends and stops at once when the binary is missing', async () => {
+    const child = realIo.spawner.spawn('thiscommanddoesnotexist', ['app-server']);
+    child.send('{"id":1}');
+    expect(await linesUntil(child, 'never')).toEqual([]);
+    child.send('{"id":2}');
+    await expect(child.stop()).resolves.toBeUndefined();
+  });
+
+  it('ignores writes to a child that already exited', async () => {
+    const child = spawnNode('process.stdin.destroy()');
+    expect(await linesUntil(child, 'never')).toEqual([]);
+    await vi.waitFor(async () => {
+      child.send('x'.repeat(1 << 20));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    await child.stop();
+  });
+
+  it('terminates a running child with SIGTERM', async () => {
+    const child = spawnNode('console.log("ready"); setInterval(() => {}, 1000)');
+    const lines = child.lines[Symbol.asyncIterator]();
+    expect(await lines.next()).toEqual({ value: 'ready', done: false });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await child.stop();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(await lines.next()).toMatchObject({ done: true });
+  });
+
+  it('kills an app-server child that ignores SIGTERM after 5 seconds', async () => {
+    const child = spawnNode('process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000)');
+    const lines = child.lines[Symbol.asyncIterator]();
+    await lines.next();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let stopped = false;
+    const stopping = child.stop().then(() => {
+      stopped = true;
+    });
+    vi.advanceTimersByTime(4999);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(false);
+    vi.advanceTimersByTime(1);
+    await stopping;
+    expect(await lines.next()).toMatchObject({ done: true });
   });
 });
 
@@ -655,7 +856,7 @@ describe('wiring', () => {
     expect(output).toContain('Command failed or timed out');
   });
 
-  it('probes claude, agy and kilo with their commands and timeouts', async () => {
+  it('probes claude, agy, codex and kilo with their commands and timeouts', async () => {
     const calls: [string, string[], number][] = [];
     const runner: CommandRunner = {
       run: async (command, args, timeoutMs) => {
@@ -667,6 +868,7 @@ describe('wiring', () => {
     expect(calls).toEqual([
       ['claude', ['-p', '/usage'], 90000],
       ['agy', ['-p', '/usage'], 60000],
+      ['codex', ['login', 'status'], 15000],
       ['kilo', ['profile'], 20000]
     ]);
   });
