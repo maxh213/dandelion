@@ -61,14 +61,18 @@ function usableSnapshot(event: unknown): Snapshot | undefined {
 }
 
 function snapshotOf(line: string): Snapshot | undefined {
+  if (!line.includes(BILLING_MSG)) return undefined;
   const event = parseLine(line);
   return fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshot(event) : undefined;
 }
 
 function newestSnapshot(log: string): Snapshot | undefined {
-  for (const line of log.split('\n').reverse()) {
-    const snapshot = snapshotOf(line);
+  let end = log.length;
+  while (end > 0) {
+    const start = log.lastIndexOf('\n', end - 1);
+    const snapshot = snapshotOf(log.slice(start + 1, end));
     if (snapshot !== undefined) return snapshot;
+    end = start;
   }
   return undefined;
 }

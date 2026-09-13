@@ -75,6 +75,11 @@ describe('probeGrok', () => {
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok Heavy', windows: [{ usedPct: 75 }] });
   });
 
+  it('finds a snapshot on the first line behind a leading newline and trailing blank lines', async () => {
+    const usage = await probeGrok(ioWithLog(`\n${JSON.stringify(EVENT_60)}\n${'{"msg":"noise"}\n'.repeat(3)}\n`), HOME, NOW);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok', snapshotAt: '2026-09-11T09:00:00.000Z', windows: [{ usedPct: 60 }] });
+  });
+
   it('skips unusable billing events in favour of an older usable one', async () => {
     const usage = await probeGrok(ioWithLog(`${BACKGROUND}\n${UNUSABLE}`), HOME, NOW);
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok Heavy', snapshotAt: '2026-09-12T16:00:00.000Z', windows: [{ usedPct: 75 }] });
@@ -99,7 +104,8 @@ describe('probeGrok', () => {
     ['an empty log', { '/grok/logs/unified.jsonl': '' }],
     ['only non-billing lines', { '/grok/logs/unified.jsonl': BACKGROUND.split('\n').filter((line) => !line.includes('billing')).join('\n') }],
     ['only unusable billing events', { '/grok/logs/unified.jsonl': UNUSABLE }],
-    ['a date-like but invalid ts', { '/grok/logs/unified.jsonl': '{"ts":"2026-02-30T99:00:00Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":5}}}' }]
+    ['the billing message outside msg', { '/grok/logs/unified.jsonl': '\n{"ts":"2026-09-13T09:00:00Z","msg":"echo","ctx":{"text":"billing: fetched credits config","config":{"creditUsagePercent":5}}}\n\n' }],
+    ['a date-like but invalid ts',{ '/grok/logs/unified.jsonl': '{"ts":"2026-02-30T99:00:00Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":5}}}' }]
   ])('is unavailable with %s', async (_case, files) => {
     expect(await probeGrok(readerOf(files).io, HOME, NOW)).toStrictEqual(UNAVAILABLE);
   });
