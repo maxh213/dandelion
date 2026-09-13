@@ -1,4 +1,5 @@
-import { execFile, ExecException } from 'child_process';
+import { execFile } from 'child_process';
+import type { ExecException } from 'child_process';
 import { probeKilo, type CommandRunner, type CommandRunnerResult } from '../probes/kilo.ts';
 import { renderDashboard } from '../render/terminal.ts';
 
