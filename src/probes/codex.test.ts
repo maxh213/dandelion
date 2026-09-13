@@ -105,6 +105,7 @@ describe('probeCodex login', () => {
   it.each<[string, CommandRunnerResult]>([
     ['stderr', { stdout: '', stderr: `${API_KEY_LINE}\n` }],
     ['stdout', { stdout: `${API_KEY_LINE}\n`, stderr: '' }],
+    ['stderr after a stdout banner without a newline', { stdout: 'banner', stderr: API_KEY_LINE }],
     ['stdout after another line', { stdout: `WARNING: something\n${API_KEY_LINE}\n`, stderr: 'ChatGPT' }]
   ])('is an ok API-key panel with a note and no app-server when the key line is on %s', async (_case, login) => {
     const { io, spawns } = ioWith(login);

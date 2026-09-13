@@ -626,6 +626,14 @@ describe('real codex app-server spawner', () => {
     await child.stop();
   });
 
+  it('does not let a child block on a flood of stderr before it answers', async () => {
+    const child = spawnNode('require("node:fs").writeSync(2, "x".repeat(4 << 20)); console.log("answer"); setInterval(() => {}, 1000)');
+    const lines = child.lines[Symbol.asyncIterator]();
+    const blocked = new Promise((resolve) => setTimeout(() => resolve({ blocked: true }), 3000));
+    expect(await Promise.race([lines.next(), blocked])).toEqual({ value: 'answer', done: false });
+    await child.stop();
+  });
+
   it('ends the lines when the child exits', async () => {
     const child = spawnNode('console.log("a"); console.log("b")');
     expect(await linesUntil(child, 'never')).toEqual(['a', 'b']);

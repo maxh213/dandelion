@@ -91,18 +91,19 @@ function windowsOf(answer: unknown): UsageWindow[] {
   return windows;
 }
 
-function parsed(line: string): unknown {
+function answerIn(line: string): unknown {
   try {
-    return JSON.parse(line);
+    const message: unknown = JSON.parse(line);
+    return fieldOf(message, 'id') === ANSWER_ID ? message : null;
   } catch {
-    return undefined;
+    return null;
   }
 }
 
 async function answerOf(lines: AsyncIterable<string>): Promise<unknown> {
   for await (const line of lines) {
-    const message = parsed(line);
-    if (fieldOf(message, 'id') === ANSWER_ID) return message;
+    const answer = answerIn(line);
+    if (answer !== null) return answer;
   }
   throw new CodexFailure('codex app-server exited without answering');
 }
@@ -145,7 +146,7 @@ export async function probeCodex(io: CodexIo, now: string): Promise<ProviderUsag
   const usage = { id: 'codex', displayName: 'codex', planLabel: 'codex', fetchedAt: now };
   const login = await io.runner.run('codex', ['login', 'status'], LOGIN_TIMEOUT_MS);
   const mode = loginMode(login);
-  if (mode === undefined) return { ...usage, windows: [], status: 'unavailable', reason: LOGIN_FAILURES[login.failure ?? 'exit'] };
   if (mode === 'apikey') return { ...usage, windows: [], status: 'ok', note: API_KEY_NOTE };
-  return rateLimitUsage(io.spawner, usage);
+  if (mode === 'chatgpt') return rateLimitUsage(io.spawner, usage);
+  return { ...usage, windows: [], status: 'unavailable', reason: LOGIN_FAILURES[login.failure ?? 'exit'] };
 }

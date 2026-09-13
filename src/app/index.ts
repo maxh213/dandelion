@@ -1,10 +1,11 @@
 import { execFile, spawn, type ChildProcess, type ChildProcessByStdio, type ExecException } from 'node:child_process';
+import { once } from 'node:events';
 import { closeSync, mkdtempSync, openSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import type { Readable, Writable } from 'node:stream';
+import { PassThrough, pipeline, type Readable, type Writable } from 'node:stream';
 import {
   probeProviders,
   type CommandRunner,
@@ -53,16 +54,19 @@ function hasExited(child: ChildProcess): boolean {
   return child.exitCode !== null || child.signalCode !== null;
 }
 
+function exitOf(child: ChildProcess): Promise<unknown> {
+  return once(child, 'exit').catch(() => undefined);
+}
+
+async function signalUntil(child: ChildProcess, exited: Promise<unknown>): Promise<void> {
+  const escalation = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
+  child.kill('SIGTERM');
+  await exited;
+  clearTimeout(escalation);
+}
+
 function terminate(child: ChildProcess): Promise<void> {
-  if (hasExited(child)) return Promise.resolve();
-  return new Promise((resolve) => {
-    const escalation = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
-    child.once('exit', () => {
-      clearTimeout(escalation);
-      resolve();
-    });
-    child.kill('SIGTERM');
-  });
+  return hasExited(child) ? Promise.resolve() : signalUntil(child, exitOf(child));
 }
 
 function logFileIn(logDir: string): string {
@@ -109,18 +113,15 @@ const realLauncher: Launcher = {
   }
 };
 
-function ignoreError(): void {
-  return undefined;
-}
-
 function rpcChild(child: ChildProcessByStdio<Writable, Readable, null>): RpcChild {
-  child.on('error', ignoreError);
-  child.stdin.on('error', ignoreError);
+  const exited = exitOf(child);
+  const input = new PassThrough();
+  pipeline(input, child.stdin, () => undefined);
   const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
   return {
     lines: { [Symbol.asyncIterator]: () => lines },
-    send: (message) => child.stdin.write(`${message}\n`),
-    stop: () => terminate(child)
+    send: (message) => input.write(`${message}\n`),
+    stop: () => signalUntil(child, exited)
   };
 }
 
