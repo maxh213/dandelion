@@ -85,6 +85,11 @@ describe('probeGrok', () => {
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok Heavy', snapshotAt: '2026-09-12T16:00:00.000Z', windows: [{ usedPct: 75 }] });
   });
 
+  it('finds a usable snapshot behind a thousand newer unusable billing events', async () => {
+    const usage = await probeGrok(ioWithLog(`${BACKGROUND}\n${`${UNUSABLE}\n`.repeat(170)}`), HOME, NOW);
+    expect(usage).toMatchObject({ status: 'ok', snapshotAt: '2026-09-12T16:00:00.000Z', windows: [{ usedPct: 75 }] });
+  });
+
   it.each<[string, unknown, { planLabel: string; windows: UsageWindow[] }]>([
     ['no tier or period', { creditUsagePercent: 75 }, { planLabel: 'grok', windows: [{ label: 'credits', usedPct: 75 }] }],
     ['an empty tier and a half percent', { creditUsagePercent: 33.5 }, { planLabel: 'grok', windows: [{ label: 'credits', usedPct: 34 }] }],

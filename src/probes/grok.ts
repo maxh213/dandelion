@@ -16,14 +16,6 @@ function grokHome(reader: FileReader, env: Record<string, string | undefined>): 
   return env['ALLOWANCE_GROK_HOME'] || `${reader.homeDir()}/.grok`;
 }
 
-function parseLine(line: string): unknown {
-  try {
-    return JSON.parse(line);
-  } catch {
-    return undefined;
-  }
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -51,35 +43,38 @@ function creditsWindow(usedPct: number, config: unknown): UsageWindow {
   return resetsAt === undefined ? { label: 'credits', usedPct } : { label: 'credits', usedPct, resetsAt };
 }
 
-function usableSnapshot(event: unknown): Snapshot | undefined {
+function usableSnapshots(event: unknown): Snapshot[] {
   const ctx = fieldOf(event, 'ctx');
   const config = fieldOf(ctx, 'config');
   const usedPct = usedPercent(config);
   const ts = validInstant(fieldOf(event, 'ts'));
-  if (usedPct === undefined || ts === undefined) return undefined;
-  return { window: creditsWindow(usedPct, config), tier: tierOf(ctx), ts };
+  if (usedPct === undefined || ts === undefined) return [];
+  return [{ window: creditsWindow(usedPct, config), tier: tierOf(ctx), ts }];
 }
 
-function snapshotOf(line: string): Snapshot | undefined {
-  if (!line.includes(BILLING_MSG)) return undefined;
-  const event = parseLine(line);
-  return fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshot(event) : undefined;
-}
-
-function newestSnapshot(log: string): Snapshot | undefined {
-  let end = log.length;
-  while (end > 0) {
-    const start = log.lastIndexOf('\n', end - 1);
-    const snapshot = snapshotOf(log.slice(start + 1, end));
-    if (snapshot !== undefined) return snapshot;
-    end = start;
+function snapshotsOn(line: string): Snapshot[] {
+  try {
+    const event: unknown = JSON.parse(line);
+    return fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshots(event) : [];
+  } catch {
+    return [];
   }
-  return undefined;
+}
+
+function lineAround(log: string, at: number): string {
+  const end = log.indexOf('\n', at);
+  return log.slice(log.lastIndexOf('\n', at) + 1, end === -1 ? undefined : end);
+}
+
+function snapshotFrom(log: string, at: number): Snapshot | undefined {
+  if (at === -1) return undefined;
+  const [snapshot] = snapshotsOn(lineAround(log, at));
+  return snapshot ?? snapshotFrom(log, log.lastIndexOf(BILLING_MSG, at - 1));
 }
 
 export async function probeGrok(io: GrokIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
   const log = await io.reader.read(`${grokHome(io.reader, env)}/logs/unified.jsonl`);
-  const snapshot = newestSnapshot(log ?? '');
+  const snapshot = log === undefined ? undefined : snapshotFrom(log, log.lastIndexOf(BILLING_MSG));
   const usage = { id: 'grok', displayName: 'grok', fetchedAt: now };
   if (snapshot === undefined) return { ...usage, planLabel: 'grok', windows: [], status: 'unavailable', reason: UNAVAILABLE };
   return { ...usage, planLabel: snapshot.tier, windows: [snapshot.window], status: 'ok', snapshotAt: snapshot.ts };

@@ -119,8 +119,8 @@ function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow) 
   return usage.windows.map(row);
 }
 
-function isStale(snapshotAt: string, now: string): boolean {
-  return Date.parse(now) - Date.parse(snapshotAt) > STALE_AFTER_MS;
+function isStale(snapshotAt: string | undefined, now: string): boolean {
+  return Date.parse(now) - new Date(snapshotAt ?? Number.NaN).getTime() > STALE_AFTER_MS;
 }
 
 function snapshotLine(snapshotAt: string, now: string): string {
@@ -148,8 +148,7 @@ function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string): string
 }
 
 export function renderPanelOk(usage: OkUsage, noColor: boolean, now: string): string {
-  const stale = usage.snapshotAt !== undefined && isStale(usage.snapshotAt, now);
-  return stale ? renderPanelStale(usage, noColor, now) : renderPanelFresh(usage, noColor, now);
+  return isStale(usage.snapshotAt, now) ? renderPanelStale(usage, noColor, now) : renderPanelFresh(usage, noColor, now);
 }
 
 export function renderPanelUnavailable(usage: FailedUsage, noColor: boolean): string {
