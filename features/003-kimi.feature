@@ -1,7 +1,10 @@
 Feature: 003 - Kimi windows via its local web API
 
   Row layout, gauge math, ramp colours and NO_COLOR rules are those of features/002-claude-agy.feature.
-  Kimi usage percent = used / limit * 100, rounded half-up to a whole number.
+  Kimi usage percent = used / limit * 100, rounded half-up to a whole number, not capped at 100.
+  A usable number is a finite JSON number; used must be >= 0 and limit must be > 0.
+  The 003 scenarios "Kimi probes in parallel with the others" and "No CLI on the PATH at all" replace
+  the 002 scenarios "Probes run in parallel" and "No CLI on the PATH at all": there are now four panels.
 
   Background:
     Given the current time is "2026-09-13T10:00:00Z"
@@ -45,39 +48,69 @@ Feature: 003 - Kimi windows via its local web API
       | open http://127.0.0.1:48123/?token=abc.D-9_z   | stdout |
       | Authorization: Bearer abc.D-9_z                | stderr |
 
-  Scenario Outline: Kimi response variations
+  Scenario Outline: Kimi summary variations
     Given the kimi usage response is <body>
+    When the user runs `npm start` with NO_COLOR set
+    Then the kimi panel is ok and its only row is exactly "<row>"
+
+    Examples:
+      | body                                                                                                         | row                                                               |
+      | {"data":{"summary":{"used":500,"limit":1000}}}                                                               | weekly                              ##########----------  50%     |
+      | {"data":{"summary":{"used":1,"limit":3},"limits":[]}}                                                        | weekly                              #######-------------  33%     |
+      | {"data":{"summary":{"used":2,"limit":3},"limits":[{"used":9,"limit":10,"window":{"unit":"day","value":1}}]}} | weekly                              #############-------  67%     |
+      | {"data":{"summary":{"used":125,"limit":1000}}}                                                               | weekly                              ###-----------------  13%     |
+      | {"data":{"summary":{"used":0,"limit":1000}}}                                                                 | weekly                              --------------------   0%     |
+      | {"data":{"summary":{"used":1200,"limit":1000}}}                                                              | weekly                              #################### 120%     |
+      | {"data":{"summary":{"used":590,"limit":1000,"reset_at":"soon"}}}                                             | weekly                              ############--------  59%     |
+      | {"data":{"summary":{"used":590,"limit":1000,"reset_at":42}}}                                                 | weekly                              ############--------  59%     |
+
+  Scenario: Every hour entry is labelled 5h and shown in response order; bad hour entries are skipped
+    Given the kimi usage response is:
+      """
+      { "data": {
+          "summary": { "used": 590, "limit": 1000 },
+          "limits": [
+            { "used": 42, "limit": 100, "window": { "unit": "hour", "value": 5 } },
+            { "used": 1, "limit": 0, "window": { "unit": "hour", "value": 5 } },
+            { "used": "x", "limit": 100, "window": { "unit": "hour", "value": 5 } },
+            { "used": 3, "window": { "unit": "hour", "value": 5 } },
+            { "used": -1, "limit": 100, "window": { "unit": "hour", "value": 5 } },
+            { "used": 7, "limit": 10, "window": { "unit": "hour", "value": 1 } },
+            { "used": 9, "limit": 10, "window": { "unit": "day", "value": 7 } }
+          ]
+      } }
+      """
     When the user runs `npm start` with NO_COLOR set
     Then the kimi panel is ok and its rows are exactly:
       """
-      <rows>
+      weekly                              ############--------  59%
+      5h                                  ########------------  42%
+      5h                                  ##############------  70%
       """
-
-    Examples:
-      | body                                                                                                                      | rows                                                              |
-      | {"data":{"summary":{"used":500,"limit":1000}}}                                                                            | weekly                              ##########----------  50%     |
-      | {"data":{"summary":{"used":1,"limit":3},"limits":[]}}                                                                     | weekly                              #######-------------  33%     |
-      | {"data":{"summary":{"used":2,"limit":3},"limits":[{"used":9,"limit":10,"window":{"unit":"day","value":1}}]}}              | weekly                              #############-------  67%     |
 
   Scenario Outline: Kimi probe failures render a dim unavailable panel and reap the child
     Given the `kimi` fixture <condition>
-    When the user runs `npm start` under an outer timeout of <seconds> seconds
-    Then the process exits with code 0 before the outer timeout
+    When the user runs `npm start` under an outer timeout of 40 seconds
+    Then the process exits with code 0 <timing>
     And the kimi panel is dim, shows no gauge, and shows the reason "<reason>" and caption "kimi code · kimi"
     And the claude, agy and kilo panels still render normally, in order around it
     And no process started as the kimi fixture is still running
 
     Examples:
-      | condition                                                    | reason                                   | seconds |
-      | is not in the PATH                                           | kimi CLI not found in PATH               | 10      |
-      | exits immediately without printing a token                   | kimi web printed no token within 20s     | 30      |
-      | keeps running but never prints a token                       | kimi web printed no token within 20s     | 35      |
-      | prints the token but serves no HTTP on the port              | kimi usage request failed                | 35      |
-      | prints the token and answers HTTP 500                        | kimi usage request failed: HTTP 500      | 10      |
-      | prints the token and never answers the request               | kimi usage request timed out after 10s   | 25      |
-      | prints the token and answers "{\"data\":"                    | Could not parse usage from response      | 10      |
-      | prints the token and answers {"data":{"limits":[]}}          | Could not parse usage from response      | 10      |
-      | prints the token and answers {"data":{"summary":{"used":1}}} | Could not parse usage from response      | 10      |
+      | condition                                                        | reason                                   | timing                     |
+      | is not in the PATH                                               | kimi CLI not found in PATH               | within 5 seconds           |
+      | exits immediately without printing a token                       | kimi web exited without printing a token | within 5 seconds           |
+      | keeps running but never prints a token                           | kimi web printed no token within 20s     | after 20 to 30 seconds     |
+      | prints the token but serves no HTTP on the port                  | kimi usage request failed                | within 5 seconds           |
+      | prints the token and answers HTTP 500                            | kimi usage request failed: HTTP 500      | within 5 seconds           |
+      | prints the token and never answers the request                   | kimi usage request timed out after 10s   | after 10 to 20 seconds     |
+      | prints the token and answers "{\"data\":"                        | Could not parse usage from response      | within 5 seconds           |
+      | prints the token and answers {"data":{"limits":[]}}              | Could not parse usage from response      | within 5 seconds           |
+      | prints the token and answers {"data":{"summary":{"used":1}}}     | Could not parse usage from response      | within 5 seconds           |
+      | prints the token and answers {"data":{"summary":{"used":1,"limit":0}}}      | Could not parse usage from response | within 5 seconds    |
+      | prints the token and answers {"data":{"summary":{"used":-1,"limit":1000}}}  | Could not parse usage from response | within 5 seconds    |
+      | prints the token and answers {"data":{"summary":{"used":"590","limit":1000}}} | Could not parse usage from response | within 5 seconds  |
+      | prints the token and answers {"data":{"summary":{"used":590,"limit":"1000"}}} | Could not parse usage from response | within 5 seconds  |
 
   Scenario: A kimi child that ignores SIGTERM is killed after 5 seconds
     Given the `kimi` fixture serves the usage JSON but ignores SIGTERM
@@ -92,11 +125,26 @@ Feature: 003 - Kimi windows via its local web API
     Then the `kimi` fixture is invoked with the arguments "web --no-open --port 59177"
     And the usage request goes to "http://127.0.0.1:59177/api/v1/oauth/usage"
 
+  Scenario Outline: ALLOWANCE_KIMI_PORT values
+    Given ALLOWANCE_KIMI_PORT is set to "<value>"
+    When the user runs `npm start`
+    Then the process exits with code 0
+    And <outcome>
+
+    Examples:
+      | value   | outcome                                                                                                                  |
+      |         | the `kimi` fixture is invoked with "web --no-open --port 59177"                                                          |
+      | 65535   | the `kimi` fixture is invoked with "web --no-open --port 65535"                                                          |
+      | abc     | `kimi` is not started and the kimi panel is dim with the reason "ALLOWANCE_KIMI_PORT must be an integer from 1 to 65535" |
+      | 0       | `kimi` is not started and the kimi panel is dim with the reason "ALLOWANCE_KIMI_PORT must be an integer from 1 to 65535" |
+      | 70000   | `kimi` is not started and the kimi panel is dim with the reason "ALLOWANCE_KIMI_PORT must be an integer from 1 to 65535" |
+      | 48123.5 | `kimi` is not started and the kimi panel is dim with the reason "ALLOWANCE_KIMI_PORT must be an integer from 1 to 65535" |
+
   Scenario: Kimi probes in parallel with the others
-    Given the `claude`, `agy` and `kilo` CLIs all hang indefinitely and `kimi` never prints a token
+    Given the `claude`, `agy` and `kilo` CLIs all hang indefinitely and `kimi` keeps running but never prints a token
     When the user runs `npm start`
     Then the process exits with code 0 within 95 seconds
-    And the panels appear in the order "claude", "agy", "kimi", "kilo", all dim unavailable
+    And four dim unavailable panels render in order "claude", "agy", "kimi", "kilo" with reasons "Command timed out after 90s", "Command timed out after 60s", "kimi web printed no token within 20s", "Command timed out after 20s"
 
   Scenario: No CLI on the PATH at all
     Given the PATH contains no `claude`, `agy`, `kimi` or `kilo`
@@ -111,11 +159,14 @@ Feature: 003 - Kimi windows via its local web API
 
   Scenario: README documents kimi
     When I read "README.md"
-    Then the provider list names `kimi` (kimi code) between `agy` and `kilo`, and says it reads `kimi web`'s local usage endpoint
+    Then the provider list names `kimi` (kimi code) between `agy` and `kilo`, says it reads `kimi web`'s local usage endpoint, and states a 20s token wait, a 10s request timeout, and a SIGTERM then SIGKILL after 5s shutdown
+    And it says "All four probes run in parallel" and no longer says "All three probes run in parallel"
     And the env-var ledger lists `ALLOWANCE_KIMI_PORT` with default `59177`
 
   Scenario: Earlier end-to-end checks keep passing
     When the user runs `node qa/e2e.mjs`
     Then every e2e passes, including the 001 and 002 e2es and the new 003 kimi e2es
-    And no e2e invokes a real `claude`, `agy`, `kimi` or `kilo` binary or leaves a fixture process running
+    And every 003 e2e creates its fixture dir with the temp prefix "allowance-qa-003-"
+    And after the run no process whose command line contains "allowance-qa" is running
+    And no e2e invokes a real `claude`, `agy`, `kimi` or `kilo` binary
     And package.json still has no "dependencies" section
