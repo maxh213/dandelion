@@ -1,0 +1,172 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const codexEntry = join(tree, 'src', 'probes', 'codex.ts');
+const NOW = '2026-09-13T10:00:00.000Z';
+const ITERATIONS = 2000;
+const SPAWN_ITERATIONS = 50;
+
+const TARGETS = {
+  cliApiKey: 'cli one-shot six providers codex api-key',
+  cliChatGpt: 'cli one-shot six providers codex chatgpt app-server',
+  probeApiKey: 'probeCodex api-key (in-process, per call)',
+  probeChatGpt: 'probeCodex chatgpt stub spawner (in-process, per call)',
+  probeRealSpawn: 'probeCodex chatgpt spawned sh app-server (in-process, per call)',
+  runApp: 'runApp six providers codex chatgpt (in-process, per call)',
+  renderApiKey: 'renderDashboard six providers codex api-key (in-process, per call)',
+  renderChatGpt: 'renderDashboard six providers codex windows (in-process, per call)'
+};
+
+function emit(target, value, unit) {
+  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
+}
+
+function absent(...targets) {
+  for (const target of targets) console.log(JSON.stringify({ target, absent: true }));
+}
+
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry) || !existsSync(codexEntry)) {
+  absent(TARGETS.cliApiKey, TARGETS.cliChatGpt, TARGETS.probeApiKey, TARGETS.probeChatGpt, TARGETS.probeRealSpawn, TARGETS.runApp);
+}
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
+  absent(TARGETS.renderApiKey, TARGETS.renderChatGpt);
+  process.exit(0);
+}
+
+const API_KEY_LOGIN = 'Logged in using an API key - sk-proj-***n5zQA\n';
+const CHATGPT_LOGIN = 'Logged in using ChatGPT\n';
+const LIMITS = {
+  primary: { usedPercent: 42, windowDurationMins: 300, resetsAt: 1789302600 },
+  secondary: { usedPercent: 86, windowDurationMins: 10080, resetsAt: 1789552800 }
+};
+const ANSWER_LINES = [
+  JSON.stringify({ jsonrpc: '2.0', id: 1, result: { userAgent: 'codex/0.153.4' } }),
+  JSON.stringify({ jsonrpc: '2.0', method: 'account/rateLimits/updated', params: { rateLimits: LIMITS } }),
+  JSON.stringify({ jsonrpc: '2.0', id: 2, result: { rateLimits: LIMITS, rateLimitsByLimitId: {} } })
+];
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+const CLAUDE_OUT = 'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)\nCurrent week (all models): 86% used · resets Sep 13, 11pm (Europe/London)\n';
+const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z\n';
+const OUTPUTS = { claude: CLAUDE_OUT, agy: AGY_OUT, kilo: KILO_OUT };
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-codex-'));
+const bin = join(fixture, 'bin');
+mkdirSync(bin);
+for (const [name, out] of Object.entries(OUTPUTS)) {
+  const file = join(bin, name);
+  writeFileSync(file, `#!/bin/sh\ncat <<'OUT'\n${out}OUT\n`);
+  chmodSync(file, 0o755);
+}
+const codexFile = join(bin, 'codex');
+writeFileSync(codexFile, [
+  '#!/bin/sh',
+  'if [ "$1" = login ]; then',
+  `  if [ "$CODEX_BENCH_MODE" = chatgpt ]; then printf '%s' '${CHATGPT_LOGIN}' >&2; else printf '%s' '${API_KEY_LOGIN}' >&2; fi`,
+  '  exit 0',
+  'fi',
+  'read line',
+  `printf '%s\\n' '${ANSWER_LINES[0]}'`,
+  'read line',
+  'read line',
+  `printf '%s\\n' '${ANSWER_LINES[1]}' '${ANSWER_LINES[2]}'`,
+  'while read line; do :; done',
+  ''
+].join('\n'));
+chmodSync(codexFile, 0o755);
+process.env.PATH = `${bin}:${process.env.PATH}`;
+
+function timeCli(mode) {
+  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, CODEX_BENCH_MODE: mode };
+  delete env.NO_COLOR;
+  const start = process.hrtime.bigint();
+  execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  return Number(process.hrtime.bigint() - start) / 1e6;
+}
+
+function runnerFor(login) {
+  return { run: async (command) => (command === 'codex' ? { stdout: '', stderr: login } : { stdout: OUTPUTS[command] ?? '', stderr: '' }) };
+}
+
+const stubSpawner = {
+  spawn: () => ({
+    lines: (async function* () { yield* ANSWER_LINES; })(),
+    send: () => undefined,
+    stop: async () => undefined
+  })
+};
+
+function ioWith(login, spawner) {
+  const runner = runnerFor(login);
+  return {
+    ...runner,
+    runner,
+    spawner,
+    launcher: { launch: async () => undefined },
+    fetcher: { get: async () => ({ failure: 'network' }) },
+    reader: { homeDir: () => fixture, read: async () => undefined }
+  };
+}
+
+async function perCall(iterations, fn) {
+  const start = process.hrtime.bigint();
+  for (let i = 0; i < iterations; i++) await fn();
+  return Number(process.hrtime.bigint() - start) / 1e3 / iterations;
+}
+
+function usages(codex) {
+  return [
+    { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' }] },
+    { id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok', windows: [{ label: 'Gemini Models · Weekly Limit', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' }] },
+    { id: 'kimi', displayName: 'kimi', planLabel: 'kimi', fetchedAt: NOW, status: 'unavailable', windows: [], reason: 'kimi CLI not found' },
+    { id: 'grok', displayName: 'grok', planLabel: 'grok', fetchedAt: NOW, status: 'unavailable', windows: [], reason: 'grok log not found' },
+    codex,
+    { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
+  ];
+}
+
+const codexIdentity = { id: 'codex', displayName: 'codex', planLabel: 'codex', fetchedAt: NOW, status: 'ok' };
+const apiKeyUsages = usages({ ...codexIdentity, windows: [], note: 'api-key billing · no usage windows' });
+const windowUsages = usages({
+  ...codexIdentity,
+  windows: [{ label: '5h', usedPct: 42, resetsAt: '2026-09-13T12:30:00.000Z' }, { label: 'weekly', usedPct: 86, resetsAt: '2026-09-16T10:00:00.000Z' }]
+});
+
+try {
+  const { runApp, realIo } = await import(pathToFileURL(appEntry).href);
+  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+
+  const chatIo = ioWith(CHATGPT_LOGIN, stubSpawner);
+  if (existsSync(codexEntry)) {
+    timeCli('apikey');
+    timeCli('chatgpt');
+    emit(TARGETS.cliApiKey, timeCli('apikey'), 'ms');
+    emit(TARGETS.cliChatGpt, timeCli('chatgpt'), 'ms');
+    const { probeCodex } = await import(pathToFileURL(codexEntry).href);
+    const apiIo = ioWith(API_KEY_LOGIN, stubSpawner);
+    const realSpawnIo = ioWith(CHATGPT_LOGIN, realIo.spawner);
+    await probeCodex(apiIo, NOW);
+    await probeCodex(chatIo, NOW);
+    const warm = await probeCodex(realSpawnIo, NOW);
+    if (warm.status !== 'ok' || warm.windows.length !== 2) throw new Error(`real app-server probe failed: ${JSON.stringify(warm)}`);
+    emit(TARGETS.probeApiKey, await perCall(ITERATIONS, () => probeCodex(apiIo, NOW)), 'us');
+    emit(TARGETS.probeChatGpt, await perCall(ITERATIONS, () => probeCodex(chatIo, NOW)), 'us');
+    emit(TARGETS.probeRealSpawn, await perCall(SPAWN_ITERATIONS, () => probeCodex(realSpawnIo, NOW)), 'us');
+    await runApp(chatIo, {}, NOW);
+    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(chatIo, {}, NOW)), 'us');
+  }
+
+  renderDashboard(apiKeyUsages, false, NOW);
+  renderDashboard(windowUsages, false, NOW);
+  emit(TARGETS.renderApiKey, await perCall(ITERATIONS, () => renderDashboard(apiKeyUsages, false, NOW)), 'us');
+  emit(TARGETS.renderChatGpt, await perCall(ITERATIONS, () => renderDashboard(windowUsages, false, NOW)), 'us');
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}
