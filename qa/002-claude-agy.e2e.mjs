@@ -2,12 +2,11 @@ import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, writeFile, chmod, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, writeFile, chmod, rm } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NODE_DIR = dirname(process.execPath);
-let nodeBinDir = '';
 const ESC = '\x1b[';
 const COUNTDOWN = String.raw`↻ (\d+h\d+m|\d+d\d+h)`;
 const CLAUDE_LINES = [
@@ -58,7 +57,7 @@ async function fixtureDir(overrides) {
 
 function runApp(dir, extraEnv) {
   const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_GROK_HOME, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, ALLOWANCE_GROK_HOME: dir, ...extraEnv };
+  const env = { ...inherited, PATH: `${dir}:${NODE_DIR}`, ALLOWANCE_GROK_HOME: dir, ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -183,28 +182,16 @@ async function noCliOnPath() {
   }
 }
 
-async function nodeBin() {
-  const dir = await mkdtemp(join(tmpdir(), 'allowance-nodebin-'));
-  await symlink(process.execPath, join(dir, 'node'));
-  await symlink('/bin/sh', join(dir, 'sh'));
-  return dir;
-}
-
 export default async function () {
-  nodeBinDir = await nodeBin();
+  const dir = await fixtureDir({});
   try {
-    const dir = await fixtureDir({});
-    try {
-      await threeProvidersInOrder(dir);
-      await rampStylesRows(dir);
-      await noColorRows(dir);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-    await failingClaude();
-    await garbageAgy();
-    await noCliOnPath();
+    await threeProvidersInOrder(dir);
+    await rampStylesRows(dir);
+    await noColorRows(dir);
   } finally {
-    await rm(nodeBinDir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
   }
+  await failingClaude();
+  await garbageAgy();
+  await noCliOnPath();
 }

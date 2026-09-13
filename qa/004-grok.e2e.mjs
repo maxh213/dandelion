@@ -2,12 +2,11 @@ import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, stat, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, stat } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NODE_DIR = dirname(process.execPath);
-let nodeBinDir = '';
 const OUTER_TIMEOUT_MS = 60000;
 const PREFIX = 'allowance-qa-004-';
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
@@ -56,7 +55,7 @@ async function snapshotTree(dir) {
 
 function runApp(binDir, grokHome) {
   const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_GROK_HOME, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${binDir}:${nodeBinDir}`, NO_COLOR: '1', ALLOWANCE_GROK_HOME: grokHome };
+  const env = { ...inherited, PATH: `${binDir}:${NODE_DIR}`, NO_COLOR: '1', ALLOWANCE_GROK_HOME: grokHome };
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   assert.equal(result.error, undefined, `spawn failed or hit the outer timeout: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -111,25 +110,13 @@ async function noRuntimeDependencies() {
   assert.equal(manifest.dependencies, undefined, 'package.json has a dependencies section');
 }
 
-async function nodeBin() {
-  const dir = await mkdtemp(join(tmpdir(), 'allowance-nodebin-'));
-  await symlink(process.execPath, join(dir, 'node'));
-  await symlink('/bin/sh', join(dir, 'sh'));
-  return dir;
-}
-
 export default async function () {
-  nodeBinDir = await nodeBin();
+  await noRuntimeDependencies();
+  const binDir = await fixtureBin();
   try {
-    await noRuntimeDependencies();
-    const binDir = await fixtureBin();
-    try {
-      await grokShowsNewestSnapshot(binDir);
-      await grokUnavailableWithEmptyHome(binDir);
-    } finally {
-      await rm(binDir, { recursive: true, force: true });
-    }
+    await grokShowsNewestSnapshot(binDir);
+    await grokUnavailableWithEmptyHome(binDir);
   } finally {
-    await rm(nodeBinDir, { recursive: true, force: true });
+    await rm(binDir, { recursive: true, force: true });
   }
 }

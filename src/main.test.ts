@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ProbeIo } from './app/index.ts';
@@ -116,6 +116,22 @@ describe('main', () => {
     expect(io.runner.run).not.toHaveBeenCalled();
     expect(io.launcher.launch).not.toHaveBeenCalled();
     expect(io.spawner.spawn).not.toHaveBeenCalled();
+  });
+
+  it('runs with only fixtures, node and sh on PATH and no runtime dependencies', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'allowance-nodebin-'));
+    try {
+      symlinkSync(process.execPath, join(dir, 'node'));
+      symlinkSync('/bin/sh', join(dir, 'sh'));
+      writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
+      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', ALLOWANCE_GROK_HOME: dir };
+      const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8', timeout: 60000 });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toMatch(/\ngrok\n[^]*\ncodex\napi-key billing · no usage windows\ncodex · codex\n[^]*\nkilo\n/);
+      expect(JSON.parse(readFileSync('package.json', 'utf-8')).dependencies).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('prints six dim unavailable panels in order when no CLI is on PATH and grok home is empty', () => {

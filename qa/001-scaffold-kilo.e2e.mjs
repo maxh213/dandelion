@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, writeFile, chmod, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, writeFile, chmod, rm } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -10,11 +10,9 @@ const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalan
 const ESC = '\x1b[';
 const ALLOWED_GLYPHS = /[↻·…—]/g;
 const NODE_DIR = dirname(process.execPath);
-let nodeBinDir = '';
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const KIMI_FIXTURE = '#!/bin/sh\nexit 0\n';
-const CODEX_FIXTURE = '#!/bin/sh\nexit 1\n';
 
 async function kiloFixture() {
   const dir = await mkdtemp(join(tmpdir(), 'allowance-qa-kilo-'));
@@ -22,7 +20,7 @@ async function kiloFixture() {
   const quoted = PROFILE.replaceAll('\n', '\\n').replaceAll('$', '\\$');
   await writeFile(script, `#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "${quoted}"\n`);
   await chmod(script, 0o755);
-  for (const [name, body] of [['claude', CLAUDE_FIXTURE], ['agy', AGY_FIXTURE], ['kimi', KIMI_FIXTURE], ['codex', CODEX_FIXTURE]]) {
+  for (const [name, body] of [['claude', CLAUDE_FIXTURE], ['agy', AGY_FIXTURE], ['kimi', KIMI_FIXTURE]]) {
     await writeFile(join(dir, name), body);
     await chmod(join(dir, name), 0o755);
   }
@@ -60,7 +58,7 @@ function assertAscii(stdout) {
 }
 
 async function happyPathDefaultReference(kiloDir) {
-  const stdout = runApp(`${kiloDir}:${nodeBinDir}`, {});
+  const stdout = runApp(`${kiloDir}:${NODE_DIR}`, {});
   const plain = stripAnsi(stdout);
   assert.match(plain, /^ALLOWANCE +\d{2}:\d{2}:\d{2}Z$/m);
   assert.match(plain, /^kilo$/m);
@@ -72,7 +70,7 @@ async function happyPathDefaultReference(kiloDir) {
 }
 
 async function customReferenceFillsGauge(kiloDir) {
-  const stdout = runApp(`${kiloDir}:${nodeBinDir}`, { NO_COLOR: '1', ALLOWANCE_KILO_REFERENCE: '10' });
+  const stdout = runApp(`${kiloDir}:${NODE_DIR}`, { NO_COLOR: '1', ALLOWANCE_KILO_REFERENCE: '10' });
   assert.ok(!stdout.includes(ESC), 'NO_COLOR output contains escape codes');
   assert.match(stdout, /^ALLOWANCE /m);
   assert.ok(stdout.includes(`$14.15 ${'#'.repeat(20)}`), `gauge not full at reference 10:\n${stdout}`);
@@ -81,7 +79,7 @@ async function customReferenceFillsGauge(kiloDir) {
 }
 
 async function missingKiloRendersUnavailable(emptyDir) {
-  const stdout = runApp(`${emptyDir}:${nodeBinDir}`, {});
+  const stdout = runApp(`${emptyDir}:${NODE_DIR}`, {});
   const plain = stripAnsi(stdout);
   assert.match(plain, /^ALLOWANCE /m);
   assert.match(plain, /^kilo\nkilo CLI not found in PATH\n/m);
@@ -93,27 +91,15 @@ async function missingKiloRendersUnavailable(emptyDir) {
   assertWidth(stdout);
 }
 
-async function nodeBin() {
-  const dir = await mkdtemp(join(tmpdir(), 'allowance-nodebin-'));
-  await symlink(process.execPath, join(dir, 'node'));
-  await symlink('/bin/sh', join(dir, 'sh'));
-  return dir;
-}
-
 export default async function () {
-  nodeBinDir = await nodeBin();
+  const kiloDir = await kiloFixture();
+  const emptyDir = await emptyPathFixture();
   try {
-    const kiloDir = await kiloFixture();
-    const emptyDir = await emptyPathFixture();
-    try {
-      await happyPathDefaultReference(kiloDir);
-      await customReferenceFillsGauge(kiloDir);
-      await missingKiloRendersUnavailable(emptyDir);
-    } finally {
-      await rm(kiloDir, { recursive: true, force: true });
-      await rm(emptyDir, { recursive: true, force: true });
-    }
+    await happyPathDefaultReference(kiloDir);
+    await customReferenceFillsGauge(kiloDir);
+    await missingKiloRendersUnavailable(emptyDir);
   } finally {
-    await rm(nodeBinDir, { recursive: true, force: true });
+    await rm(kiloDir, { recursive: true, force: true });
+    await rm(emptyDir, { recursive: true, force: true });
   }
 }
