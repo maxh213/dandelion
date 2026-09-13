@@ -17,6 +17,9 @@ Nothing for this task.
 - Your shell may have `NO_COLOR=1` set; unset it to see the coloured dashboard.
 - The QA e2e fixture still uses `echo` with `\n`. I left `qa/` alone because it belongs to the QA procedure.
 
+## Config change
+`marestail gate --hook` (scope changed) fails `ts.deps` on a clean tree: `scoped_findings` in `marestail/gates/ts_deps.py` reports depcruise's `✔ no dependency violations found` and npm notices as findings. `npx depcruise --config .dependency-cruiser.cjs --output-type err src` exits 0, and `--tier sonar` (scope all) passes `ts.deps`. It should return no findings when depcruise exits 0 or prints no `VIOLATION` lines.
+
 ## Audit
 - Display kilo balance successfully with default reference -> src/app/wiring.test.ts::displays kilo balance with default reference
 - Gauge fill count rounds half-up -> src/app/wiring.test.ts::rounds gauge fill half-up
