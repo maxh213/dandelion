@@ -1,5 +1,7 @@
 # QA Procedure: 003 - Kimi windows
 
+After 003, two expected results in `qa/002-claude-agy.md` change. In step 2, a `kimi` panel (dim, reason `kimi CLI not found in PATH`, since `$FX` has no `kimi` yet) sits between `agy` and `kilo`. Step 9 shows four dim panels in the order claude, agy, kimi, kilo, and the kimi reason is `kimi CLI not found in PATH`. Step 13 below replaces that step 9.
+
 Set up once in the repo root (bash). Run the set-up block of `qa/002-claude-agy.md` first so `$FX` holds the `claude`, `agy` and `kilo` fixtures and `$NODEDIR` is set. Then add the `kimi` fixture. It reads its behaviour from `$FX/mode`, writes its pid to `$FX/kimi.pid`, and sets `reset_at` to 5 days and 5 minutes from now.
 
 Modes: `ok`, `notoken` (exits at once), `silent` (stays alive, prints nothing), `nohttp` (prints the token, never listens), `hang` (accepts the request, never answers), `500`, `badjson`, `zero` (summary limit 0), `odd` (1200/1000 with `reset_at` "soon", a bad hour entry, a 1-hour entry), `stubborn` (ignores SIGTERM).
@@ -73,3 +75,6 @@ run() { echo "$1" > "$FX/mode"; rm -f "$FX/kimi.pid"; time timeout "$2" env PATH
 
 12. Run `mv "$FX/kimi" "$FX/kimi.off"; run ok 10; mv "$FX/kimi.off" "$FX/kimi"`, then `pgrep -fa "$FX/kimi"`.
     - **Expected:** `exit=0`. The kimi panel reason is `kimi CLI not found in PATH` and it still sits between agy and kilo. (`alive` prints `GONE` because there is no pid file.) `pgrep` prints nothing.
+
+13. Run `PATH="$(mktemp -d):$NODEDIR" npm start; echo "exit=$?"`.
+    - **Expected:** `exit=0`. Four dim panels appear in the order claude, agy, kimi, kilo, with the reasons `claude CLI not found in PATH`, `agy CLI not found in PATH`, `kimi CLI not found in PATH` and `kilo CLI not found in PATH`.

@@ -3,6 +3,8 @@ Feature: 003 - Kimi windows via its local web API
   Row layout, gauge math, ramp colours and NO_COLOR rules are those of features/002-claude-agy.feature.
   Kimi usage percent = used / limit * 100, rounded half-up to a whole number, not capped at 100.
   A usable number is a finite JSON number; used must be >= 0 and limit must be > 0.
+  A response of any shape never crashes the app: a bad `data` or `summary` makes the kimi panel unavailable,
+  and a bad `limits` value or entry is ignored.
   The 003 scenarios "Kimi probes in parallel with the others" and "No CLI on the PATH at all" replace
   the 002 scenarios "Probes run in parallel" and "No CLI on the PATH at all": there are now four panels.
 
@@ -63,6 +65,11 @@ Feature: 003 - Kimi windows via its local web API
       | {"data":{"summary":{"used":1200,"limit":1000}}}                                                              | weekly                              #################### 120%     |
       | {"data":{"summary":{"used":590,"limit":1000,"reset_at":"soon"}}}                                             | weekly                              ############--------  59%     |
       | {"data":{"summary":{"used":590,"limit":1000,"reset_at":42}}}                                                 | weekly                              ############--------  59%     |
+      | {"data":{"summary":{"used":590,"limit":1000},"limits":"x"}}                                                  | weekly                              ############--------  59%     |
+      | {"data":{"summary":{"used":590,"limit":1000},"limits":{}}}                                                   | weekly                              ############--------  59%     |
+      | {"data":{"summary":{"used":590,"limit":1000},"limits":[null]}}                                               | weekly                              ############--------  59%     |
+      | {"data":{"summary":{"used":590,"limit":1000},"limits":[{"used":42,"limit":100}]}}                            | weekly                              ############--------  59%     |
+      | {"data":{"summary":{"used":590,"limit":1000},"limits":[{"used":42,"limit":100,"window":null}]}}              | weekly                              ############--------  59%     |
 
   Scenario: Every hour entry is labelled 5h and shown in response order; bad hour entries are skipped
     Given the kimi usage response is:
@@ -106,6 +113,11 @@ Feature: 003 - Kimi windows via its local web API
       | prints the token and never answers the request                   | kimi usage request timed out after 10s   | after 10 to 20 seconds     |
       | prints the token and answers "{\"data\":"                        | Could not parse usage from response      | within 5 seconds           |
       | prints the token and answers {"data":{"limits":[]}}              | Could not parse usage from response      | within 5 seconds           |
+      | prints the token and answers null                                | Could not parse usage from response      | within 5 seconds           |
+      | prints the token and answers []                                  | Could not parse usage from response      | within 5 seconds           |
+      | prints the token and answers {"data":null}                       | Could not parse usage from response      | within 5 seconds           |
+      | prints the token and answers {"data":{"summary":null}}           | Could not parse usage from response      | within 5 seconds           |
+      | prints the token and answers {"data":{"summary":"x"}}            | Could not parse usage from response      | within 5 seconds           |
       | prints the token and answers {"data":{"summary":{"used":1}}}     | Could not parse usage from response      | within 5 seconds           |
       | prints the token and answers {"data":{"summary":{"used":1,"limit":0}}}      | Could not parse usage from response | within 5 seconds    |
       | prints the token and answers {"data":{"summary":{"used":-1,"limit":1000}}}  | Could not parse usage from response | within 5 seconds    |
@@ -159,7 +171,8 @@ Feature: 003 - Kimi windows via its local web API
 
   Scenario: README documents kimi
     When I read "README.md"
-    Then the provider list names `kimi` (kimi code) between `agy` and `kilo`, says it reads `kimi web`'s local usage endpoint, and states a 20s token wait, a 10s request timeout, and a SIGTERM then SIGKILL after 5s shutdown
+    Then the intro sentence names `claude`, `agy` and `kimi` as the subscription usage windows and `kilo` as the API balance
+    And the provider list names `kimi` (kimi code) between `agy` and `kilo`, says it reads `kimi web`'s local usage endpoint, and states a 20s token wait, a 10s request timeout, and a SIGTERM then SIGKILL after 5s shutdown
     And it says "All four probes run in parallel" and no longer says "All three probes run in parallel"
     And the env-var ledger lists `ALLOWANCE_KIMI_PORT` with default `59177`
 
@@ -167,6 +180,10 @@ Feature: 003 - Kimi windows via its local web API
     When the user runs `node qa/e2e.mjs`
     Then every e2e passes, including the 001 and 002 e2es and the new 003 kimi e2es
     And every 003 e2e creates its fixture dir with the temp prefix "allowance-qa-003-"
+    And "qa/003-kimi.e2e.mjs" runs `npm start` twice with PATH set to only its fixture dir and node's dir, ALLOWANCE_KIMI_PORT set to a free port, and an outer spawn timeout
+    And in the first run its `kimi` fixture serves the Background JSON, and it asserts exit code 0, the kimi panel between agy and kilo, a "weekly" row at "59%" and a "5h" row at "42%"
+    And in the second run its `kimi` fixture writes its pid file and exits at once without printing a token, and it asserts exit code 0 before the outer timeout and a dim kimi panel with the reason "kimi web exited without printing a token"
+    And after each run it reads the fixture's pid file and asserts that pid no longer names a running process
     And after the run no process whose command line contains "allowance-qa" is running
     And no e2e invokes a real `claude`, `agy`, `kimi` or `kilo` binary
     And package.json still has no "dependencies" section
