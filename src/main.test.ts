@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
+import { spawnSync } from 'node:child_process';
 import type { CommandRunner } from './app/index.ts';
 
 vi.mock('./app/index.ts', async (importOriginal) => {
@@ -41,6 +42,16 @@ describe('main', () => {
     await runIfMain('file:///path/to/main.ts', 'other.ts', runner);
     await runIfMain('file:///path/to/main.ts', undefined, runner);
     expect(runner.run).not.toHaveBeenCalled();
+  });
+
+  it('prints a dim unavailable kilo panel with the exact reason when kilo is not on PATH', () => {
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '' };
+    delete env.NO_COLOR;
+    const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('ALLOWANCE');
+    expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\nkilo\nkilo CLI not found in PATH\n');
+    expect(result.stdout).not.toContain('Command failed');
   });
 
   it('README is updated with project details', () => {
