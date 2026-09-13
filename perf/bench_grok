@@ -1,0 +1,157 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const grokEntry = join(tree, 'src', 'probes', 'grok.ts');
+const NOW = '2026-09-13T10:00:00.000Z';
+const ITERATIONS = 200;
+const RENDER_ITERATIONS = 2000;
+const LOG_LINES = 13400;
+const RECENT_FROM_END = 65;
+
+const TARGETS = {
+  cli: 'cli one-shot claude+agy+grok+kilo 4MB grok log',
+  cliEmpty: 'cli one-shot claude+agy+grok+kilo empty grok home',
+  probeRecent: 'probeGrok 4MB log, snapshot 65 lines from end (in-process, per call)',
+  probeWorst: 'probeGrok 4MB log, snapshot on first line (in-process, per call)',
+  probeMissing: 'probeGrok missing log (in-process, per call)',
+  runApp: 'runApp five providers 4MB grok log (in-process, per call)',
+  renderFresh: 'renderDashboard five providers grok fresh (in-process, per call)',
+  renderStale: 'renderDashboard five providers grok stale (in-process, per call)'
+};
+
+function emit(target, value, unit) {
+  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
+}
+
+function absent(...targets) {
+  for (const target of targets) console.log(JSON.stringify({ target, absent: true }));
+}
+
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+function billing(ts, pct) {
+  return JSON.stringify({
+    ts, src: 'shell', pid: 2500055, ver: '1.0.25', level: 'info', msg: 'billing: fetched credits config',
+    ctx: {
+      config: { creditUsagePercent: pct, currentPeriod: { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: '2026-09-06T21:15:36.133376+00:00', end: '2026-09-13T21:15:36.133376+00:00' } },
+      subscriptionTier: 'SuperGrok Heavy'
+    }
+  });
+}
+
+function noise(i) {
+  return JSON.stringify({
+    ts: '2026-09-13T09:00:00.000Z', src: 'shell', pid: 2500055, ver: '1.0.25', level: 'debug', msg: `tool: step ${i}`,
+    ctx: { session: 'a1b2c3d4-e5f6-7890-abcd-ef0123456789', detail: 'x'.repeat(170) }
+  });
+}
+
+function makeLog(billingIndex) {
+  const lines = [];
+  for (let i = 0; i < LOG_LINES; i++) lines.push(i === billingIndex ? billing('2026-09-13T08:00:00.000Z', 75) : noise(i));
+  return lines.join('\n') + '\n';
+}
+
+const recentLog = makeLog(LOG_LINES - RECENT_FROM_END);
+const worstLog = makeLog(0);
+
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+const CLAUDE_OUT = 'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)\nCurrent week (all models): 86% used · resets Sep 13, 11pm (Europe/London)\n';
+const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z\n';
+const OUTPUTS = { claude: CLAUDE_OUT, agy: AGY_OUT, kilo: KILO_OUT };
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-grok-'));
+const bin = join(fixture, 'bin');
+const home = join(fixture, 'home');
+const emptyHome = join(fixture, 'empty');
+mkdirSync(bin);
+mkdirSync(join(home, 'logs'), { recursive: true });
+mkdirSync(emptyHome);
+writeFileSync(join(home, 'logs', 'unified.jsonl'), recentLog);
+for (const [name, out] of Object.entries(OUTPUTS)) {
+  const file = join(bin, name);
+  writeFileSync(file, `#!/bin/sh\ncat <<'OUT'\n${out}OUT\n`);
+  chmodSync(file, 0o755);
+}
+
+function timeCli(grokHome) {
+  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: grokHome };
+  delete env.NO_COLOR;
+  const start = process.hrtime.bigint();
+  execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  return Number(process.hrtime.bigint() - start) / 1e6;
+}
+
+function ioWith(log) {
+  const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
+  return {
+    ...runner,
+    runner,
+    launcher: { launch: async () => undefined },
+    fetcher: { get: async () => ({ failure: 'network' }) },
+    reader: { homeDir: () => fixture, read: async () => log }
+  };
+}
+
+async function perCall(iterations, fn) {
+  const start = process.hrtime.bigint();
+  for (let i = 0; i < iterations; i++) await fn();
+  return Number(process.hrtime.bigint() - start) / 1e3 / iterations;
+}
+
+function usages(snapshotAt) {
+  return [
+    { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' }] },
+    { id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok', windows: [{ label: 'Gemini Models · Weekly Limit', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' }] },
+    { id: 'kimi', displayName: 'kimi', planLabel: 'kimi', fetchedAt: NOW, status: 'unavailable', windows: [], reason: 'kimi CLI not found' },
+    { id: 'grok', displayName: 'grok', planLabel: 'SuperGrok Heavy', fetchedAt: NOW, status: 'ok', snapshotAt, windows: [{ label: 'credits', usedPct: 75, resetsAt: '2026-09-13T21:15:36.133376+00:00' }] },
+    { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
+  ];
+}
+
+try {
+  const { runApp } = await import(pathToFileURL(appEntry).href);
+  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+  const fresh = usages('2026-09-12T16:00:00.000Z');
+  const stale = usages('2026-09-10T17:14:22.812Z');
+
+  timeCli(home);
+  timeCli(emptyHome);
+  emit(TARGETS.cli, timeCli(home), 'ms');
+  emit(TARGETS.cliEmpty, timeCli(emptyHome), 'ms');
+
+  if (existsSync(grokEntry)) {
+    const { probeGrok } = await import(pathToFileURL(grokEntry).href);
+    const recentIo = ioWith(recentLog);
+    const worstIo = ioWith(worstLog);
+    const missingIo = ioWith(undefined);
+    await probeGrok(recentIo, {}, NOW);
+    await probeGrok(worstIo, {}, NOW);
+    await probeGrok(missingIo, {}, NOW);
+    await runApp(recentIo, {}, NOW);
+    emit(TARGETS.probeRecent, await perCall(ITERATIONS, () => probeGrok(recentIo, {}, NOW)), 'us');
+    emit(TARGETS.probeWorst, await perCall(ITERATIONS, () => probeGrok(worstIo, {}, NOW)), 'us');
+    emit(TARGETS.probeMissing, await perCall(RENDER_ITERATIONS, () => probeGrok(missingIo, {}, NOW)), 'us');
+    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(recentIo, {}, NOW)), 'us');
+  } else {
+    absent(TARGETS.probeRecent, TARGETS.probeWorst, TARGETS.probeMissing, TARGETS.runApp);
+  }
+
+  renderDashboard(fresh, false, NOW);
+  renderDashboard(stale, false, NOW);
+  emit(TARGETS.renderFresh, await perCall(RENDER_ITERATIONS, () => renderDashboard(fresh, false, NOW)), 'us');
+  emit(TARGETS.renderStale, await perCall(RENDER_ITERATIONS, () => renderDashboard(stale, false, NOW)), 'us');
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}

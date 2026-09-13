@@ -56,7 +56,7 @@ for (const [name, out] of Object.entries(OUTPUTS)) {
 }
 
 function timeCli() {
-  const env = { ...process.env, PATH: `${fixture}:/usr/bin:/bin` };
+  const env = { ...process.env, PATH: `${fixture}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture };
   delete env.NO_COLOR;
   const start = process.hrtime.bigint();
   execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -64,7 +64,7 @@ function timeCli() {
 }
 
 const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
-const stub = { ...runner, runner, launcher: { launch: async () => undefined }, fetcher: { get: async () => ({ failure: 'network' }) } };
+const stub = { ...runner, runner, launcher: { launch: async () => undefined }, fetcher: { get: async () => ({ failure: 'network' }) }, reader: { homeDir: () => fixture, read: async () => undefined } };
 const usages = [
   {
     id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok',

@@ -78,7 +78,7 @@ function freePort() {
 }
 
 async function timeCli(fixture) {
-  const env = { ...process.env, PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_KIMI_PORT: String(await freePort()) };
+  const env = { ...process.env, PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_KIMI_PORT: String(await freePort()), ALLOWANCE_GROK_HOME: fixture };
   delete env.NO_COLOR;
   const start = process.hrtime.bigint();
   execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -91,7 +91,8 @@ const io = {
   ...runner,
   runner,
   launcher: { launch: async () => child },
-  fetcher: { get: async () => ({ status: 200, body: BODY }) }
+  fetcher: { get: async () => ({ status: 200, body: BODY }) },
+  reader: { homeDir: () => tmpdir(), read: async () => undefined }
 };
 const usages = [
   { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' }] },
