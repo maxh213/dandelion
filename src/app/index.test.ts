@@ -42,6 +42,7 @@ function grokReader(log: string | undefined): FileReader {
   return { homeDir: () => '/home/tester', read: async (path) => (path === '/grok/logs/unified.jsonl' ? log : undefined) };
 }
 
+const LONG_UNUSABLE = Array.from({ length: 50000 }, () => '{"msg":"billing: fetched credits config","ts":"x"}').join('\n');
 const GROK_ENV = { ALLOWANCE_GROK_HOME: '/grok' };
 const NO_GROK = grokReader(undefined);
 
@@ -385,11 +386,20 @@ describe('grok panel', () => {
     ]);
   });
 
+  it('renders an older usable event far behind 50,000 unusable billing lines', async () => {
+    const log = `${billingEvent('2026-09-11T09:00:00.000Z', 60.0, 'SuperGrok')}\n${LONG_UNUSABLE}`;
+    const lines = (await runApp(grokIo(log), { ...GROK_ENV, NO_COLOR: '1' }, NOW)).split('\n');
+    const grok = lines.indexOf('grok');
+    expect(lines[grok + 1]).toBe('credits                             ############--------  60% ↻ 11h15m');
+    expect(lines[grok + 3]).toBe('SuperGrok · grok');
+  });
+
   it.each<[string, string | undefined]>([
     ['no log', undefined],
     ['an empty log', ''],
     ['only non-billing lines', '{"ts":"2026-09-11T08:00:00.000Z","msg":"session started","ctx":{}}\n{"msg":"tool call finished"}'],
-    ['only unusable billing events', '{"ts":"later","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":95}}}']
+    ['only unusable billing events', '{"ts":"later","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":95}}}'],
+    ['50,000 unusable billing lines', LONG_UNUSABLE]
   ])('renders a dim unavailable grok panel with %s while the others render normally', async (_case, log) => {
     const output = await runApp(grokIo(log), GROK_ENV, NOW);
     expect(output).toContain(`${DIM}${RULE}\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m\n`);

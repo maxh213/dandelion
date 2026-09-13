@@ -10,6 +10,8 @@ export type GrokIo = { reader: FileReader };
 type Snapshot = { window: UsageWindow; tier: string; ts: string };
 
 const BILLING_MSG = 'billing: fetched credits config';
+const BILLING_HITS = new RegExp(BILLING_MSG, 'g');
+const FIRST_CHUNK = 65536;
 const UNAVAILABLE = 'no grok billing snapshot — run grok once';
 
 function grokHome(reader: FileReader, env: Record<string, string | undefined>): string {
@@ -66,15 +68,23 @@ function lineAround(log: string, at: number): string {
   return log.slice(log.lastIndexOf('\n', at) + 1, end === -1 ? undefined : end);
 }
 
-function snapshotFrom(log: string, at: number): Snapshot | undefined {
-  if (at === -1) return undefined;
-  const [snapshot] = snapshotsOn(lineAround(log, at));
-  return snapshot ?? snapshotFrom(log, log.lastIndexOf(BILLING_MSG, at - 1));
+function newestIn(chunk: string): Snapshot | undefined {
+  for (const hit of [...chunk.matchAll(BILLING_HITS)].reverse()) {
+    const [snapshot] = snapshotsOn(lineAround(chunk, hit.index));
+    if (snapshot !== undefined) return snapshot;
+  }
+  return undefined;
+}
+
+function snapshotBefore(log: string, end: number, size: number): Snapshot | undefined {
+  if (end <= 1) return undefined;
+  const start = log.lastIndexOf('\n', end - size) + 1;
+  return newestIn(log.slice(start, end)) ?? snapshotBefore(log, start, size * 2);
 }
 
 export async function probeGrok(io: GrokIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
   const log = await io.reader.read(`${grokHome(io.reader, env)}/logs/unified.jsonl`);
-  const snapshot = log === undefined ? undefined : snapshotFrom(log, log.lastIndexOf(BILLING_MSG));
+  const snapshot = log === undefined ? undefined : snapshotBefore(log, log.length, FIRST_CHUNK);
   const usage = { id: 'grok', displayName: 'grok', fetchedAt: now };
   if (snapshot === undefined) return { ...usage, planLabel: 'grok', windows: [], status: 'unavailable', reason: UNAVAILABLE };
   return { ...usage, planLabel: snapshot.tier, windows: [snapshot.window], status: 'ok', snapshotAt: snapshot.ts };

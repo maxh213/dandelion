@@ -24,6 +24,7 @@ const UNUSABLE = [
   'null',
   ''
 ].join('\n');
+const LONG_UNUSABLE = Array.from({ length: 50000 }, () => '{"msg":"billing: fetched credits config","ts":"x"}').join('\n');
 const UNAVAILABLE = {
   id: 'grok',
   displayName: 'grok',
@@ -85,9 +86,15 @@ describe('probeGrok', () => {
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok Heavy', snapshotAt: '2026-09-12T16:00:00.000Z', windows: [{ usedPct: 75 }] });
   });
 
-  it('finds a usable snapshot behind a thousand newer unusable billing events', async () => {
-    const usage = await probeGrok(ioWithLog(`${BACKGROUND}\n${`${UNUSABLE}\n`.repeat(170)}`), HOME, NOW);
-    expect(usage).toMatchObject({ status: 'ok', snapshotAt: '2026-09-12T16:00:00.000Z', windows: [{ usedPct: 75 }] });
+  it('finds an older usable snapshot behind 50,000 unusable billing lines', async () => {
+    const usage = await probeGrok(ioWithLog(`${JSON.stringify(EVENT_60)}\n${LONG_UNUSABLE}`), HOME, NOW);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok', snapshotAt: '2026-09-11T09:00:00.000Z', windows: [{ usedPct: 60 }] });
+  });
+
+  it('finds a snapshot whose line is longer than the first scan chunk', async () => {
+    const event = { ...EVENT_60, ctx: { ...EVENT_60.ctx, padding: 'x'.repeat(70000) } };
+    const usage = await probeGrok(ioWithLog(`${JSON.stringify(EVENT_75)}\n${JSON.stringify(event)}\n${'{"msg":"noise"}\n'.repeat(2)}`), HOME, NOW);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok', snapshotAt: '2026-09-11T09:00:00.000Z' });
   });
 
   it.each<[string, unknown, { planLabel: string; windows: UsageWindow[] }]>([
@@ -109,6 +116,7 @@ describe('probeGrok', () => {
     ['an empty log', { '/grok/logs/unified.jsonl': '' }],
     ['only non-billing lines', { '/grok/logs/unified.jsonl': BACKGROUND.split('\n').filter((line) => !line.includes('billing')).join('\n') }],
     ['only unusable billing events', { '/grok/logs/unified.jsonl': UNUSABLE }],
+    ['50,000 unusable billing lines', { '/grok/logs/unified.jsonl': LONG_UNUSABLE }],
     ['the billing message outside msg', { '/grok/logs/unified.jsonl': '\n{"ts":"2026-09-13T09:00:00Z","msg":"echo","ctx":{"text":"billing: fetched credits config","config":{"creditUsagePercent":5}}}\n\n' }],
     ['a date-like but invalid ts',{ '/grok/logs/unified.jsonl': '{"ts":"2026-02-30T99:00:00Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":5}}}' }]
   ])('is unavailable with %s', async (_case, files) => {
