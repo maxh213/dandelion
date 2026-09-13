@@ -105,7 +105,13 @@ async function grokUnavailableWithEmptyHome(binDir) {
   }
 }
 
+async function noRuntimeDependencies() {
+  const manifest = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8'));
+  assert.equal(manifest.dependencies, undefined, 'package.json has a dependencies section');
+}
+
 export default async function () {
+  await noRuntimeDependencies();
   const binDir = await fixtureBin();
   try {
     await grokShowsNewestSnapshot(binDir);
