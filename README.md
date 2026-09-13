@@ -1,6 +1,6 @@
 # Allowance Dashboard
 
-Allowance is a terminal dashboard that shows how much of your AI allowances you have left: subscription usage windows for `claude` and `agy`, and the API balance for `kilo`.
+Allowance is a terminal dashboard that shows how much of your AI allowances you have left: subscription usage windows for `claude`, `agy` and `kimi`, and the API balance for `kilo`.
 
 ## Providers
 
@@ -8,9 +8,10 @@ Panels always appear in this order. A provider whose CLI is missing, fails, time
 
 - `claude` (claude code) - runs `claude -p "/usage"` (90s timeout) and shows the session, weekly and per-model weekly windows with a reset countdown.
 - `agy` - runs `agy -p "/usage"` (60s timeout) and shows each model group's windows; agy reports remaining percent, shown as used percent.
+- `kimi` (kimi code) - starts `kimi web --no-open --port <port>`, waits up to 20s for the token it prints, and reads `kimi web`'s local usage endpoint `/api/v1/oauth/usage` (10s request timeout). It shows the weekly window with a reset countdown and each rolling `5h` window. The server is then shut down with SIGTERM, then SIGKILL after 5s.
 - `kilo` (api balance) - runs `kilo profile` (20s timeout) and shows the balance against a reference.
 
-All three probes run in parallel. Window gauges are coloured by usage: below 50% calm, 50-79% warm, 80-94% hot, 95% and above critical.
+All four probes run in parallel. Window gauges are coloured by usage: below 50% calm, 50-79% warm, 80-94% hot, 95% and above critical.
 
 ## Run Commands
 
@@ -21,4 +22,5 @@ All three probes run in parallel. Window gauges are coloured by usage: below 50%
 ## Env-var Ledger
 
 - `ALLOWANCE_KILO_REFERENCE` - The reference amount (in dollars) used to calculate the gauge fill percentage for the `kilo` probe. Defaults to `20`. If set to an empty string, no reference gauge is shown. If set to a custom number, the gauge will fill relative to that amount.
+- `ALLOWANCE_KIMI_PORT` - The local port `kimi web` is started on for the `kimi` probe. Defaults to `59177`. Any value other than an integer from 1 to 65535 makes the kimi panel unavailable.
 - `NO_COLOR` - If set, disables ANSI colors and uses ASCII fallback rendering.

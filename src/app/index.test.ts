@@ -1,15 +1,33 @@
-import { describe, it, expect } from 'vitest';
-import { runApp, realCommandRunner } from './index.ts';
-import type { CommandRunner, CommandRunnerResult } from '../probes/index.ts';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { runApp, realCommandRunner, realIo } from './index.ts';
+import type { CommandRunner, CommandRunnerResult, Fetcher, KimiProcess, Launcher, ProbeIo } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
+const KIMI_BODY = JSON.stringify({
+  data: {
+    summary: { used: 590, limit: 1000, reset_at: '2026-09-18T10:00:00Z' },
+    limits: [{ used: 42, limit: 100, window: { unit: 'hour', value: 5 } }]
+  }
+});
+const MISSING_KIMI: Launcher = { launch: async () => undefined };
+const KIMI_CHILD: KimiProcess = {
+  output: async () => 'kimi web ready: http://127.0.0.1:48123/?token=test-token',
+  hasExited: () => false,
+  stop: async () => undefined
+};
+const HAPPY_KIMI: Launcher = { launch: async () => KIMI_CHILD };
+const KIMI_FETCHER: Fetcher = { get: async () => ({ status: 200, body: KIMI_BODY }) };
 
-function mockRunner(result: CommandRunnerResult): CommandRunner {
-  return { run: async () => result };
+function ioOf(runner: CommandRunner, launcher: Launcher = MISSING_KIMI): ProbeIo {
+  return { runner, launcher, fetcher: KIMI_FETCHER };
 }
 
-function profileRunner(stdout: string): CommandRunner {
+function mockRunner(result: CommandRunnerResult): ProbeIo {
+  return ioOf({ run: async () => result });
+}
+
+function profileRunner(stdout: string): ProbeIo {
   return mockRunner({ stdout, stderr: '' });
 }
 
@@ -41,9 +59,9 @@ const HAPPY: Record<string, CommandRunnerResult> = {
 const DIM = '\x1b[90m';
 const RULE = '━'.repeat(72);
 
-function routedRunner(overrides: Record<string, CommandRunnerResult> = {}): CommandRunner {
+function routedRunner(overrides: Record<string, CommandRunnerResult> = {}, launcher = HAPPY_KIMI): ProbeIo {
   const results = { ...HAPPY, ...overrides };
-  return { run: async (command) => results[command] };
+  return ioOf({ run: async (command) => results[command] }, launcher);
 }
 
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
@@ -60,12 +78,12 @@ function panelOf(output: string, name: string): string[] {
 }
 
 describe('claude and agy windows', () => {
-  it('renders claude, agy and kilo panels in fixed order with captions', async () => {
+  it('renders claude, agy, kimi and kilo panels in fixed order with captions', async () => {
     const output = await runApp(routedRunner(), {}, NOW);
     const lines = plain(output).split('\n');
     expect(lines[0]).toMatch(/^ALLOWANCE +10:00:00Z$/);
-    expect(lines.filter((line) => line === RULE)).toHaveLength(3);
-    expect([lines.indexOf('claude'), lines.indexOf('agy'), lines.indexOf('kilo')]).toEqual([2, 8, 15]);
+    expect(lines.filter((line) => line === RULE)).toHaveLength(4);
+    expect(['claude', 'agy', 'kimi', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20]);
     expect(lines[1]).toBe(RULE);
     expect(panelOf(output, 'claude').at(-1)).toBe('claude code · claude');
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
@@ -169,30 +187,164 @@ describe('claude and agy windows', () => {
     ]);
   });
 
-  it('runs the probes in parallel and keeps panel order', async () => {
+  it('runs the four probes in parallel and keeps panel order', async () => {
     const release: (() => void)[] = [];
+    const resumeAllOnFourth = () => {
+      if (release.length === 4) release.reverse().forEach((resume) => resume());
+    };
     const runner: CommandRunner = {
       run: () =>
         new Promise((resolve) => {
           release.push(() => resolve({ stdout: '', stderr: '', failure: 'timeout' }));
-          if (release.length === 3) release.reverse().forEach((resume) => resume());
+          resumeAllOnFourth();
         })
     };
-    const output = plain(await runApp(runner, {}, NOW));
-    expect(output).toContain('claude\nCommand timed out after 90s\n');
-    expect(output.indexOf('claude\n')).toBeLessThan(output.indexOf('\nagy\nCommand timed out after 60s'));
-    expect(output.indexOf('\nagy\n')).toBeLessThan(output.indexOf('\nkilo\nCommand timed out after 20s'));
+    const silentKimi: KimiProcess = { output: async () => '', hasExited: () => true, stop: async () => undefined };
+    const launcher: Launcher = {
+      launch: () =>
+        new Promise((resolve) => {
+          release.push(() => resolve(silentKimi));
+          resumeAllOnFourth();
+        })
+    };
+    const output = plain(await runApp(ioOf(runner, launcher), {}, NOW));
+    expect(output).toContain(
+      [
+        'claude\nCommand timed out after 90s\nclaude code · claude',
+        'agy\nCommand timed out after 60s\nagy · agy',
+        'kimi\nkimi web exited without printing a token\nkimi code · kimi',
+        'kilo\nCommand timed out after 20s\napi balance · kilo'
+      ].join(`\n${RULE}\n`)
+    );
   });
 
-  it('renders three unavailable panels when no CLI is on the PATH', async () => {
+  it('renders four unavailable panels when no CLI is on the PATH', async () => {
     const output = await runApp(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW);
     expect(output).toContain(
       [
         `${DIM}${RULE}\nclaude\nclaude CLI not found in PATH\nclaude code · claude\x1b[0m`,
         `${DIM}${RULE}\nagy\nagy CLI not found in PATH\nagy · agy\x1b[0m`,
+        `${DIM}${RULE}\nkimi\nkimi CLI not found in PATH\nkimi code · kimi\x1b[0m`,
         `${DIM}${RULE}\nkilo\nkilo CLI not found in PATH\napi balance · kilo\x1b[0m`
       ].join('\n')
     );
+  });
+});
+
+describe('kimi panel', () => {
+  it('renders the kimi weekly and 5h rows between agy and kilo', async () => {
+    const output = await runApp(routedRunner(), { NO_COLOR: '1' }, NOW);
+    const lines = output.split('\n');
+    const kimi = lines.indexOf('kimi');
+    expect(lines.slice(kimi - 1, kimi + 5)).toEqual([
+      '='.repeat(72),
+      'kimi',
+      'weekly                              ############--------  59% ↻ 5d0h',
+      '5h                                  ########------------  42%',
+      'kimi code · kimi',
+      '='.repeat(72)
+    ]);
+    expect(lines.indexOf('agy')).toBeLessThan(kimi);
+    expect(lines[kimi + 5]).toBe('kilo');
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+  });
+
+  it('keeps the claude, agy and kilo panels unchanged next to kimi', async () => {
+    const withKimi = await runApp(routedRunner(), {}, NOW);
+    const withoutKimi = await runApp(routedRunner({}, MISSING_KIMI), {}, NOW);
+    for (const name of ['claude', 'agy', 'kilo']) expect(panelOf(withKimi, name)).toEqual(panelOf(withoutKimi, name));
+  });
+
+  it('renders a dim kimi panel with the reason while the others render normally', async () => {
+    const launcher: Launcher = { launch: async () => ({ ...KIMI_CHILD, output: async () => '', hasExited: () => true }) };
+    const output = await runApp(routedRunner({}, launcher), {}, NOW);
+    expect(output).toContain(`${DIM}${RULE}\nkimi\nkimi web exited without printing a token\nkimi code · kimi\x1b[0m`);
+    expect(panelOf(output, 'claude')).toHaveLength(5);
+    expect(panelOf(output, 'agy')).toHaveLength(6);
+    expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
+  });
+});
+
+describe('real kimi launcher', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function launchNode(script: string): Promise<KimiProcess> {
+    const child = await realIo.launcher.launch(process.execPath, ['-e', script]);
+    if (child === undefined) throw new Error('node did not launch');
+    return child;
+  }
+
+  async function outputContaining(child: KimiProcess, text: string): Promise<string> {
+    const output = await child.output();
+    if (output.includes(text)) return output;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return outputContaining(child, text);
+  }
+
+  it('logs stdout and stderr of an exited child and stops it without signals', async () => {
+    const child = await launchNode('console.log("token=out"); console.error("Bearer err")');
+    expect(await outputContaining(child, 'Bearer err')).toBe('token=out\nBearer err\n');
+    await vi.waitFor(() => expect(child.hasExited()).toBe(true));
+    await child.stop();
+    expect(await child.output()).toBe('');
+  });
+
+  it('terminates a running child with SIGTERM', async () => {
+    const child = await launchNode('console.log("ready"); setInterval(() => {}, 1000)');
+    await outputContaining(child, 'ready');
+    expect(child.hasExited()).toBe(false);
+    await child.stop();
+    expect(child.hasExited()).toBe(true);
+  });
+
+  it('kills a child that ignores SIGTERM after 5 seconds', async () => {
+    const child = await launchNode('process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000)');
+    await outputContaining(child, 'ready');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    let stopped = false;
+    const stopping = child.stop().then(() => {
+      stopped = true;
+    });
+    vi.advanceTimersByTime(4999);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(false);
+    vi.advanceTimersByTime(1);
+    await stopping;
+    expect(child.hasExited()).toBe(true);
+  });
+
+  it('reports a missing binary as undefined', async () => {
+    expect(await realIo.launcher.launch('thiscommanddoesnotexist', [])).toBeUndefined();
+  });
+});
+
+describe('real fetcher', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the status and body with headers and a timeout signal', async () => {
+    const fetchMock = vi.fn(async () => new Response('{"data":1}', { status: 401 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const outcome = await realIo.fetcher.get('http://127.0.0.1:1/x', { Authorization: 'Bearer t' }, 10000);
+    expect(outcome).toEqual({ status: 401, body: '{"data":1}' });
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:1/x', {
+      headers: { Authorization: 'Bearer t' },
+      signal: expect.any(AbortSignal)
+    });
+  });
+
+  it.each<[string, unknown, string]>([
+    ['a timeout', new DOMException('slow', 'TimeoutError'), 'timeout'],
+    ['an abort', new DOMException('gone', 'AbortError'), 'network'],
+    ['a refused connection', new TypeError('fetch failed'), 'network']
+  ])('maps %s to a failure', async (_case, error, failure) => {
+    vi.stubGlobal('fetch', async () => {
+      throw error;
+    });
+    expect(await realIo.fetcher.get('http://127.0.0.1:1/x', {}, 10)).toEqual({ failure });
   });
 });
 
@@ -274,7 +426,7 @@ describe('wiring', () => {
         return { stdout: PROFILE, stderr: '' };
       }
     };
-    await runApp(runner, {}, NOW);
+    await runApp(ioOf(runner), {}, NOW);
     expect(calls).toEqual([
       ['claude', ['-p', '/usage'], 90000],
       ['agy', ['-p', '/usage'], 60000],
