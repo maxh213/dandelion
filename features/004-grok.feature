@@ -111,6 +111,13 @@ Feature: 004 - Grok window from its local billing log
       | "logs/unified.jsonl" holds only unusable billing events                |
       | "logs/unified.jsonl" exists but is not readable (mode 000)             |
       | "logs/unified.jsonl" is a directory                                    |
+      | "logs/unified.jsonl" holds 50,000 lines of {"msg":"billing: fetched credits config","ts":"x"} |
+
+  Scenario: A long log with an older usable event far behind many unusable ones
+    Given "logs/unified.jsonl" holds the 60% Background event followed by 50,000 lines of {"msg":"billing: fetched credits config","ts":"x"}
+    When the user runs `npm start` with NO_COLOR set
+    Then the process exits with code 0 within 5 seconds and prints no stack trace
+    And the grok panel shows "credits" at 60% and the caption "SuperGrok · grok"
 
   Scenario Outline: Grok home defaults to ~/.grok
     Given ALLOWANCE_GROK_HOME is <value> and HOME is a directory whose ".grok/logs/unified.jsonl" holds the Background lines
