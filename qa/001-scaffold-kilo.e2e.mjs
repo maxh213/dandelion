@@ -19,7 +19,7 @@ async function kiloFixture() {
   const quoted = PROFILE.replaceAll('\n', '\\n').replaceAll('$', '\\$');
   await writeFile(script, `#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "${quoted}"\n`);
   await chmod(script, 0o755);
-  for (const [name, body] of [['claude', CLAUDE_FIXTURE], ['agy', AGY_FIXTURE], ['kimi', '#!/bin/sh\nexit 0\n']]) {
+  for (const [name, body] of [['claude', CLAUDE_FIXTURE], ['agy', AGY_FIXTURE]]) {
     await writeFile(join(dir, name), body);
     await chmod(join(dir, name), 0o755);
   }
