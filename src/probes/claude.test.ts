@@ -51,6 +51,12 @@ describe('claudeProbe', () => {
     expect(await weeklyResetsAt(reset)).toBeUndefined();
   });
 
+  it('resolves the same zone identically on repeated reads', async () => {
+    const first = await weeklyResetsAt('Dec 1, 9am (Europe/Berlin)');
+    const second = await weeklyResetsAt('Dec 1, 9am (Europe/Berlin)');
+    expect([first, second]).toEqual(['2026-12-01T08:00:00.000Z', '2026-12-01T08:00:00.000Z']);
+  });
+
   it('keeps windows without a reset and allows a missing session', async () => {
     const stdout = 'Current week (all models): 50% used\r\nCurrent week (Fable): 60% used · resets someday\n';
     expect(await windowsOf(stdout)).toStrictEqual([

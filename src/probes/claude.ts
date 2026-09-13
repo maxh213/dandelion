@@ -7,8 +7,10 @@ const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
 type ResetParts = { month: number; day: number; hour: number; minute: number; zone: string };
 
-function zoneOffsetMs(utcMs: number, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
+const zoneFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function createZoneFormatter(timeZone: string): Intl.DateTimeFormat {
+  const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone,
     hourCycle: 'h23',
     year: 'numeric',
@@ -17,7 +19,17 @@ function zoneOffsetMs(utcMs: number, timeZone: string): number {
     hour: 'numeric',
     minute: 'numeric',
     second: 'numeric'
-  }).formatToParts(new Date(utcMs));
+  });
+  zoneFormatters.set(timeZone, formatter);
+  return formatter;
+}
+
+function zoneFormatter(timeZone: string): Intl.DateTimeFormat {
+  return zoneFormatters.get(timeZone) ?? createZoneFormatter(timeZone);
+}
+
+function zoneOffsetMs(utcMs: number, timeZone: string): number {
+  const parts = zoneFormatter(timeZone).formatToParts(new Date(utcMs));
   const field = Object.fromEntries(parts.map((part) => [part.type, Number(part.value)]));
   return Date.UTC(field.year, field.month - 1, field.day, field.hour, field.minute, field.second) - utcMs;
 }
