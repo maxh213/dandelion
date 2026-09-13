@@ -1,0 +1,71 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const NOW = '2026-09-13T10:00:00.000Z';
+const INPROC_ITERATIONS = 2000;
+
+const TARGETS = [
+  'cli one-shot kilo ok',
+  'cli one-shot kilo missing',
+  'runApp kilo ok (in-process, per call)',
+  'renderDashboard ok (in-process, per call)'
+];
+
+function emit(target, value, unit) {
+  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
+}
+
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
+  for (const target of TARGETS) console.log(JSON.stringify({ target, absent: true }));
+  process.exit(0);
+}
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-kilo-'));
+const empty = mkdtempSync(join(tmpdir(), 'bench-empty-'));
+const kilo = join(fixture, 'kilo');
+writeFileSync(kilo, '#!/bin/sh\nprintf "Name: Max\\nEmail: a@b.c\\nTeam: Personal\\nBalance: $14.15\\n"\n');
+chmodSync(kilo, 0o755);
+
+function timeCli(pathValue) {
+  const env = { ...process.env, PATH: pathValue };
+  delete env.NO_COLOR;
+  const start = process.hrtime.bigint();
+  execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  return Number(process.hrtime.bigint() - start) / 1e6;
+}
+
+const okPath = `${fixture}:/usr/bin:/bin`;
+const stub = { run: async () => ({ stdout: 'Name: Max\nBalance: $14.15\n', stderr: '' }) };
+const usage = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } };
+
+try {
+  const { runApp } = await import(pathToFileURL(appEntry).href);
+  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+
+  timeCli(okPath);
+  timeCli(empty);
+  await runApp(stub, {}, NOW);
+  renderDashboard([usage], false, NOW);
+
+  emit(TARGETS[0], timeCli(okPath), 'ms');
+  emit(TARGETS[1], timeCli(empty), 'ms');
+
+  let start = process.hrtime.bigint();
+  for (let i = 0; i < INPROC_ITERATIONS; i++) await runApp(stub, {}, NOW);
+  emit(TARGETS[2], Number(process.hrtime.bigint() - start) / 1e3 / INPROC_ITERATIONS, 'us');
+
+  start = process.hrtime.bigint();
+  for (let i = 0; i < INPROC_ITERATIONS; i++) renderDashboard([usage], false, NOW);
+  emit(TARGETS[3], Number(process.hrtime.bigint() - start) / 1e3 / INPROC_ITERATIONS, 'us');
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+  rmSync(empty, { recursive: true, force: true });
+}
