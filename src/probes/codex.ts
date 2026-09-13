@@ -1,4 +1,4 @@
-import type { ProviderUsage, UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, isRecord, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 import type { CommandRunner, CommandRunnerResult, RunFailure } from './cli.ts';
 
 export type RpcChild = {
@@ -38,25 +38,13 @@ const MINUTES_PER_HOUR = 60;
 
 class CodexFailure extends Error {}
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function fieldOf(value: unknown, key: string): unknown {
-  return isRecord(value) ? value[key] : undefined;
-}
-
-function isCount(value: unknown): value is number {
-  return Number.isFinite(value) && Number(value) >= 0;
-}
-
 function isPositiveInteger(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) > 0;
 }
 
 function loginMode(login: CommandRunnerResult): 'apikey' | 'chatgpt' | undefined {
-  const text = `${login.stdout}\n${login.stderr}`;
   if (login.failure !== undefined) return undefined;
+  const text = `${login.stdout}\n${login.stderr}`;
   if (API_KEY_LINE.test(text)) return 'apikey';
   return CHATGPT_LINE.test(text) ? 'chatgpt' : undefined;
 }
@@ -75,8 +63,8 @@ function labelOf(minutes: unknown, fallback: string): string {
 }
 
 function resetInstant(seconds: unknown): string | undefined {
-  const date = new Date(Number.NaN);
-  if (typeof seconds === 'number') date.setTime(seconds * 1000);
+  if (typeof seconds !== 'number') return undefined;
+  const date = new Date(seconds * 1000);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 

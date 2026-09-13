@@ -22,6 +22,18 @@ export type ProviderUsage =
   | (ProviderIdentity & { status: 'ok'; balance?: Balance; snapshotAt?: string; note?: string })
   | (ProviderIdentity & { status: 'unavailable' | 'error'; reason: string });
 
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function fieldOf(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+export function isCount(value: unknown): value is number {
+  return Number.isFinite(value) && Number(value) >= 0;
+}
+
 const DATE_BEFORE_TIME = /\d-\d{2}-\d{2}T/;
 
 export function validInstant(value: unknown): string | undefined {

@@ -1,4 +1,4 @@
-import { validInstant, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, validInstant, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export interface FileReader {
   homeDir(): string;
@@ -14,18 +14,6 @@ const UNAVAILABLE = 'no grok billing snapshot — run grok once';
 
 function grokHome(reader: FileReader, env: Record<string, string | undefined>): string {
   return env['ALLOWANCE_GROK_HOME'] || `${reader.homeDir()}/.grok`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function fieldOf(value: unknown, key: string): unknown {
-  return isRecord(value) ? value[key] : undefined;
-}
-
-function isCount(value: unknown): value is number {
-  return Number.isFinite(value) && Number(value) >= 0;
 }
 
 function usedPercent(config: unknown): number | undefined {

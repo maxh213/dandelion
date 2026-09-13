@@ -1,4 +1,4 @@
-import { validInstant, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, validInstant, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type LaunchedProcess = {
   output(): Promise<string>;
@@ -82,18 +82,6 @@ async function requestUsage(fetcher: Fetcher, port: number, token: string): Prom
   if ('failure' in outcome) throw new KimiUnavailable(FETCH_FAILURES[outcome.failure]);
   if (!isSuccess(outcome.status)) throw new KimiUnavailable(`kimi usage request failed: HTTP ${outcome.status}`);
   return outcome.body;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function fieldOf(value: unknown, key: string): unknown {
-  return isRecord(value) ? value[key] : undefined;
-}
-
-function isCount(value: unknown): value is number {
-  return Number.isFinite(value) && Number(value) >= 0;
 }
 
 function percentOf(entry: unknown): number | undefined {
