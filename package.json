@@ -4,13 +4,13 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.5.1",
-    "@vitest/coverage-v8": "^5.0.0",
+    "@vitest/coverage-v8": "4.1.11",
     "dependency-cruiser": "^18.2.0",
     "eslint": "^10.10.0",
     "knip": "^6.35.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",
-    "vitest": "^5.0.0"
+    "vitest": "4.1.11"
   },
   "type": "module",
   "scripts": {

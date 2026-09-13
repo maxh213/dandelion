@@ -58,7 +58,7 @@ function balanceGauge(balance: Balance, noColor: boolean): string {
 }
 
 function balanceLine(balance: Balance | undefined, noColor: boolean): string {
-  if (!balance) return ' '.padEnd(WIDTH);
+  if (!balance) return ' '.repeat(WIDTH);
   const amount = `${balance.currency}${balance.amount.toFixed(2)}`;
   return `${amount} ${balanceGauge(balance, noColor)}`.padEnd(WIDTH);
 }

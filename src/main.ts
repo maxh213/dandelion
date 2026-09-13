@@ -12,8 +12,7 @@ export async function main(
 }
 
 function isEntry(metaUrl: string, argv1: string | undefined): boolean {
-  if (!argv1) return false;
-  return fileURLToPath(metaUrl).replace(/\.ts$/, '.js').endsWith(argv1.replace(/\.ts$/, '.js'));
+  return fileURLToPath(metaUrl) === argv1;
 }
 
 export function runIfMain(metaUrl: string, argv1: string | undefined, runner: CommandRunner): Promise<void> {

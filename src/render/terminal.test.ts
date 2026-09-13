@@ -79,6 +79,7 @@ describe('terminal renderer', () => {
     const panel = renderPanelOk(usage, true);
     expect(panel).toContain('kilo');
     expect(panel).toContain('api balance · kilo');
+    expect(panel.split('\n')).toContain(' '.repeat(72));
   });
 
   it('renders unavailable panel', () => {

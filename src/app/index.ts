@@ -10,7 +10,7 @@ import { renderDashboard } from '../render/index.ts';
 export type { CommandRunner } from '../probes/index.ts';
 
 function wasKilledByTimeout(error: ExecException): boolean {
-  return error.killed === true && error.signal === 'SIGTERM';
+  return error.killed === true;
 }
 
 function failureOf(error: ExecException): RunFailure {

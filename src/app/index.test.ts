@@ -121,4 +121,9 @@ describe('wiring', () => {
     const result = await realCommandRunner.run('node', ['-e', 'process.exit(2)'], 2000);
     expect(result.failure).toBe('exit');
   });
+
+  it('realCommandRunner reports a self-inflicted SIGTERM as an exit', async () => {
+    const result = await realCommandRunner.run('node', ['-e', 'process.kill(process.pid, "SIGTERM")'], 2000);
+    expect(result.failure).toBe('exit');
+  });
 });

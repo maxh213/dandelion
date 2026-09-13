@@ -20,6 +20,12 @@ describe('probeKilo', () => {
     });
   });
 
+  it('parses a balance with no space before the amount', async () => {
+    const runner = mockRunner({ stdout: 'Balance:$3.50', stderr: '' });
+    const res = await probeKilo(runner, 'now', {});
+    expect(res).toMatchObject({ status: 'ok', balance: { amount: 3.5 } });
+  });
+
   it('handles custom reference', async () => {
     const runner = mockRunner({ stdout: 'Balance: $14.15', stderr: '' });
     const res = await probeKilo(runner, 'now', { ALLOWANCE_KILO_REFERENCE: '10' });
