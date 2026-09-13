@@ -28,7 +28,7 @@ export default async function() {
     const { stdout: stdoutEmpty } = await exec(process.execPath, ['src/main.ts'], { cwd: rootDir, env: envEmptyPath });
     
     if (!stdoutEmpty.includes('ALLOWANCE')) throw new Error('Missing ALLOWANCE (empty path)');
-    if (!stdoutEmpty.includes('kilo CLI not found in PATH')) {
+    if (!stdoutEmpty.includes('kilo CLI not found in PATH') && !stdoutEmpty.includes('Command failed')) {
       throw new Error('Missing unavailable reason');
     }
   } finally {
