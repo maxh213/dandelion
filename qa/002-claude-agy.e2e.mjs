@@ -56,8 +56,8 @@ async function fixtureDir(overrides) {
 }
 
 function runApp(dir, extraEnv) {
-  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_GROK_HOME, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${dir}:${NODE_DIR}`, ALLOWANCE_GROK_HOME: dir, ...extraEnv };
+  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ...inherited } = process.env;
+  const env = { ...inherited, PATH: `${dir}:${NODE_DIR}`, ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -135,7 +135,7 @@ async function noColorRows(dir) {
   assert.match(stdout, /^Gemini Models · Weekly Limit {8}-{20}   0% ↻ (7d0h|6d23h)$/m);
   assert.match(stdout, /^Claude and GPT models · Weekly Lim… -{20}   0% ↻ (7d0h|6d23h)$/m);
   assert.ok(stdout.includes(`$14.15 ${'#'.repeat(14)}${'-'.repeat(6)}`), 'kilo gauge not ASCII');
-  assert.ok(/^[\x0a\x20-\x7e↻·…—]*$/.test(stdout), `non-ASCII beyond ↻ · … —:\n${stdout}`);
+  assert.ok(/^[\x0a\x20-\x7e↻·…]*$/.test(stdout), `non-ASCII beyond ↻ · …:\n${stdout}`);
   assertWidth(stdout);
 }
 
