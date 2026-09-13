@@ -179,6 +179,11 @@ describe('window rows', () => {
     expect(renderWindowRow(fiveHour, true, NOW)).toBe('Claude and GPT models · Five Hour…  ###############-----  75% ↻ 12h13m');
   });
 
+  it('keeps a label of exactly 35 cells whole', () => {
+    expect(renderWindowRow({ label: 'y'.repeat(35), usedPct: 50 }, true, NOW))
+      .toBe(`${'y'.repeat(35)} ##########----------  50%`);
+  });
+
   it('omits the countdown when the window has no reset', () => {
     expect(renderWindowRow({ label: 'weekly', usedPct: 50 }, true, NOW))
       .toBe('weekly                              ##########----------  50%');

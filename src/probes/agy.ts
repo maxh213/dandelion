@@ -1,7 +1,7 @@
 import type { CliProbe, ReadWindow, Reading } from './cli.ts';
 
 const REMAINING_PERCENT = /^(\d+)%$/;
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const DATE_BEFORE_TIME = /\d-\d{2}-\d{2}T/;
 
 function remainingPercent(columns: string[]): number | undefined {
   if (columns.length !== 4) return undefined;
@@ -10,15 +10,14 @@ function remainingPercent(columns: string[]): number | undefined {
 }
 
 function validInstant(text: string): string | undefined {
-  return ISO_INSTANT.test(text) && !Number.isNaN(Date.parse(text)) ? text : undefined;
+  return DATE_BEFORE_TIME.test(text) && !Number.isNaN(Date.parse(text)) ? text : undefined;
 }
 
 function withoutWord(text: string, word: string): string {
   return text
     .split(' ')
     .filter((part) => part !== word)
-    .join(' ')
-    .trim();
+    .join(' ');
 }
 
 function parseRow(line: string): ReadWindow | [] {

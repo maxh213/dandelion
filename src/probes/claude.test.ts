@@ -42,13 +42,46 @@ describe('claudeProbe', () => {
     ['Sep 12, 12am', '2026-09-12T00:00:00Z'],
     ['Sep 13, 12pm', '2026-09-13T12:00:00Z'],
     ['Sep 10, 9am', '2027-09-10T09:00:00Z'],
-    ['Jan 2, 1:05am (America/New_York)', '2027-01-02T06:05:00Z']
+    ['Jan 2, 1:05am (America/New_York)', '2027-01-02T06:05:00Z'],
+    ['Sep 11, 10am', '2026-09-11T10:00:00Z'],
+    ['Oct 25, 12:30am (Europe/London)', '2026-10-24T23:30:00Z']
   ])('resolves reset "%s" to %s', async (reset, instant) => {
     expect(await weeklyResetsAt(reset)).toBe(new Date(instant).toISOString());
   });
 
-  it.each(['someday', 'Sep 13, 11pm (Not/A_Zone)', 'Foo 13, 11pm'])('leaves resetsAt unset for reset "%s"', async (reset) => {
+  it.each([
+    ['Jan', '2027-01-15T09:00:00Z'],
+    ['Feb', '2027-02-15T09:00:00Z'],
+    ['Mar', '2027-03-15T09:00:00Z'],
+    ['Apr', '2027-04-15T09:00:00Z'],
+    ['May', '2027-05-15T09:00:00Z'],
+    ['Jun', '2027-06-15T09:00:00Z'],
+    ['Jul', '2027-07-15T09:00:00Z'],
+    ['Aug', '2027-08-15T09:00:00Z'],
+    ['Sep', '2026-09-15T09:00:00Z'],
+    ['Oct', '2026-10-15T09:00:00Z'],
+    ['Nov', '2026-11-15T09:00:00Z'],
+    ['Dec', '2026-12-15T09:00:00Z']
+  ])('resolves month %s to %s', async (month, instant) => {
+    expect(await weeklyResetsAt(`${month} 15, 9am`)).toBe(new Date(instant).toISOString());
+  });
+
+  it.each([
+    'someday',
+    'Sep 13, 11pm (Not/A_Zone)',
+    'Foo 13, 11pm',
+    'Sep 13, 11pm (Europe/London) extra',
+    'x · resets Sep 13, 11pm'
+  ])('leaves resetsAt unset for reset "%s"', async (reset) => {
     expect(await weeklyResetsAt(reset)).toBeUndefined();
+  });
+
+  it('resolves a reset on CRLF output', async () => {
+    expect(await weeklyResetsAt('Sep 13, 11pm\r\n')).toBe('2026-09-13T23:00:00.000Z');
+  });
+
+  it('ignores a window line that does not start the line', async () => {
+    expect(await windowsOf('Note: Current week (all models): 9% used')).toEqual([]);
   });
 
   it('resolves the same zone identically on repeated reads', async () => {
