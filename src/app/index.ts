@@ -1,13 +1,14 @@
 import { execFile, spawn, type ChildProcess, type ExecException } from 'node:child_process';
 import { closeSync, mkdtempSync, openSync, rmSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   probeProviders,
   type CommandRunner,
   type CommandRunnerResult,
   type Fetcher,
+  type FileReader,
   type LaunchedProcess,
   type Launcher,
   type ProbeIo,
@@ -119,7 +120,12 @@ const realFetcher: Fetcher = {
   }
 };
 
-export const realIo: ProbeIo = { runner: realCommandRunner, launcher: realLauncher, fetcher: realFetcher };
+const realReader: FileReader = {
+  homeDir: homedir,
+  read: (path) => readFile(path, 'utf8').catch(() => undefined)
+};
+
+export const realIo: ProbeIo = { runner: realCommandRunner, launcher: realLauncher, fetcher: realFetcher, reader: realReader };
 
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
   const usages = await probeProviders(io, env, now);

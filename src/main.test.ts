@@ -11,7 +11,8 @@ vi.mock('./app/index.ts', async (importOriginal) => {
   const stubIo: ProbeIo = {
     runner: { run: async () => ({ stdout: 'Balance: $14.15', stderr: '' }) },
     launcher: { launch: async () => undefined },
-    fetcher: { get: async () => ({ failure: 'network' }) }
+    fetcher: { get: async () => ({ failure: 'network' }) },
+    reader: { homeDir: () => '/nowhere', read: async () => undefined }
   };
   return { ...original, realIo: stubIo };
 });
@@ -21,7 +22,8 @@ const { main, runIfMain } = await import('./main.ts');
 const profileIo: ProbeIo = {
   runner: { run: async () => ({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' }) },
   launcher: { launch: async () => undefined },
-  fetcher: { get: async () => ({ failure: 'network' }) }
+  fetcher: { get: async () => ({ failure: 'network' }) },
+  reader: { homeDir: () => '/nowhere', read: async () => undefined }
 };
 
 function writeFixture(dir: string, name: string, body: string): void {
@@ -43,7 +45,7 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
     delete env.NO_COLOR;
     delete env.ALLOWANCE_KILO_REFERENCE;
     delete env.ALLOWANCE_KIMI_PORT;
-    Object.assign(env, extraEnv);
+    Object.assign(env, { ALLOWANCE_GROK_HOME: dir }, extraEnv);
     return spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -67,13 +69,14 @@ describe('main', () => {
     expect(result.stdout).toContain('='.repeat(72) + '\nkilo\n$14.15 ' + '#'.repeat(20) + ' '.repeat(45) + '\n');
   });
 
-  it('prints claude, agy, kimi and kilo panels in order from fixture CLIs on PATH', () => {
+  it('prints claude, agy, kimi, grok and kilo panels in order from fixture CLIs on PATH', () => {
     const result = runWithFixtureKilo({ NO_COLOR: '1' });
     expect(result.status).toBe(0);
     const lines = result.stdout.split('\n');
     expect(lines.indexOf('claude')).toBeLessThan(lines.indexOf('agy'));
     expect(lines.indexOf('agy')).toBeLessThan(lines.indexOf('kimi'));
-    expect(lines.indexOf('kimi')).toBeLessThan(lines.indexOf('kilo'));
+    expect(lines.indexOf('kimi')).toBeLessThan(lines.indexOf('grok'));
+    expect(lines.indexOf('grok')).toBeLessThan(lines.indexOf('kilo'));
     expect(lines).toContain('weekly                              #################---  86%');
     expect(lines).toContain('Claude and GPT models · Five Hour…  ###############-----  75%');
     expect(lines).toContain('claude code · claude');
@@ -102,22 +105,25 @@ describe('main', () => {
   });
 
   it('runIfMain does nothing for another entry file', async () => {
-    const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn() } };
+    const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn() }, reader: { homeDir: vi.fn(), read: vi.fn() } };
     await runIfMain('file:///path/to/main.ts', 'other.ts', io);
     await runIfMain('file:///path/to/main.ts', undefined, io);
     expect(io.runner.run).not.toHaveBeenCalled();
     expect(io.launcher.launch).not.toHaveBeenCalled();
   });
 
-  it('prints a dim unavailable kilo panel with the exact reason when kilo is not on PATH', () => {
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '' };
+  it('prints five dim unavailable panels when no CLI is on PATH and grok home is empty', () => {
+    const grokHome = mkdtempSync(join(tmpdir(), 'allowance-grok-'));
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', ALLOWANCE_GROK_HOME: grokHome };
     delete env.NO_COLOR;
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
+    rmSync(grokHome, { recursive: true, force: true });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('ALLOWANCE');
     expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\nclaude\nclaude CLI not found in PATH\nclaude code · claude\x1b[0m\n');
     expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\nagy\nagy CLI not found in PATH\nagy · agy\x1b[0m\n');
     expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\nkimi\nkimi CLI not found in PATH\nkimi code · kimi\x1b[0m\n');
+    expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m\n');
     expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\nkilo\nkilo CLI not found in PATH\n');
     expect(result.stdout).not.toContain('Command failed');
   });
@@ -131,17 +137,26 @@ describe('main', () => {
 
   it('README documents kimi', () => {
     const readme = readFileSync('README.md', 'utf-8');
-    expect(readme).toContain('subscription usage windows for `claude`, `agy` and `kimi`, and the API balance for `kilo`');
     const providers = readme.split('\n').filter((line) => /^- `(claude|agy|kimi|kilo)` /.test(line));
-    expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'agy', 'kimi', 'kilo']);
     const kimi = providers[2];
     expect(kimi).toContain('(kimi code)');
     expect(kimi).toContain("`kimi web`'s local usage endpoint");
     expect(kimi).toContain('20s');
     expect(kimi).toContain('10s request timeout');
     expect(kimi).toContain('SIGTERM, then SIGKILL after 5s');
-    expect(readme).toContain('All four probes run in parallel');
-    expect(readme).not.toContain('All three probes run in parallel');
     expect(readme).toMatch(/^- `ALLOWANCE_KIMI_PORT` - .*Defaults to `59177`/m);
+  });
+
+  it('README documents grok', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    expect(readme).toContain('subscription usage windows for `claude`, `agy`, `kimi` and `grok`, and the API balance for `kilo`');
+    const providers = readme.split('\n').filter((line) => /^- `(claude|agy|kimi|grok|kilo)` /.test(line));
+    expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'agy', 'kimi', 'grok', 'kilo']);
+    const grok = providers[3];
+    expect(grok).toContain('newest billing snapshot from `<grok home>/logs/unified.jsonl` without running grok');
+    expect(grok).toContain('older than 48h is shown dim as stale');
+    expect(readme).toContain('All five probes run in parallel');
+    expect(readme).not.toContain('All four probes run in parallel');
+    expect(readme).toMatch(/^- `ALLOWANCE_GROK_HOME` - .*Defaults to `~\/\.grok`/m);
   });
 });

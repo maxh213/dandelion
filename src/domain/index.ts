@@ -19,7 +19,7 @@ type ProviderIdentity = {
 };
 
 export type ProviderUsage =
-  | (ProviderIdentity & { status: 'ok'; balance?: Balance })
+  | (ProviderIdentity & { status: 'ok'; balance?: Balance; snapshotAt?: string })
   | (ProviderIdentity & { status: 'unavailable' | 'error'; reason: string });
 
 const MS_PER_MINUTE = 60 * 1000;

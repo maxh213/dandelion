@@ -115,6 +115,50 @@ describe('terminal renderer', () => {
     ]);
   });
 
+  it('renders a dim snapshot age line between the rows and the caption', () => {
+    const usage: ProviderUsage = {
+      id: 'grok',
+      displayName: 'grok',
+      planLabel: 'SuperGrok Heavy',
+      windows: [{ label: 'credits', usedPct: 75, resetsAt: '2026-09-13T21:15:36Z' }],
+      fetchedAt: 'now',
+      status: 'ok',
+      snapshotAt: '2026-09-12T16:00:00.000Z'
+    };
+    expect(renderPanelOk(usage, true, NOW).split('\n')).toEqual([
+      '='.repeat(72),
+      'grok',
+      'credits                             ###############-----  75% ↻ 11h15m',
+      'snapshot 18h0m old',
+      'SuperGrok Heavy · grok'
+    ]);
+    expect(renderPanelOk(usage, false, NOW)).toContain(`\x1b[90msnapshot 18h0m old${RESET}\n\x1b[90mSuperGrok Heavy · grok${RESET}`);
+  });
+
+  it.each([
+    ['2026-09-11T10:00:00.000Z', 'snapshot 2d0h old'],
+    ['2026-09-11T09:59:59.999Z', 'stale snapshot 2d0h old']
+  ])('marks a snapshot at %s as "%s"', (snapshotAt, line) => {
+    const usage: ProviderUsage = { id: 'g', displayName: 'g', windows: [{ label: 'credits', usedPct: 10 }], fetchedAt: 'now', status: 'ok', snapshotAt };
+    expect(renderPanelOk(usage, true, NOW).split('\n')[3]).toBe(line);
+  });
+
+  it('dims a stale panel as one block with plain gauge glyphs and no ramp escape', () => {
+    const usage: ProviderUsage = {
+      id: 'grok',
+      displayName: 'grok',
+      planLabel: 'grok',
+      windows: [{ label: 'credits', usedPct: 96 }],
+      fetchedAt: 'now',
+      status: 'ok',
+      snapshotAt: '2026-09-10T17:14:22.812Z'
+    };
+    expect(renderPanelOk(usage, false, NOW)).toBe(
+      `\x1b[90m${'━'.repeat(72)}\ngrok\n${'credits'.padEnd(35)} ${'█'.repeat(19)}░  96%\nstale snapshot 2d16h old\ngrok · grok${RESET}`
+    );
+    expect(renderPanelOk({ ...usage, windows: [] }, true, NOW).split('\n')[2]).toBe(' '.repeat(72));
+  });
+
   it('renders unavailable panel', () => {
     const usage: ProviderUsage = {
       id: 'kilo',

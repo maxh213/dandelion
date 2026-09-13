@@ -7,6 +7,7 @@ const PERCENT_CELLS = 4;
 const BOLD = '\x1b[1m';
 const DIM = '\x1b[90m';
 const RESET = '\x1b[0m';
+const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
 
 function styled(text: string, code: string, noColor: boolean): string {
   if (noColor) return text;
@@ -83,11 +84,15 @@ function countdown(resetsAt: string | undefined, now: string): string {
   return resetsAt === undefined ? '' : ` ↻ ${formatCountdown(resetsAt, now)}`;
 }
 
+function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string): string {
+  const gauge = paint(renderGauge(window.usedPct, 100, noColor));
+  const percent = paint(`${window.usedPct}%`.padStart(PERCENT_CELLS));
+  return `${fitLabel(window.label)} ${gauge} ${percent}${countdown(window.resetsAt, now)}`;
+}
+
 export function renderWindowRow(window: UsageWindow, noColor: boolean, now: string): string {
   const style = STYLE_TOKENS[styleToken(window.usedPct)];
-  const gauge = styled(renderGauge(window.usedPct, 100, noColor), style, noColor);
-  const percent = styled(`${window.usedPct}%`.padStart(PERCENT_CELLS), style, noColor);
-  return `${fitLabel(window.label)} ${gauge} ${percent}${countdown(window.resetsAt, now)}`;
+  return rowWith(window, noColor, now, (text) => styled(text, style, noColor));
 }
 
 function balanceGauge(balance: Balance, noColor: boolean): string {
@@ -109,18 +114,42 @@ function caption(usage: ProviderUsage): string {
 type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
 type FailedUsage = Exclude<ProviderUsage, OkUsage>;
 
-function panelBody(usage: OkUsage, noColor: boolean, now: string): string[] {
+function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow) => string): string[] {
   if (usage.windows.length === 0) return [balanceLine(usage.balance, noColor)];
-  return usage.windows.map((window) => renderWindowRow(window, noColor, now));
+  return usage.windows.map(row);
 }
 
-export function renderPanelOk(usage: OkUsage, noColor: boolean, now: string): string {
+function isStale(snapshotAt: string, now: string): boolean {
+  return Date.parse(now) - Date.parse(snapshotAt) > STALE_AFTER_MS;
+}
+
+function snapshotLine(snapshotAt: string, now: string): string {
+  const age = `snapshot ${formatCountdown(now, snapshotAt)} old`;
+  return isStale(snapshotAt, now) ? `stale ${age}` : age;
+}
+
+function snapshotLines(usage: OkUsage, now: string): string[] {
+  return usage.snapshotAt === undefined ? [] : [snapshotLine(usage.snapshotAt, now)];
+}
+
+function renderPanelStale(usage: OkUsage, noColor: boolean, now: string): string {
+  const rows = panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String));
+  return dim([plainRule(noColor), usage.displayName, ...rows, ...snapshotLines(usage, now), caption(usage)].join('\n'), noColor);
+}
+
+function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string): string {
   return [
     renderRule(noColor),
     usage.displayName,
-    ...panelBody(usage, noColor, now),
+    ...panelBody(usage, noColor, (window) => renderWindowRow(window, noColor, now)),
+    ...snapshotLines(usage, now).map((line) => dim(line, noColor)),
     dim(caption(usage), noColor)
   ].join('\n');
+}
+
+export function renderPanelOk(usage: OkUsage, noColor: boolean, now: string): string {
+  const stale = usage.snapshotAt !== undefined && isStale(usage.snapshotAt, now);
+  return stale ? renderPanelStale(usage, noColor, now) : renderPanelFresh(usage, noColor, now);
 }
 
 export function renderPanelUnavailable(usage: FailedUsage, noColor: boolean): string {

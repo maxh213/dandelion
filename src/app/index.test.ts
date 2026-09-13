@@ -1,9 +1,10 @@
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { runApp, realCommandRunner, realIo } from './index.ts';
-import type { CommandRunner, CommandRunnerResult, Fetcher, LaunchedProcess, Launcher, ProbeIo } from '../probes/index.ts';
+import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
@@ -21,9 +22,31 @@ const KIMI_CHILD: LaunchedProcess = {
 };
 const HAPPY_KIMI: Launcher = { launch: async () => KIMI_CHILD };
 const KIMI_FETCHER: Fetcher = { get: async () => ({ status: 200, body: KIMI_BODY }) };
+const PERIOD = { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: '2026-09-06T21:15:36.133376+00:00', end: '2026-09-13T21:15:36.133376+00:00' };
 
-function ioOf(runner: CommandRunner, launcher: Launcher = MISSING_KIMI): ProbeIo {
-  return { runner, launcher, fetcher: KIMI_FETCHER };
+function billingEvent(ts: string, creditUsagePercent: number, subscriptionTier: string): string {
+  return JSON.stringify({ ts, msg: 'billing: fetched credits config', ctx: { config: { creditUsagePercent, currentPeriod: PERIOD }, subscriptionTier } });
+}
+
+function grokLog(newestTs = '2026-09-12T16:00:00.000Z'): string {
+  return [
+    '{"ts":"2026-09-11T08:00:00.000Z","msg":"session started","ctx":{}}',
+    billingEvent('2026-09-11T09:00:00.000Z', 60.0, 'SuperGrok'),
+    'not json at all',
+    billingEvent(newestTs, 75.0, 'SuperGrok Heavy'),
+    '{"ts":"2026-09-12T16:00:01.000Z","msg":"tool call finished","ctx":{"tool":"bash"}}'
+  ].join('\n');
+}
+
+function grokReader(log: string | undefined): FileReader {
+  return { homeDir: () => '/home/tester', read: async (path) => (path === '/grok/logs/unified.jsonl' ? log : undefined) };
+}
+
+const GROK_ENV = { ALLOWANCE_GROK_HOME: '/grok' };
+const NO_GROK = grokReader(undefined);
+
+function ioOf(runner: CommandRunner, launcher: Launcher = MISSING_KIMI, reader: FileReader = NO_GROK): ProbeIo {
+  return { runner, launcher, fetcher: KIMI_FETCHER, reader };
 }
 
 function mockRunner(result: CommandRunnerResult): ProbeIo {
@@ -62,9 +85,9 @@ const HAPPY: Record<string, CommandRunnerResult> = {
 const DIM = '\x1b[90m';
 const RULE = '━'.repeat(72);
 
-function routedRunner(overrides: Record<string, CommandRunnerResult> = {}, launcher = HAPPY_KIMI): ProbeIo {
+function routedRunner(overrides: Record<string, CommandRunnerResult> = {}, launcher = HAPPY_KIMI, reader = grokReader(grokLog())): ProbeIo {
   const results = { ...HAPPY, ...overrides };
-  return ioOf({ run: async (command) => results[command] }, launcher);
+  return ioOf({ run: async (command) => results[command] }, launcher, reader);
 }
 
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
@@ -81,12 +104,12 @@ function panelOf(output: string, name: string): string[] {
 }
 
 describe('claude and agy windows', () => {
-  it('renders claude, agy, kimi and kilo panels in fixed order with captions', async () => {
-    const output = await runApp(routedRunner(), {}, NOW);
+  it('renders claude, agy, kimi, grok and kilo panels in fixed order with captions', async () => {
+    const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const lines = plain(output).split('\n');
     expect(lines[0]).toMatch(/^ALLOWANCE +10:00:00Z$/);
-    expect(lines.filter((line) => line === RULE)).toHaveLength(4);
-    expect(['claude', 'agy', 'kimi', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20]);
+    expect(lines.filter((line) => line === RULE)).toHaveLength(5);
+    expect(['claude', 'agy', 'kimi', 'grok', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25]);
     expect(lines[1]).toBe(RULE);
     expect(panelOf(output, 'claude').at(-1)).toBe('claude code · claude');
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
@@ -123,7 +146,7 @@ describe('claude and agy windows', () => {
   });
 
   it('keeps window rows ASCII under NO_COLOR except the separator glyphs', async () => {
-    const output = await runApp(routedRunner(), { NO_COLOR: '1' }, NOW);
+    const output = await runApp(routedRunner(), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
     expect(output).not.toContain('\x1b');
     expect(output).not.toMatch(/[█░━]/);
     expect(output.split('\n')).toContain('Gemini Models · Weekly Limit        --------------------   0% ↻ 7d7h');
@@ -190,7 +213,7 @@ describe('claude and agy windows', () => {
     ]);
   });
 
-  it('runs the four probes in parallel and keeps panel order', async () => {
+  it('runs the probes in parallel and keeps panel order', async () => {
     const release: (() => void)[] = [];
     const resumeAllOnFourth = () => {
       if (release.length === 4) release.reverse().forEach((resume) => resume());
@@ -216,18 +239,20 @@ describe('claude and agy windows', () => {
         'claude\nCommand timed out after 90s\nclaude code · claude',
         'agy\nCommand timed out after 60s\nagy · agy',
         'kimi\nkimi web exited without printing a token\nkimi code · kimi',
+        'grok\nno grok billing snapshot — run grok once\ngrok · grok',
         'kilo\nCommand timed out after 20s\napi balance · kilo'
       ].join(`\n${RULE}\n`)
     );
   });
 
-  it('renders four unavailable panels when no CLI is on the PATH', async () => {
+  it('renders five unavailable panels when no CLI is on the PATH and grok home is empty', async () => {
     const output = await runApp(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW);
     expect(output).toContain(
       [
         `${DIM}${RULE}\nclaude\nclaude CLI not found in PATH\nclaude code · claude\x1b[0m`,
         `${DIM}${RULE}\nagy\nagy CLI not found in PATH\nagy · agy\x1b[0m`,
         `${DIM}${RULE}\nkimi\nkimi CLI not found in PATH\nkimi code · kimi\x1b[0m`,
+        `${DIM}${RULE}\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m`,
         `${DIM}${RULE}\nkilo\nkilo CLI not found in PATH\napi balance · kilo\x1b[0m`
       ].join('\n')
     );
@@ -248,7 +273,7 @@ describe('kimi panel', () => {
       '='.repeat(72)
     ]);
     expect(lines.indexOf('agy')).toBeLessThan(kimi);
-    expect(lines[kimi + 5]).toBe('kilo');
+    expect(lines[kimi + 5]).toBe('grok');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
   });
 
@@ -265,6 +290,180 @@ describe('kimi panel', () => {
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'agy')).toHaveLength(6);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
+  });
+});
+
+describe('grok panel', () => {
+  const grokIo = (log: string | undefined) => routedRunner({}, HAPPY_KIMI, grokReader(log));
+  const WARM = '\x1b[33m';
+
+  it('renders the newest snapshot between kimi and kilo', async () => {
+    const output = await runApp(grokIo(grokLog()), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
+    const lines = output.split('\n');
+    const grok = lines.indexOf('grok');
+    expect(lines.slice(grok - 1, grok + 6)).toEqual([
+      '='.repeat(72),
+      'grok',
+      'credits                             ###############-----  75% ↻ 11h15m',
+      'snapshot 18h0m old',
+      'SuperGrok Heavy · grok',
+      '='.repeat(72),
+      'kilo'
+    ]);
+    expect(lines.indexOf('kimi')).toBeLessThan(grok);
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+  });
+
+  it('keeps the claude, agy, kimi and kilo panels unchanged next to grok', async () => {
+    const withGrok = await runApp(grokIo(grokLog()), GROK_ENV, NOW);
+    const withoutGrok = await runApp(grokIo(undefined), GROK_ENV, NOW);
+    for (const name of ['claude', 'agy', 'kimi', 'kilo']) expect(panelOf(withGrok, name)).toEqual(panelOf(withoutGrok, name));
+  });
+
+  it('colours a fresh grok panel warm with a dim snapshot line and caption', async () => {
+    const output = await runApp(grokIo(grokLog()), GROK_ENV, NOW);
+    expect(output).toContain(
+      `\ngrok\n${'credits'.padEnd(35)} ${WARM}${'█'.repeat(15)}${'░'.repeat(5)}\x1b[0m ${WARM} 75%\x1b[0m ↻ 11h15m\n${DIM}snapshot 18h0m old\x1b[0m\n${DIM}SuperGrok Heavy · grok\x1b[0m\n`
+    );
+  });
+
+  it.each([
+    ['2026-09-13T09:59:00.000Z', 'snapshot 0h1m old', false],
+    ['2026-09-13T11:00:00.000Z', 'snapshot 0h0m old', false],
+    ['2026-09-11T10:00:00.000Z', 'snapshot 2d0h old', false],
+    ['2026-09-11T09:59:59.000Z', 'stale snapshot 2d0h old', true],
+    ['2026-09-10T17:14:22.812Z', 'stale snapshot 2d16h old', true]
+  ])('shows a snapshot taken at %s as "%s"', async (ts, line, stale) => {
+    const noColor = (await runApp(grokIo(grokLog(ts)), { ...GROK_ENV, NO_COLOR: '1' }, NOW)).split('\n');
+    const grok = noColor.indexOf('grok');
+    expect(noColor.slice(grok + 1, grok + 3)).toEqual(['credits                             ###############-----  75% ↻ 11h15m', line]);
+    const output = await runApp(grokIo(grokLog(ts)), GROK_ENV, NOW);
+    expect(output.includes(`${DIM}${RULE}\ngrok\n`)).toBe(stale);
+  });
+
+  it('dims a stale grok panel throughout without a ramp escape', async () => {
+    const output = await runApp(grokIo(grokLog('2026-09-10T17:14:22.812Z')), GROK_ENV, NOW);
+    expect(output).toContain(
+      `${DIM}${RULE}\ngrok\n${'credits'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 11h15m\nstale snapshot 2d16h old\nSuperGrok Heavy · grok\x1b[0m\n`
+    );
+    expect(output).toContain(`${DIM}claude code · claude\x1b[0m`);
+    expect(output).toContain(`\x1b[31m${'█'.repeat(17)}`);
+  });
+
+  it.each<[string, string]>([
+    ['{"config":{"creditUsagePercent":75}}', 'credits                             ###############-----  75%|grok · grok'],
+    ['{"config":{"creditUsagePercent":33.5},"subscriptionTier":""}', 'credits                             #######-------------  34%|grok · grok'],
+    ['{"config":{"creditUsagePercent":0},"subscriptionTier":7}', 'credits                             --------------------   0%|grok · grok'],
+    ['{"config":{"creditUsagePercent":130,"currentPeriod":{"end":"soon"}},"subscriptionTier":"SuperGrok"}', 'credits                             #################### 130%|SuperGrok · grok'],
+    ['{"config":{"creditUsagePercent":75,"currentPeriod":null}}', 'credits                             ###############-----  75%|grok · grok']
+  ])('renders the only billing event with ctx %s', async (ctx, expected) => {
+    const event = `{"ts":"2026-09-13T09:00:00Z","msg":"billing: fetched credits config","ctx":${ctx}}`;
+    const lines = (await runApp(grokIo(event), { ...GROK_ENV, NO_COLOR: '1' }, NOW)).split('\n');
+    const grok = lines.indexOf('grok');
+    const [row, caption] = expected.split('|');
+    expect([lines[grok + 1], lines[grok + 3]]).toEqual([row, caption]);
+  });
+
+  it('skips unusable billing events in favour of an older usable one', async () => {
+    const unusable = [
+      '{"ts":"2026-09-13T09:00:00Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":"90"}}}',
+      '{"ts":"2026-09-13T09:00:00Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":-5}}}',
+      '{"ts":"2026-09-13T09:00:00Z","msg":"billing: fetched credits config","ctx":{"config":null}}',
+      '{"ts":"later","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":95}}}',
+      '{"msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":95}}}',
+      '{"ts":"2026-09-13T09:00:00Z","msg":"billing: fetched credits config"',
+      '[1,2,3]',
+      'null',
+      ''
+    ].join('\n');
+    const lines = (await runApp(grokIo(`${grokLog()}\n${unusable}`), { ...GROK_ENV, NO_COLOR: '1' }, NOW)).split('\n');
+    const grok = lines.indexOf('grok');
+    expect(lines.slice(grok + 1, grok + 4)).toEqual([
+      'credits                             ###############-----  75% ↻ 11h15m',
+      'snapshot 18h0m old',
+      'SuperGrok Heavy · grok'
+    ]);
+  });
+
+  it.each<[string, string | undefined]>([
+    ['no log', undefined],
+    ['an empty log', ''],
+    ['only non-billing lines', '{"ts":"2026-09-11T08:00:00.000Z","msg":"session started","ctx":{}}\n{"msg":"tool call finished"}'],
+    ['only unusable billing events', '{"ts":"later","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":95}}}']
+  ])('renders a dim unavailable grok panel with %s while the others render normally', async (_case, log) => {
+    const output = await runApp(grokIo(log), GROK_ENV, NOW);
+    expect(output).toContain(`${DIM}${RULE}\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m\n`);
+    expect(plain(output)).not.toMatch(/^(stale )?snapshot /m);
+    expect(panelOf(output, 'claude')).toHaveLength(5);
+    expect(panelOf(output, 'kimi')).toHaveLength(4);
+    expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
+  });
+});
+
+describe('real grok reader', () => {
+  let scratch = '';
+
+  afterEach(() => {
+    if (scratch) {
+      chmodSync(scratch, 0o755);
+      rmSync(scratch, { recursive: true, force: true });
+    }
+    scratch = '';
+  });
+
+  function grokHome(): string {
+    scratch = mkdtempSync(join(tmpdir(), 'allowance-grok-'));
+    return scratch;
+  }
+
+  function writeLog(home: string, log: string): string {
+    mkdirSync(join(home, 'logs'));
+    const path = join(home, 'logs', 'unified.jsonl');
+    writeFileSync(path, log);
+    return path;
+  }
+
+  function tree(dir: string): [string, number, number][] {
+    return readdirSync(dir, { recursive: true, encoding: 'utf8' }).sort().map((name) => {
+      const info = statSync(join(dir, name));
+      return [name, info.size, info.mtimeMs];
+    });
+  }
+
+  it('uses the os home dir', () => {
+    expect(realIo.reader.homeDir()).toBe(homedir());
+  });
+
+  it('reads the log file', async () => {
+    const path = writeLog(grokHome(), 'hello');
+    expect(await realIo.reader.read(path)).toBe('hello');
+  });
+
+  it('reports a missing path, a directory and an unreadable file as undefined', async () => {
+    const home = grokHome();
+    const path = writeLog(home, 'secret');
+    expect(await realIo.reader.read(join(home, 'nope', 'unified.jsonl'))).toBeUndefined();
+    expect(await realIo.reader.read(join(home, 'logs'))).toBeUndefined();
+    chmodSync(path, 0o000);
+    const readable = await realIo.reader.read(path);
+    expect(readable === undefined || process.getuid?.() === 0).toBe(true);
+  });
+
+  it('renders from a real grok home and a missing one without writing to either', async () => {
+    const home = grokHome();
+    writeLog(home, grokLog());
+    const io = { ...routedRunner(), reader: realIo.reader };
+    const before = tree(home);
+    const output = await runApp(io, { ALLOWANCE_GROK_HOME: home, NO_COLOR: '1' }, NOW);
+    expect(output).toContain('\ngrok\ncredits                             ###############-----  75% ↻ 11h15m\n');
+    expect(tree(home)).toEqual(before);
+    const empty = join(home, 'empty');
+    mkdirSync(empty);
+    const emptyBefore = tree(empty);
+    expect(await runApp(io, { ALLOWANCE_GROK_HOME: empty }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(tree(empty)).toEqual(emptyBefore);
+    expect(await runApp(io, { ALLOWANCE_GROK_HOME: join(home, 'missing') }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(readdirSync(home).sort()).toEqual(['empty', 'logs']);
   });
 });
 
