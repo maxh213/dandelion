@@ -28,4 +28,7 @@ async function runQa() {
   }
 }
 
-runQa().catch(console.error);
+runQa().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
