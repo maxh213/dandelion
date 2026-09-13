@@ -1,0 +1,133 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const kimiEntry = join(tree, 'src', 'probes', 'kimi.ts');
+const NOW = '2026-09-13T10:00:00.000Z';
+const ITERATIONS = 2000;
+
+const TARGETS = {
+  cliOk: 'cli one-shot claude+agy+kimi+kilo kimi ok',
+  cliNoToken: 'cli one-shot kimi exits without token',
+  probe: 'probeKimi ok (in-process, per call)',
+  runApp: 'runApp claude+agy+kimi+kilo ok (in-process, per call)',
+  render: 'renderDashboard four providers with kimi (in-process, per call)'
+};
+
+function emit(target, value, unit) {
+  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
+}
+
+function absent(...targets) {
+  for (const target of targets) console.log(JSON.stringify({ target, absent: true }));
+}
+
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const BODY = JSON.stringify({
+  data: {
+    summary: { used: 590, limit: 1000, reset_at: '2026-09-18T10:00:00Z' },
+    limits: [{ used: 42, limit: 100, window: { unit: 'hour', value: 5 } }]
+  }
+});
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+const CLAUDE_OUT = 'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)\nCurrent week (all models): 86% used · resets Sep 13, 11pm (Europe/London)\n';
+const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z\n';
+const OUTPUTS = { claude: CLAUDE_OUT, agy: AGY_OUT, kilo: KILO_OUT };
+
+const KIMI_OK = `#!${process.execPath}
+const http = require('node:http');
+const a = process.argv.slice(2), port = Number(a[a.indexOf('--port') + 1]);
+http.createServer((req, res) => {
+  res.writeHead(req.headers.authorization === 'Bearer test-token' ? 200 : 401, { 'content-type': 'application/json' });
+  res.end(${JSON.stringify(BODY)});
+}).listen(port, '127.0.0.1', () => console.log('kimi web ready: http://127.0.0.1:' + port + '/?token=test-token'));
+`;
+
+function makeFixture(prefix, kimi) {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  for (const [name, out] of Object.entries(OUTPUTS)) {
+    const file = join(dir, name);
+    writeFileSync(file, `#!/bin/sh\ncat <<'OUT'\n${out}OUT\n`);
+    chmodSync(file, 0o755);
+  }
+  writeFileSync(join(dir, 'kimi'), kimi);
+  chmodSync(join(dir, 'kimi'), 0o755);
+  return dir;
+}
+
+function freePort() {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+async function timeCli(fixture) {
+  const env = { ...process.env, PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_KIMI_PORT: String(await freePort()) };
+  delete env.NO_COLOR;
+  const start = process.hrtime.bigint();
+  execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  return Number(process.hrtime.bigint() - start) / 1e6;
+}
+
+const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
+const child = { output: async () => 'kimi web ready: /?token=test-token', hasExited: () => false, stop: async () => {} };
+const io = {
+  ...runner,
+  runner,
+  launcher: { launch: async () => child },
+  fetcher: { get: async () => ({ status: 200, body: BODY }) }
+};
+const usages = [
+  { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' }] },
+  { id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok', windows: [{ label: 'Gemini Models · Weekly Limit', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' }] },
+  { id: 'kimi', displayName: 'kimi', planLabel: 'kimi code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'weekly', usedPct: 59, resetsAt: '2026-09-18T10:00:00Z' }, { label: '5h', usedPct: 42 }] },
+  { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
+];
+
+const okFixture = makeFixture('bench-kimi-ok-', KIMI_OK);
+const noTokenFixture = makeFixture('bench-kimi-notoken-', '#!/bin/sh\nexit 0\n');
+
+async function perCall(fn) {
+  const start = process.hrtime.bigint();
+  for (let i = 0; i < ITERATIONS; i++) await fn();
+  return Number(process.hrtime.bigint() - start) / 1e3 / ITERATIONS;
+}
+
+try {
+  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+  if (existsSync(kimiEntry)) {
+    const { runApp } = await import(pathToFileURL(appEntry).href);
+    const { probeKimi } = await import(pathToFileURL(kimiEntry).href);
+    await timeCli(okFixture);
+    await timeCli(noTokenFixture);
+    await probeKimi(io, {}, NOW);
+    await runApp(io, {}, NOW);
+    emit(TARGETS.cliOk, await timeCli(okFixture), 'ms');
+    emit(TARGETS.cliNoToken, await timeCli(noTokenFixture), 'ms');
+    emit(TARGETS.probe, await perCall(() => probeKimi(io, {}, NOW)), 'us');
+    emit(TARGETS.runApp, await perCall(() => runApp(io, {}, NOW)), 'us');
+  } else {
+    absent(TARGETS.cliOk, TARGETS.cliNoToken, TARGETS.probe, TARGETS.runApp);
+  }
+  renderDashboard(usages, false, NOW);
+  emit(TARGETS.render, await perCall(() => renderDashboard(usages, false, NOW)), 'us');
+} finally {
+  rmSync(okFixture, { recursive: true, force: true });
+  rmSync(noTokenFixture, { recursive: true, force: true });
+}

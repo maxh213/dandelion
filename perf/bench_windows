@@ -63,7 +63,8 @@ function timeCli() {
   return Number(process.hrtime.bigint() - start) / 1e6;
 }
 
-const stub = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
+const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
+const stub = { ...runner, runner, launcher: { launch: async () => undefined }, fetcher: { get: async () => ({ failure: 'network' }) } };
 const usages = [
   {
     id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok',
