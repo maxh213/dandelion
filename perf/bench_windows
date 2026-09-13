@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const claudeEntry = join(tree, 'src', 'probes', 'claude.ts');
+const NOW = '2026-09-13T10:00:00.000Z';
+const ITERATIONS = 2000;
+
+const TARGETS = {
+  cli: 'cli one-shot claude+agy+kilo ok',
+  runApp: 'runApp claude+agy+kilo ok (in-process, per call)',
+  render: 'renderDashboard three providers with windows (in-process, per call)'
+};
+
+const CLAUDE_OUT = [
+  'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)',
+  'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)',
+  'Current week (Fable): 100% used · resets Sep 13, 11pm (Europe/London)',
+  '',
+  "What's contributing to your usage"
+].join('\n');
+const AGY_OUT = [
+  'Gemini Models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z',
+  'Gemini Models\tFive Hour Limit Remaining\t100%\t2026-09-13T22:13:45Z',
+  'Claude and GPT models\tWeekly Limit Remaining\t25%\t2026-09-20T17:13:45Z',
+  'Claude and GPT models\tFive Hour Limit Remaining\t75%\t2026-09-13T22:13:45Z'
+].join('\n');
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+const OUTPUTS = { claude: CLAUDE_OUT, agy: AGY_OUT, kilo: KILO_OUT };
+
+function emit(target, value, unit) {
+  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
+}
+
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
+  for (const target of Object.values(TARGETS)) console.log(JSON.stringify({ target, absent: true }));
+  process.exit(0);
+}
+
+function quoteLines(text) {
+  return text.split('\n').map((line) => `'${line.replaceAll("'", "'\\''").replaceAll('\t', "'\"$(printf '\\t')\"'")}'`).join(' ');
+}
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-windows-'));
+for (const [name, out] of Object.entries(OUTPUTS)) {
+  const file = join(fixture, name);
+  writeFileSync(file, `#!/bin/sh\nprintf '%s\\n' ${quoteLines(out)}\n`);
+  chmodSync(file, 0o755);
+}
+
+function timeCli() {
+  const env = { ...process.env, PATH: `${fixture}:/usr/bin:/bin` };
+  delete env.NO_COLOR;
+  const start = process.hrtime.bigint();
+  execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  return Number(process.hrtime.bigint() - start) / 1e6;
+}
+
+const stub = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
+const usages = [
+  {
+    id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok',
+    windows: [
+      { label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' },
+      { label: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00.000Z' },
+      { label: 'weekly Fable', usedPct: 100, resetsAt: '2026-09-13T22:00:00.000Z' }
+    ]
+  },
+  {
+    id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok',
+    windows: [
+      { label: 'Gemini Models · Weekly Limit', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' },
+      { label: 'Gemini Models · Five Hour Limit', usedPct: 0, resetsAt: '2026-09-13T22:13:45Z' },
+      { label: 'Claude and GPT models · Weekly Limit', usedPct: 75, resetsAt: '2026-09-20T17:13:45Z' },
+      { label: 'Claude and GPT models · Five Hour Limit', usedPct: 25, resetsAt: '2026-09-13T22:13:45Z' }
+    ]
+  },
+  { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
+];
+
+try {
+  const { runApp } = await import(pathToFileURL(appEntry).href);
+  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+  const hasWindows = existsSync(claudeEntry);
+
+  timeCli();
+  await runApp(stub, {}, NOW);
+  if (hasWindows) renderDashboard(usages, false, NOW);
+
+  emit(TARGETS.cli, timeCli(), 'ms');
+
+  let start = process.hrtime.bigint();
+  for (let i = 0; i < ITERATIONS; i++) await runApp(stub, {}, NOW);
+  emit(TARGETS.runApp, Number(process.hrtime.bigint() - start) / 1e3 / ITERATIONS, 'us');
+
+  if (hasWindows) {
+    start = process.hrtime.bigint();
+    for (let i = 0; i < ITERATIONS; i++) renderDashboard(usages, false, NOW);
+    emit(TARGETS.render, Number(process.hrtime.bigint() - start) / 1e3 / ITERATIONS, 'us');
+  } else {
+    console.log(JSON.stringify({ target: TARGETS.render, absent: true }));
+  }
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}
