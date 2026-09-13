@@ -1,7 +1,6 @@
-import type { ProviderUsage, Balance } from '../domain/index.ts';
-import { runFailureReason, type CommandRunner } from './runner.ts';
+import type { Balance } from '../domain/index.ts';
+import type { CliProbe } from './cli.ts';
 
-const PROFILE_TIMEOUT_MS = 20000;
 const DEFAULT_REFERENCE = 20;
 const BALANCE_LINE = /Balance:\s*\$([0-9.]+)/;
 
@@ -21,20 +20,13 @@ function parseBalance(stdout: string, rawReference: string | undefined): Balance
   return balance;
 }
 
-export async function probeKilo(
-  runner: CommandRunner,
-  now: string,
-  env: Record<string, string | undefined>
-): Promise<ProviderUsage> {
-  const result = await runner.run('kilo', ['profile'], PROFILE_TIMEOUT_MS);
-  const usage = { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: now };
-
-  if (result.failure) {
-    return { ...usage, status: 'unavailable', reason: runFailureReason('kilo', PROFILE_TIMEOUT_MS, result.failure) };
-  }
-
-  const balance = parseBalance(result.stdout, env['ALLOWANCE_KILO_REFERENCE']);
-  if (!balance) return { ...usage, status: 'unavailable', reason: 'Could not parse balance from output' };
-
-  return { ...usage, balance, status: 'ok' };
+export function kiloProbe(env: Record<string, string | undefined>): CliProbe {
+  return {
+    id: 'kilo',
+    planLabel: 'api balance',
+    args: ['profile'],
+    timeoutMs: 20000,
+    reads: 'balance',
+    read: (stdout) => ({ windows: [], balance: parseBalance(stdout, env['ALLOWANCE_KILO_REFERENCE']) })
+  };
 }

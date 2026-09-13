@@ -24,6 +24,20 @@ module.exports = {
       to: { pathNot: '^src/(domain|probes)' }
     },
     {
+      name: 'probe-definitions-independent',
+      severity: 'error',
+      comment: 'Each CLI probe knows only the cli skeleton and domain; only probes/index.ts composes them',
+      from: { path: '^src/probes/', pathNot: ['^src/probes/index\\.ts$', '\\.test\\.ts$'] },
+      to: { path: '^src/probes/', pathNot: '^src/probes/cli\\.ts$' }
+    },
+    {
+      name: 'spawn-only-in-app',
+      severity: 'error',
+      comment: 'Only the app edge spawns processes; everything else goes through the injected CommandRunner',
+      from: { path: '^src/', pathNot: ['^src/app/index\\.ts$', '\\.test\\.ts$'] },
+      to: { path: '^(node:)?child_process$' }
+    },
+    {
       name: 'render-layer',
       severity: 'error',
       comment: 'Render depends on domain only, never on probes, and does no IO',

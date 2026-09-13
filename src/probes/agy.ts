@@ -1,5 +1,4 @@
-import type { UsageWindow } from '../domain/index.ts';
-import { presentOnly, windowOf, type WindowProbe } from './windows.ts';
+import type { CliProbe, ReadWindow, Reading } from './cli.ts';
 
 const REMAINING_PERCENT = /^(\d+)%$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -22,23 +21,24 @@ function withoutWord(text: string, word: string): string {
     .trim();
 }
 
-function parseRow(line: string): UsageWindow | undefined {
+function parseRow(line: string): ReadWindow | [] {
   const columns = line.trim().split('\t');
   const remaining = remainingPercent(columns);
-  if (remaining === undefined) return undefined;
+  if (remaining === undefined) return [];
   const [group, label, , reset] = columns;
   const windowName = withoutWord(label, 'Remaining');
-  return windowOf(`${group} · ${windowName}`, 100 - remaining, validInstant(reset));
+  return { label: `${group} · ${windowName}`, usedPct: 100 - remaining, resetsAt: validInstant(reset) };
 }
 
-function parseAgyUsage(stdout: string): UsageWindow[] {
-  return presentOnly(stdout.split('\n').map(parseRow));
+function readAgyUsage(stdout: string): Reading {
+  return { windows: stdout.split('\n').flatMap(parseRow) };
 }
 
-export const agyProbe: WindowProbe = {
+export const agyProbe: CliProbe = {
   id: 'agy',
   planLabel: 'agy',
   args: ['-p', '/usage'],
   timeoutMs: 60000,
-  parse: parseAgyUsage
+  reads: 'usage',
+  read: readAgyUsage
 };

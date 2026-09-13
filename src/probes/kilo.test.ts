@@ -1,12 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { probeKilo } from './kilo.ts';
-import type { CommandRunner, CommandRunnerResult } from './runner.ts';
+import { probeCli, type CommandRunner, type CommandRunnerResult } from './cli.ts';
+import { kiloProbe } from './kilo.ts';
+
+function probeKilo(runner: CommandRunner, now: string, env: Record<string, string | undefined>) {
+  return probeCli(runner, kiloProbe(env), now);
+}
 
 function mockRunner(result: CommandRunnerResult): CommandRunner {
   return { run: async () => result };
 }
 
 describe('probeKilo', () => {
+  it('runs kilo profile with a 20 second timeout', () => {
+    expect(kiloProbe({})).toMatchObject({ id: 'kilo', planLabel: 'api balance', args: ['profile'], timeoutMs: 20000 });
+  });
+
   it('returns balance successfully with default reference', async () => {
     const runner = mockRunner({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' });
     const res = await probeKilo(runner, 'now', {});
