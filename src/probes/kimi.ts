@@ -1,4 +1,4 @@
-import type { ProviderUsage, UsageWindow } from '../domain/index.ts';
+import { validInstant, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type LaunchedProcess = {
   output(): Promise<string>;
@@ -25,7 +25,6 @@ const TOKEN_WAIT_MS = 20000;
 const REQUEST_TIMEOUT_MS = 10000;
 const TOKEN = /token=([A-Za-z0-9._-]+)|Bearer ([A-Za-z0-9._-]+)/;
 const DIGITS = /^\d+$/;
-const DATE_BEFORE_TIME = /\d-\d{2}-\d{2}T/;
 const PARSE_FAILURE = 'Could not parse usage from response';
 const FETCH_FAILURES = {
   network: 'kimi usage request failed',
@@ -104,14 +103,10 @@ function percentOf(entry: unknown): number | undefined {
   return Math.round((used * 100) / limit);
 }
 
-function instantOf(value: unknown): string | undefined {
-  return typeof value === 'string' && DATE_BEFORE_TIME.test(value) && !Number.isNaN(Date.parse(value)) ? value : undefined;
-}
-
 function weeklyWindow(summary: unknown): UsageWindow {
   const usedPct = percentOf(summary);
   if (usedPct === undefined) throw new KimiUnavailable(PARSE_FAILURE);
-  const resetsAt = instantOf(fieldOf(summary, 'reset_at'));
+  const resetsAt = validInstant(fieldOf(summary, 'reset_at'));
   return resetsAt === undefined ? { label: 'weekly', usedPct } : { label: 'weekly', usedPct, resetsAt };
 }
 

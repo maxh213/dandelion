@@ -22,6 +22,12 @@ export type ProviderUsage =
   | (ProviderIdentity & { status: 'ok'; balance?: Balance; snapshotAt?: string })
   | (ProviderIdentity & { status: 'unavailable' | 'error'; reason: string });
 
+const DATE_BEFORE_TIME = /\d-\d{2}-\d{2}T/;
+
+export function validInstant(value: unknown): string | undefined {
+  return typeof value === 'string' && DATE_BEFORE_TIME.test(value) && !Number.isNaN(Date.parse(value)) ? value : undefined;
+}
+
 const MS_PER_MINUTE = 60 * 1000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 

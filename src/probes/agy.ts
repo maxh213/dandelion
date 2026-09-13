@@ -1,16 +1,12 @@
+import { validInstant } from '../domain/index.ts';
 import type { CliProbe, ReadWindow, Reading } from './cli.ts';
 
 const REMAINING_PERCENT = /^(\d+)%$/;
-const DATE_BEFORE_TIME = /\d-\d{2}-\d{2}T/;
 
 function remainingPercent(columns: string[]): number | undefined {
   if (columns.length !== 4) return undefined;
   const match = REMAINING_PERCENT.exec(columns[2]);
   return match ? Number(match[1]) : undefined;
-}
-
-function validInstant(text: string): string | undefined {
-  return DATE_BEFORE_TIME.test(text) && !Number.isNaN(Date.parse(text)) ? text : undefined;
 }
 
 function withoutWord(text: string, word: string): string {
