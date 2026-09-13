@@ -34,7 +34,7 @@ const FETCH_FAILURES = {
 
 class KimiUnavailable extends Error {}
 
-function isDefaultPort(raw: string | undefined): boolean {
+function isDefaultPort(raw: string | undefined): raw is undefined | '' {
   return raw === undefined || raw === '';
 }
 
@@ -44,7 +44,7 @@ function isValidPort(raw: string): boolean {
 
 function parsePort(raw: string | undefined): number {
   if (isDefaultPort(raw)) return DEFAULT_PORT;
-  if (!isValidPort(String(raw))) throw new KimiUnavailable(`ALLOWANCE_KIMI_PORT must be an integer from 1 to ${MAX_PORT}`);
+  if (!isValidPort(raw)) throw new KimiUnavailable(`ALLOWANCE_KIMI_PORT must be an integer from 1 to ${MAX_PORT}`);
   return Number(raw);
 }
 

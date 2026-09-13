@@ -49,6 +49,7 @@ function bodyOf(value: unknown): FetchOutcome {
 }
 
 const PORT = { ALLOWANCE_KIMI_PORT: '48123' };
+const PARSE_FAILURE = 'Could not parse usage from response';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -145,18 +146,18 @@ describe('probeKimi', () => {
     ['a hanging request', { failure: 'timeout' }, 'kimi usage request timed out after 10s'],
     ['HTTP 500', { status: 500, body: '{}' }, 'kimi usage request failed: HTTP 500'],
     ['HTTP 199', { status: 199, body: BODY }, 'kimi usage request failed: HTTP 199'],
-    ['truncated JSON', bodyOf('{"data":'), 'Could not parse usage from response'],
-    ['no summary', bodyOf({ data: { limits: [] } }), 'Could not parse usage from response'],
-    ['null', bodyOf('null'), 'Could not parse usage from response'],
-    ['an array', bodyOf('[]'), 'Could not parse usage from response'],
-    ['null data', bodyOf({ data: null }), 'Could not parse usage from response'],
-    ['null summary', bodyOf({ data: { summary: null } }), 'Could not parse usage from response'],
-    ['a string summary', bodyOf({ data: { summary: 'x' } }), 'Could not parse usage from response'],
-    ['a limitless summary', bodyOf({ data: { summary: { used: 1 } } }), 'Could not parse usage from response'],
-    ['a zero limit', bodyOf({ data: { summary: { used: 1, limit: 0 } } }), 'Could not parse usage from response'],
-    ['a negative used', bodyOf({ data: { summary: { used: -1, limit: 1000 } } }), 'Could not parse usage from response'],
-    ['a string used', bodyOf({ data: { summary: { used: '590', limit: 1000 } } }), 'Could not parse usage from response'],
-    ['a string limit', bodyOf({ data: { summary: { used: 590, limit: '1000' } } }), 'Could not parse usage from response']
+    ['truncated JSON', bodyOf('{"data":'), PARSE_FAILURE],
+    ['no summary', bodyOf({ data: { limits: [] } }), PARSE_FAILURE],
+    ['null', bodyOf('null'), PARSE_FAILURE],
+    ['an array', bodyOf('[]'), PARSE_FAILURE],
+    ['null data', bodyOf({ data: null }), PARSE_FAILURE],
+    ['null summary', bodyOf({ data: { summary: null } }), PARSE_FAILURE],
+    ['a string summary', bodyOf({ data: { summary: 'x' } }), PARSE_FAILURE],
+    ['a limitless summary', bodyOf({ data: { summary: { used: 1 } } }), PARSE_FAILURE],
+    ['a zero limit', bodyOf({ data: { summary: { used: 1, limit: 0 } } }), PARSE_FAILURE],
+    ['a negative used', bodyOf({ data: { summary: { used: -1, limit: 1000 } } }), PARSE_FAILURE],
+    ['a string used', bodyOf({ data: { summary: { used: '590', limit: 1000 } } }), PARSE_FAILURE],
+    ['a string limit', bodyOf({ data: { summary: { used: 590, limit: '1000' } } }), PARSE_FAILURE]
   ])('is unavailable and stops the child on %s', async (_case, outcome, reason) => {
     const child = fakeChild();
     const usage = await probeKimi(ioWith(child, outcome).io, PORT, NOW);

@@ -60,31 +60,44 @@ function terminate(child: ChildProcess): Promise<void> {
   });
 }
 
-function readLog(logPath: string): Promise<string> {
-  return readFile(logPath, 'utf8').catch(() => '');
+function logFileIn(logDir: string): string {
+  return join(logDir, 'web.log');
+}
+
+function removeLogDir(logDir: string): void {
+  rmSync(logDir, { recursive: true, force: true });
+}
+
+function readLog(logDir: string): Promise<string> {
+  return readFile(logFileIn(logDir), 'utf8').catch(() => '');
 }
 
 function kimiProcess(child: ChildProcess, logDir: string): KimiProcess {
   return {
-    output: () => readLog(join(logDir, 'web.log')),
+    output: () => readLog(logDir),
     hasExited: () => hasExited(child),
     async stop() {
       await terminate(child);
-      rmSync(logDir, { recursive: true, force: true });
+      removeLogDir(logDir);
     }
   };
+}
+
+function spawnLoggingTo(logDir: string, command: string, args: string[]): ChildProcess {
+  const log = openSync(logFileIn(logDir), 'w');
+  const child = spawn(command, args, { stdio: ['ignore', log, log] });
+  closeSync(log);
+  return child;
 }
 
 const realLauncher: Launcher = {
   launch(command, args) {
     const logDir = mkdtempSync(join(tmpdir(), 'allowance-kimi-'));
-    const log = openSync(join(logDir, 'web.log'), 'w');
-    const child = spawn(command, args, { stdio: ['ignore', log, log] });
-    closeSync(log);
+    const child = spawnLoggingTo(logDir, command, args);
     return new Promise((resolve) => {
       child.once('spawn', () => resolve(kimiProcess(child, logDir)));
       child.on('error', () => {
-        rmSync(logDir, { recursive: true, force: true });
+        removeLogDir(logDir);
         resolve(undefined);
       });
     });
