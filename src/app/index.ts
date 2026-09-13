@@ -8,7 +8,7 @@ import {
   type CommandRunner,
   type CommandRunnerResult,
   type Fetcher,
-  type KimiProcess,
+  type LaunchedProcess,
   type Launcher,
   type ProbeIo,
   type RunFailure
@@ -72,7 +72,7 @@ function readLog(logDir: string): Promise<string> {
   return readFile(logFileIn(logDir), 'utf8').catch(() => '');
 }
 
-function kimiProcess(child: ChildProcess, logDir: string): KimiProcess {
+function launchedProcess(child: ChildProcess, logDir: string): LaunchedProcess {
   return {
     output: () => readLog(logDir),
     hasExited: () => hasExited(child),
@@ -95,7 +95,7 @@ const realLauncher: Launcher = {
     const logDir = mkdtempSync(join(tmpdir(), 'allowance-kimi-'));
     const child = spawnLoggingTo(logDir, command, args);
     return new Promise((resolve) => {
-      child.once('spawn', () => resolve(kimiProcess(child, logDir)));
+      child.once('spawn', () => resolve(launchedProcess(child, logDir)));
       child.on('error', () => {
         removeLogDir(logDir);
         resolve(undefined);
@@ -122,7 +122,7 @@ const realFetcher: Fetcher = {
 export const realIo: ProbeIo = { runner: realCommandRunner, launcher: realLauncher, fetcher: realFetcher };
 
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
-  const usages = await probeProviders(io, now, env);
+  const usages = await probeProviders(io, env, now);
   const noColor = env['NO_COLOR'] !== undefined;
   return renderDashboard(usages, noColor, now);
 }

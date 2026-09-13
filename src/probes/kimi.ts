@@ -1,13 +1,13 @@
 import type { ProviderUsage, UsageWindow } from '../domain/index.ts';
 
-export type KimiProcess = {
+export type LaunchedProcess = {
   output(): Promise<string>;
   hasExited(): boolean;
   stop(): Promise<void>;
 };
 
 export interface Launcher {
-  launch(command: string, args: string[]): Promise<KimiProcess | undefined>;
+  launch(command: string, args: string[]): Promise<LaunchedProcess | undefined>;
 }
 
 export type FetchOutcome = { status: number; body: string } | { failure: 'network' | 'timeout' };
@@ -63,7 +63,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForToken(child: KimiProcess, waitedMs: number): Promise<string> {
+async function waitForToken(child: LaunchedProcess, waitedMs: number): Promise<string> {
   const exited = child.hasExited();
   const token = findToken(await child.output());
   if (token !== undefined) return token;

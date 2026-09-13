@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { runApp, realCommandRunner, realIo } from './index.ts';
-import type { CommandRunner, CommandRunnerResult, Fetcher, KimiProcess, Launcher, ProbeIo } from '../probes/index.ts';
+import type { CommandRunner, CommandRunnerResult, Fetcher, LaunchedProcess, Launcher, ProbeIo } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
@@ -11,7 +11,7 @@ const KIMI_BODY = JSON.stringify({
   }
 });
 const MISSING_KIMI: Launcher = { launch: async () => undefined };
-const KIMI_CHILD: KimiProcess = {
+const KIMI_CHILD: LaunchedProcess = {
   output: async () => 'kimi web ready: http://127.0.0.1:48123/?token=test-token',
   hasExited: () => false,
   stop: async () => undefined
@@ -199,7 +199,7 @@ describe('claude and agy windows', () => {
           resumeAllOnFourth();
         })
     };
-    const silentKimi: KimiProcess = { output: async () => '', hasExited: () => true, stop: async () => undefined };
+    const silentKimi: LaunchedProcess = { output: async () => '', hasExited: () => true, stop: async () => undefined };
     const launcher: Launcher = {
       launch: () =>
         new Promise((resolve) => {
@@ -270,13 +270,13 @@ describe('real kimi launcher', () => {
     vi.useRealTimers();
   });
 
-  async function launchNode(script: string): Promise<KimiProcess> {
+  async function launchNode(script: string): Promise<LaunchedProcess> {
     const child = await realIo.launcher.launch(process.execPath, ['-e', script]);
     if (child === undefined) throw new Error('node did not launch');
     return child;
   }
 
-  async function outputContaining(child: KimiProcess, text: string): Promise<string> {
+  async function outputContaining(child: LaunchedProcess, text: string): Promise<string> {
     const output = await child.output();
     if (output.includes(text)) return output;
     await new Promise((resolve) => setTimeout(resolve, 20));

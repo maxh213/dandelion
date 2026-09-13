@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { probeKimi, type FetchOutcome, type Fetcher, type KimiIo, type KimiProcess, type Launcher } from './kimi.ts';
+import { probeKimi, type FetchOutcome, type Fetcher, type KimiIo, type LaunchedProcess, type Launcher } from './kimi.ts';
 
 const NOW = '2026-09-13T10:00:00Z';
 const BODY = JSON.stringify({
@@ -9,7 +9,7 @@ const BODY = JSON.stringify({
   }
 });
 
-type FakeChild = KimiProcess & { log: string; exited: boolean; stops: number };
+type FakeChild = LaunchedProcess & { log: string; exited: boolean; stops: number };
 
 function fakeChild(log = 'kimi web ready: http://127.0.0.1:48123/?token=test-token', exited = false): FakeChild {
   const child: FakeChild = {

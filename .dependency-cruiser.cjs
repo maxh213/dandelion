@@ -33,9 +33,23 @@ module.exports = {
     {
       name: 'spawn-only-in-app',
       severity: 'error',
-      comment: 'Only the app edge spawns processes; everything else goes through the injected CommandRunner',
+      comment: 'Only the app edge spawns processes; everything else goes through the injected CommandRunner or Launcher',
       from: { path: '^src/', pathNot: ['^src/app/index\\.ts$', '\\.test\\.ts$'] },
       to: { path: '^(node:)?child_process$' }
+    },
+    {
+      name: 'io-only-in-app',
+      severity: 'error',
+      comment: 'Filesystem, OS and network modules live only at the app edge, behind the injected Launcher and Fetcher',
+      from: { path: '^src/', pathNot: ['^src/app/index\\.ts$', '\\.test\\.ts$'] },
+      to: { path: '^(node:)?(fs|fs/promises|os|net|http|https|http2|dgram|dns|tls)$' }
+    },
+    {
+      name: 'main-is-the-entry',
+      severity: 'error',
+      comment: 'main.ts is the process entry; nothing but its own test imports it',
+      from: { path: '^src/', pathNot: '^src/main\\.test\\.ts$' },
+      to: { path: '^src/main\\.ts$' }
     },
     {
       name: 'render-layer',

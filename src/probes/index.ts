@@ -6,14 +6,14 @@ import { kiloProbe } from './kilo.ts';
 import { probeKimi, type KimiIo } from './kimi.ts';
 
 export type { CommandRunner, CommandRunnerResult, RunFailure } from './cli.ts';
-export type { Fetcher, KimiProcess, Launcher } from './kimi.ts';
+export type { Fetcher, LaunchedProcess, Launcher } from './kimi.ts';
 
 export type ProbeIo = KimiIo & { runner: CommandRunner };
 
 export function probeProviders(
   io: ProbeIo,
-  now: string,
-  env: Record<string, string | undefined>
+  env: Record<string, string | undefined>,
+  now: string
 ): Promise<ProviderUsage[]> {
   return Promise.all([
     probeCli(io.runner, claudeProbe, now),
