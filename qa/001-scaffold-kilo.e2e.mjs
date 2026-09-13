@@ -12,6 +12,7 @@ const ALLOWED_GLYPHS = /[↻·…]/g;
 const NODE_DIR = dirname(process.execPath);
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
+const KIMI_FIXTURE = '#!/bin/sh\nexit 0\n';
 
 async function kiloFixture() {
   const dir = await mkdtemp(join(tmpdir(), 'allowance-qa-kilo-'));
@@ -19,7 +20,7 @@ async function kiloFixture() {
   const quoted = PROFILE.replaceAll('\n', '\\n').replaceAll('$', '\\$');
   await writeFile(script, `#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "${quoted}"\n`);
   await chmod(script, 0o755);
-  for (const [name, body] of [['claude', CLAUDE_FIXTURE], ['agy', AGY_FIXTURE]]) {
+  for (const [name, body] of [['claude', CLAUDE_FIXTURE], ['agy', AGY_FIXTURE], ['kimi', KIMI_FIXTURE]]) {
     await writeFile(join(dir, name), body);
     await chmod(join(dir, name), 0o755);
   }
