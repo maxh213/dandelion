@@ -8,7 +8,10 @@ import assert from 'node:assert/strict';
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
 const ESC = '\x1b[';
-const KNOWN_NON_ASCII_CAPTION = 'api balance · kilo';
+const ALLOWED_GLYPHS = /[↻·…]/g;
+const NODE_DIR = dirname(process.execPath);
+const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
+const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 
 async function kiloFixture() {
   const dir = await mkdtemp(join(tmpdir(), 'allowance-qa-kilo-'));
@@ -16,6 +19,10 @@ async function kiloFixture() {
   const quoted = PROFILE.replaceAll('\n', '\\n').replaceAll('$', '\\$');
   await writeFile(script, `#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "${quoted}"\n`);
   await chmod(script, 0o755);
+  for (const [name, body] of [['claude', CLAUDE_FIXTURE], ['agy', AGY_FIXTURE]]) {
+    await writeFile(join(dir, name), body);
+    await chmod(join(dir, name), 0o755);
+  }
   return dir;
 }
 
@@ -44,13 +51,13 @@ function assertWidth(stdout) {
 
 function assertAscii(stdout) {
   for (const line of stdout.split('\n')) {
-    const checked = line === KNOWN_NON_ASCII_CAPTION ? 'api balance - kilo' : line;
+    const checked = line.replaceAll(ALLOWED_GLYPHS, '');
     assert.ok(/^[\x20-\x7e]*$/.test(checked), `NO_COLOR line is not ASCII: ${JSON.stringify(line)}`);
   }
 }
 
 async function happyPathDefaultReference(kiloDir) {
-  const stdout = runApp(`${kiloDir}:${process.env.PATH}`, {});
+  const stdout = runApp(`${kiloDir}:${NODE_DIR}`, {});
   const plain = stripAnsi(stdout);
   assert.match(plain, /^ALLOWANCE +\d{2}:\d{2}:\d{2}Z$/m);
   assert.match(plain, /^kilo$/m);
@@ -62,7 +69,7 @@ async function happyPathDefaultReference(kiloDir) {
 }
 
 async function customReferenceFillsGauge(kiloDir) {
-  const stdout = runApp(`${kiloDir}:${process.env.PATH}`, { NO_COLOR: '1', ALLOWANCE_KILO_REFERENCE: '10' });
+  const stdout = runApp(`${kiloDir}:${NODE_DIR}`, { NO_COLOR: '1', ALLOWANCE_KILO_REFERENCE: '10' });
   assert.ok(!stdout.includes(ESC), 'NO_COLOR output contains escape codes');
   assert.match(stdout, /^ALLOWANCE /m);
   assert.ok(stdout.includes(`$14.15 ${'#'.repeat(20)}`), `gauge not full at reference 10:\n${stdout}`);
@@ -71,7 +78,7 @@ async function customReferenceFillsGauge(kiloDir) {
 }
 
 async function missingKiloRendersUnavailable(emptyDir) {
-  const stdout = runApp(emptyDir, {});
+  const stdout = runApp(`${emptyDir}:${NODE_DIR}`, {});
   const plain = stripAnsi(stdout);
   assert.match(plain, /^ALLOWANCE /m);
   assert.match(plain, /^kilo\nkilo CLI not found in PATH\n/m);
