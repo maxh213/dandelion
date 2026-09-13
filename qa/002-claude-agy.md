@@ -1,32 +1,28 @@
 # QA Procedure: 002 - Claude and agy windows
 
-Set up once in the repo root (bash). The fixtures print the transcripts from `features/002-claude-agy.feature`. The agy dates are relative to your clock, so its countdowns are predictable.
+Set up once in the repo root (bash, GNU `date`). The fixtures print the transcripts from `features/002-claude-agy.feature`. The steps run with a PATH of only the fixture dir and node's dir, so the fixtures must not rely on PATH lookups: they use only shell builtins (`echo`, `printf`, `exit`). The agy reset instants are computed once here, with your normal PATH, and baked into the fixture.
 
 ```bash
 export FX="$(mktemp -d)" NODEDIR="$(dirname "$(command -v node)")"
+W="$(date -u -d "+7 days +5 minutes" +%Y-%m-%dT%H:%M:%SZ)"
+H="$(date -u -d "+2 hours +5 minutes" +%Y-%m-%dT%H:%M:%SZ)"
 cat > "$FX/kilo" <<'EOF'
 #!/bin/sh
 echo 'Balance: $14.15'
 EOF
 cat > "$FX/claude" <<'EOF'
 #!/bin/sh
-cat <<'OUT'
-Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)
-Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)
-Current week (Fable): 100% used · resets Sep 13, 11pm (Europe/London)
-OUT
+printf '%s\n' 'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)' 'Current week (Fable): 100% used · resets Sep 13, 11pm (Europe/London)'
 EOF
-cat > "$FX/agy" <<'EOF'
+cat > "$FX/agy" <<EOF
 #!/bin/sh
-W=$(date -u -d "+7 days +5 minutes" +%Y-%m-%dT%H:%M:%SZ)
-H=$(date -u -d "+2 hours +5 minutes" +%Y-%m-%dT%H:%M:%SZ)
-printf 'Gemini Models\tWeekly Limit Remaining\t100%%\t%s\n' "$W"
-printf 'Claude and GPT models\tFive Hour Limit Remaining\t25%%\t%s\n' "$H"
+printf 'Gemini Models\tWeekly Limit Remaining\t100%%\t%s\n' '$W'
+printf 'Claude and GPT models\tFive Hour Limit Remaining\t25%%\t%s\n' '$H'
 EOF
 chmod +x "$FX"/*
 ```
 
-Countdown rule: the claude dates carry no year. Every claude row ends in `↻ ` followed by `NhNm` or `NdNh`.
+Countdown rule: the claude dates carry no year. Every claude row ends in `↻ ` followed by `NhNm` or `NdNh`. The agy countdowns shrink as time passes after set-up, so step 4 gives them as ranges.
 
 1. Run `node qa/e2e.mjs`.
    - **Expected:** exits 0. `001-scaffold-kilo.e2e.mjs`, `002-readme.e2e.mjs` and `002-claude-agy.e2e.mjs` each print PASS. It finishes in under 30s because no real `claude` or `agy` runs.
@@ -38,7 +34,7 @@ Countdown rule: the claude dates carry no year. Every claude row ends in `↻ ` 
    - **Expected:** the caption is `claude code · claude`. The rows are `session` (`  3%`, 1 filled cell), `weekly` (` 86%`, 17 filled) and `weekly Fable` (`100%`, 20 filled). There is no "What's contributing" row.
 
 4. Look at the agy panel.
-   - **Expected:** the caption is `agy · agy`. The row `Gemini Models · Weekly Limit` shows an empty gauge, `  0%` and `↻ 7d0h`. The row `Claude and GPT models · Five Hour…` shows 15 filled cells, ` 75%` and `↻ 2h4m` or `↻ 2h5m`. The percents sit in the same column.
+   - **Expected:** the caption is `agy · agy`. The row `Gemini Models · Weekly Limit` shows an empty gauge, `  0%` and `↻ 7d0h` (or `↻ 6d23h` once 5 minutes have passed since set-up). The row `Claude and GPT models · Five Hour…` shows 15 filled cells, ` 75%` and `↻ 2hNm` (or `↻ 1hNm` once 5 minutes have passed). Run this within an hour of set-up. The percents sit in the same column.
 
 5. Look at the ramp colours in the step 2 output.
    - **Expected:** the gauge and percent of `session` (3%), `weekly` (86%) and `weekly Fable` (100%) are three visibly different colours. Labels and countdowns are uncoloured.
