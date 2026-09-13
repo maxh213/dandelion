@@ -5,7 +5,7 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.strict,
   {
-    ignores: ['dist', 'coverage', 'node_modules', 'ts-coverage', 'qa', '.dependency-cruiser.cjs']
+    ignores: ['dist', 'coverage', 'node_modules', 'ts-coverage', 'qa', '.marestail', '.stryker-tmp', '.dependency-cruiser.cjs']
   },
   {
     files: ['src/**/*.ts'],
