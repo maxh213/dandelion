@@ -98,18 +98,6 @@ describe('terminal renderer', () => {
     expect(panelColor).toContain('\x1b[90m');
   });
 
-  it('renders unavailable panel without reason', () => {
-    const usage: ProviderUsage = {
-      id: 'kilo',
-      displayName: 'kilo',
-      windows: [],
-      fetchedAt: 'now',
-      status: 'unavailable'
-    };
-    const panel = renderPanelUnavailable(usage, true);
-    expect(panel).toContain('Unknown error');
-  });
-
   it('renders full dashboard', () => {
     const usages: ProviderUsage[] = [
       {
@@ -125,15 +113,21 @@ describe('terminal renderer', () => {
         displayName: 'other',
         windows: [],
         fetchedAt: 'now',
-        status: 'unavailable'
+        status: 'error',
+        reason: 'Probe crashed'
       }
     ];
     const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z');
     expect(dash).toContain('ALLOWANCE');
     expect(dash).toContain('##############------');
-    expect(dash).toContain('Unknown error');
+    expect(dash).toContain('other\nProbe crashed');
     
     const dashColor = renderDashboard(usages, false, '2026-09-13T10:00:00.000Z');
     expect(dashColor).toContain('\x1b[90m');
+  });
+
+  it('rejects a provider status it does not know', () => {
+    const usage = { id: 'x', displayName: 'x', windows: [], fetchedAt: 'now', status: 'bogus' } as unknown as ProviderUsage;
+    expect(() => renderDashboard([usage], true, '2026-09-13T10:00:00.000Z')).toThrow('Unexpected provider status');
   });
 });

@@ -1,10 +1,10 @@
-export interface CommandRunnerResult {
-  code: number;
+export type RunFailure = 'missing' | 'timeout' | 'exit';
+
+export type CommandRunnerResult = {
   stdout: string;
   stderr: string;
-  timedOut: boolean;
-  error?: Error;
-}
+  failure?: RunFailure;
+};
 
 export interface CommandRunner {
   run(command: string, args: string[], timeoutMs: number): Promise<CommandRunnerResult>;

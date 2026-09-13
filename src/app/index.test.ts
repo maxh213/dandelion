@@ -1,20 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { runApp, RealCommandRunner } from './index.ts';
+import { runApp, realCommandRunner } from './index.ts';
 import type { CommandRunner, CommandRunnerResult } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
 
-class MockRunner implements CommandRunner {
-  result: CommandRunnerResult;
-  constructor(result: CommandRunnerResult) { this.result = result; }
-  async run() {
-    return this.result;
-  }
+function mockRunner(result: CommandRunnerResult): CommandRunner {
+  return { run: async () => result };
 }
 
-function profileRunner(stdout: string): MockRunner {
-  return new MockRunner({ code: 0, stdout, stderr: '', timedOut: false });
+function profileRunner(stdout: string): CommandRunner {
+  return mockRunner({ stdout, stderr: '' });
 }
 
 function visibleLines(output: string): string[] {
@@ -68,7 +64,7 @@ describe('wiring', () => {
   });
 
   it('renders a dim unavailable panel when kilo is missing', async () => {
-    const runner = new MockRunner({ code: 1, stdout: '', stderr: '', timedOut: false, error: new Error('spawn kilo ENOENT') });
+    const runner = mockRunner({ stdout: '', stderr: '', failure: 'missing' });
     const output = await runApp(runner, {}, NOW);
     expect(output).toContain('ALLOWANCE');
     expect(output).toContain('\x1b[90m' + '━'.repeat(72) + '\nkilo\nkilo CLI not found in PATH');
@@ -82,13 +78,13 @@ describe('wiring', () => {
   });
 
   it('renders a dim unavailable panel when kilo times out', async () => {
-    const runner = new MockRunner({ code: 1, stdout: '', stderr: '', timedOut: true, error: new Error('killed') });
+    const runner = mockRunner({ stdout: '', stderr: '', failure: 'timeout' });
     const output = await runApp(runner, {}, NOW);
     expect(output).toContain('Command timed out after 20s');
   });
 
   it('renders a dim unavailable panel when kilo exits with an error', async () => {
-    const runner = new MockRunner({ code: 1, stdout: '', stderr: '', timedOut: false, error: new Error('Command failed') });
+    const runner = mockRunner({ stdout: '', stderr: '', failure: 'exit' });
     const output = await runApp(runner, {}, NOW);
     expect(output).toContain('Command failed or timed out');
   });
@@ -98,38 +94,31 @@ describe('wiring', () => {
     const runner: CommandRunner = {
       run: async (command, args, timeoutMs) => {
         calls.push([command, args, timeoutMs]);
-        return { code: 0, stdout: PROFILE, stderr: '', timedOut: false };
+        return { stdout: PROFILE, stderr: '' };
       }
     };
     await runApp(runner, {}, NOW);
     expect(calls).toEqual([['kilo', ['profile'], 20000]]);
   });
 
-  it('RealCommandRunner executes commands successfully', async () => {
-    const runner = new RealCommandRunner();
-    const result = await runner.run('node', ['-e', 'console.log("hello")'], 2000);
-    expect(result.code).toBe(0);
+  it('realCommandRunner executes commands successfully', async () => {
+    const result = await realCommandRunner.run('node', ['-e', 'console.log("hello")'], 2000);
     expect(result.stdout).toContain('hello');
-    expect(result.timedOut).toBe(false);
+    expect(result.failure).toBeUndefined();
   });
 
-  it('RealCommandRunner handles ENOENT', async () => {
-    const runner = new RealCommandRunner();
-    const result = await runner.run('thiscommanddoesnotexist', [], 2000);
-    expect(result.code).toBe(1);
-    expect(result.error?.message).toContain('ENOENT');
+  it('realCommandRunner reports a missing binary', async () => {
+    const result = await realCommandRunner.run('thiscommanddoesnotexist', [], 2000);
+    expect(result.failure).toBe('missing');
   });
 
-  it('RealCommandRunner handles timeout', async () => {
-    const runner = new RealCommandRunner();
-    const result = await runner.run('node', ['-e', 'setTimeout(() => {}, 5000)'], 100);
-    expect(result.timedOut).toBe(true);
+  it('realCommandRunner reports a timeout', async () => {
+    const result = await realCommandRunner.run('node', ['-e', 'setTimeout(() => {}, 5000)'], 100);
+    expect(result.failure).toBe('timeout');
   });
 
-  it('RealCommandRunner handles error with number code', async () => {
-    const runner = new RealCommandRunner();
-    const result = await runner.run('node', ['-e', 'process.exit(2)'], 2000);
-    expect(result.code).toBe(2);
-    expect(result.timedOut).toBe(false);
+  it('realCommandRunner reports a non-zero exit', async () => {
+    const result = await realCommandRunner.run('node', ['-e', 'process.exit(2)'], 2000);
+    expect(result.failure).toBe('exit');
   });
 });

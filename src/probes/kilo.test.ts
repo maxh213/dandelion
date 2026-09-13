@@ -2,17 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { probeKilo } from './kilo.ts';
 import type { CommandRunner, CommandRunnerResult } from './runner.ts';
 
-class MockRunner implements CommandRunner {
-  result: CommandRunnerResult;
-  constructor(result: CommandRunnerResult) { this.result = result; }
-  async run() {
-    return this.result;
-  }
+function mockRunner(result: CommandRunnerResult): CommandRunner {
+  return { run: async () => result };
 }
 
 describe('probeKilo', () => {
   it('returns balance successfully with default reference', async () => {
-    const runner = new MockRunner({ code: 0, stdout: 'Name: Max\nBalance: $14.15', stderr: '', timedOut: false });
+    const runner = mockRunner({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' });
     const res = await probeKilo(runner, 'now', {});
     expect(res).toEqual({
       id: 'kilo',
@@ -25,27 +21,30 @@ describe('probeKilo', () => {
   });
 
   it('handles custom reference', async () => {
-    const runner = new MockRunner({ code: 0, stdout: 'Balance: $14.15', stderr: '', timedOut: false });
+    const runner = mockRunner({ stdout: 'Balance: $14.15', stderr: '' });
     const res = await probeKilo(runner, 'now', { ALLOWANCE_KILO_REFERENCE: '10' });
-    expect(res.balance?.reference).toBe(10);
+    expect(res).toMatchObject({ status: 'ok', balance: { reference: 10 } });
   });
 
   it('handles empty reference', async () => {
-    const runner = new MockRunner({ code: 0, stdout: 'Balance: $14.15', stderr: '', timedOut: false });
+    const runner = mockRunner({ stdout: 'Balance: $14.15', stderr: '' });
     const res = await probeKilo(runner, 'now', { ALLOWANCE_KILO_REFERENCE: '' });
-    expect(res.balance?.reference).toBeUndefined();
+    expect(res).toMatchObject({ status: 'ok', balance: { amount: 14.15, currency: '$' } });
+    expect(res).not.toHaveProperty('balance.reference');
   });
 
   it.each<[string, CommandRunnerResult, string]>([
-    ['missing CLI', { code: 1, stdout: '', stderr: '', timedOut: false, error: new Error('ENOENT') }, 'kilo CLI not found in PATH'],
-    ['timeout', { code: 0, stdout: '', stderr: '', timedOut: true }, 'Command timed out after 20s'],
-    ['error code', { code: 1, stdout: '', stderr: '', timedOut: false }, 'Command failed or timed out'],
-    ['unparseable output', { code: 0, stdout: 'Name: Max', stderr: '', timedOut: false }, 'Could not parse balance from output'],
-    ['error instance with non-ENOENT message', { code: 1, stdout: '', stderr: '', timedOut: false, error: new Error('EACCES') }, 'Command failed or timed out'],
-    ['code 0 but with error', { code: 0, stdout: '', stderr: '', timedOut: false, error: new Error('Random') }, 'Command failed or timed out']
+    ['missing CLI', { stdout: '', stderr: '', failure: 'missing' }, 'kilo CLI not found in PATH'],
+    ['timeout', { stdout: '', stderr: '', failure: 'timeout' }, 'Command timed out after 20s'],
+    ['error code', { stdout: 'Balance: $14.15', stderr: '', failure: 'exit' }, 'Command failed or timed out'],
+    ['unparseable output', { stdout: 'Name: Max', stderr: '' }, 'Could not parse balance from output']
   ])('handles %s', async (_case, result, reason) => {
-    const res = await probeKilo(new MockRunner(result), 'now', {});
-    expect(res.status).toBe('unavailable');
-    expect(res.reason).toBe(reason);
+    const res = await probeKilo(mockRunner(result), 'now', {});
+    expect(res).toMatchObject({ status: 'unavailable', reason });
+  });
+
+  it('rejects a failure kind it does not know', async () => {
+    const result = { stdout: '', stderr: '', failure: 'bogus' } as unknown as CommandRunnerResult;
+    await expect(probeKilo(mockRunner(result), 'now', {})).rejects.toThrow('Unexpected run failure: bogus');
   });
 });

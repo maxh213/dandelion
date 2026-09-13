@@ -1,5 +1,5 @@
 import type { ProviderUsage, Balance } from '../domain/index.ts';
-import type { CommandRunner, CommandRunnerResult } from './runner.ts';
+import type { CommandRunner, RunFailure } from './runner.ts';
 
 const PROFILE_TIMEOUT_MS = 20000;
 const DEFAULT_REFERENCE = 20;
@@ -11,20 +11,21 @@ function parseReference(rawReference: string | undefined): number | undefined {
   return Number.parseFloat(rawReference);
 }
 
-function isMissingBinary(error?: Error): boolean {
-  if (!error) return false;
-  return error.message.includes('ENOENT');
+function assertNever(value: never): never {
+  throw new Error(`Unexpected run failure: ${String(value)}`);
 }
 
-function hasFailed(result: CommandRunnerResult): boolean {
-  return result.code !== 0 || result.error !== undefined;
-}
-
-function runFailureReason(result: CommandRunnerResult): string | undefined {
-  if (isMissingBinary(result.error)) return 'kilo CLI not found in PATH';
-  if (result.timedOut) return 'Command timed out after 20s';
-  if (hasFailed(result)) return 'Command failed or timed out';
-  return undefined;
+function runFailureReason(failure: RunFailure): string {
+  switch (failure) {
+    case 'missing':
+      return 'kilo CLI not found in PATH';
+    case 'timeout':
+      return 'Command timed out after 20s';
+    case 'exit':
+      return 'Command failed or timed out';
+    default:
+      return assertNever(failure);
+  }
 }
 
 function parseBalance(stdout: string, rawReference: string | undefined): Balance | undefined {
@@ -45,8 +46,7 @@ export async function probeKilo(
   const result = await runner.run('kilo', ['profile'], PROFILE_TIMEOUT_MS);
   const usage = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: now };
 
-  const failure = runFailureReason(result);
-  if (failure) return { ...usage, status: 'unavailable', reason: failure };
+  if (result.failure) return { ...usage, status: 'unavailable', reason: runFailureReason(result.failure) };
 
   const balance = parseBalance(result.stdout, env['ALLOWANCE_KILO_REFERENCE']);
   if (!balance) return { ...usage, status: 'unavailable', reason: 'Could not parse balance from output' };

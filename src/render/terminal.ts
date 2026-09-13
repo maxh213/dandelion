@@ -67,7 +67,10 @@ function caption(usage: ProviderUsage): string {
   return `api balance · ${usage.displayName}`;
 }
 
-export function renderPanelOk(usage: ProviderUsage, noColor: boolean): string {
+type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
+type FailedUsage = Exclude<ProviderUsage, OkUsage>;
+
+export function renderPanelOk(usage: OkUsage, noColor: boolean): string {
   return [
     renderRule(noColor),
     usage.displayName,
@@ -76,14 +79,24 @@ export function renderPanelOk(usage: ProviderUsage, noColor: boolean): string {
   ].join('\n');
 }
 
-export function renderPanelUnavailable(usage: ProviderUsage, noColor: boolean): string {
-  const reason = usage.reason || 'Unknown error';
-  return dim([plainRule(noColor), usage.displayName, reason, caption(usage)].join('\n'), noColor);
+export function renderPanelUnavailable(usage: FailedUsage, noColor: boolean): string {
+  return dim([plainRule(noColor), usage.displayName, usage.reason, caption(usage)].join('\n'), noColor);
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unexpected provider status: ${JSON.stringify(value)}`);
 }
 
 function renderPanel(usage: ProviderUsage, noColor: boolean): string {
-  if (usage.status === 'ok') return renderPanelOk(usage, noColor);
-  return renderPanelUnavailable(usage, noColor);
+  switch (usage.status) {
+    case 'ok':
+      return renderPanelOk(usage, noColor);
+    case 'unavailable':
+    case 'error':
+      return renderPanelUnavailable(usage, noColor);
+    default:
+      return assertNever(usage);
+  }
 }
 
 export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string): string {

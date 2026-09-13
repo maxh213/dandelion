@@ -1,4 +1,4 @@
-import { runApp, RealCommandRunner, type CommandRunner } from './app/index.ts';
+import { runApp, realCommandRunner, type CommandRunner } from './app/index.ts';
 import { fileURLToPath } from 'node:url';
 
 export async function main(
@@ -21,4 +21,4 @@ export function runIfMain(metaUrl: string, argv1: string | undefined, runner: Co
   return main(runner, process.env, process.stdout, new Date().toISOString());
 }
 
-await runIfMain(import.meta.url, process.argv[1], new RealCommandRunner());
+await runIfMain(import.meta.url, process.argv[1], realCommandRunner);

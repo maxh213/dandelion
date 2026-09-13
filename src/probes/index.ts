@@ -2,7 +2,7 @@ import type { ProviderUsage } from '../domain/index.ts';
 import { probeKilo } from './kilo.ts';
 import type { CommandRunner } from './runner.ts';
 
-export type { CommandRunner, CommandRunnerResult } from './runner.ts';
+export type { CommandRunner, CommandRunnerResult, RunFailure } from './runner.ts';
 
 export async function probeProviders(
   runner: CommandRunner,

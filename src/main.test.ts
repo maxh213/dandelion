@@ -4,18 +4,16 @@ import type { CommandRunner } from './app/index.ts';
 
 vi.mock('./app/index.ts', async (importOriginal) => {
   const original = await importOriginal<typeof import('./app/index.ts')>();
-  class StubRunner implements CommandRunner {
-    async run() {
-      return { code: 0, stdout: 'Balance: $14.15', stderr: '', timedOut: false };
-    }
-  }
-  return { ...original, RealCommandRunner: StubRunner };
+  const stubRunner: CommandRunner = {
+    run: async () => ({ stdout: 'Balance: $14.15', stderr: '' })
+  };
+  return { ...original, realCommandRunner: stubRunner };
 });
 
 const { main, runIfMain } = await import('./main.ts');
 
 const profileRunner: CommandRunner = {
-  run: async () => ({ code: 0, stdout: 'Name: Max\nBalance: $14.15', stderr: '', timedOut: false })
+  run: async () => ({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' })
 };
 
 describe('main', () => {
