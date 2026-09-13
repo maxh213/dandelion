@@ -14,3 +14,4 @@ StrykerOutput/
 node_modules/
 dist/
 ts-coverage/
+coverage/
