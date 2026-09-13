@@ -12,14 +12,14 @@ import type { ProviderUsage } from '../domain/types.ts';
 
 describe('terminal renderer', () => {
   it('renders banner', () => {
-    const banner = renderBanner('10:00:00Z', true);
+    const banner = renderBanner('2026-09-13T10:00:00.000Z', true);
     expect(banner).toContain('ALLOWANCE');
     expect(banner).toContain('10:00:00Z');
     expect(banner.length).toBe(72);
   });
 
   it('renders banner with color', () => {
-    const banner = renderBanner('10:00:00Z', false);
+    const banner = renderBanner('2026-09-13T10:00:00.000Z', false);
     expect(banner).toContain('\x1b[1m');
   });
 
@@ -128,15 +128,12 @@ describe('terminal renderer', () => {
         status: 'unavailable'
       }
     ];
-    const dash = renderDashboard(usages, true, '10:00:00Z');
+    const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z');
     expect(dash).toContain('ALLOWANCE');
     expect(dash).toContain('##############------');
     expect(dash).toContain('Unknown error');
     
-    const dashColor = renderDashboard(usages, false, '10:00:00Z');
+    const dashColor = renderDashboard(usages, false, '2026-09-13T10:00:00.000Z');
     expect(dashColor).toContain('\x1b[90m');
   });
-  it('renders ok panel with no balance', () => { const usage: ProviderUsage = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: 'now', status: 'ok' }; const panel = renderPanelOk(usage, true); expect(panel).toContain('kilo'); });
-  it('renders ok panel with no balance', () => { const usage: ProviderUsage = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: 'now', status: 'ok' }; const panel = renderPanelOk(usage, true); expect(panel).toContain('kilo'); });
-
 });

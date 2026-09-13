@@ -1,4 +1,4 @@
-export type UsageWindow = {
+type UsageWindow = {
   label: string;
   usedPct: number;
   resetsAt?: string;

@@ -1,7 +1,12 @@
 import type { ProviderUsage } from '../domain/types.ts';
 
-export function renderBanner(time: string, noColor: boolean): string {
+function clockTime(instant: string): string {
+  return `${instant.slice(11, 19)}Z`;
+}
+
+export function renderBanner(instant: string, noColor: boolean): string {
   const title = 'ALLOWANCE';
+  const time = clockTime(instant);
   const spaces = 72 - title.length - time.length;
   const line = `${title}${' '.repeat(Math.max(0, spaces))}${time}`;
   if (noColor) return line;
@@ -21,10 +26,17 @@ function getRuleChar(noColor: boolean): string {
   return '━';
 }
 
+function dim(text: string, noColor: boolean): string {
+  if (noColor) return text;
+  return `\x1b[90m${text}\x1b[0m`;
+}
+
+function plainRule(noColor: boolean): string {
+  return repeatChar(getRuleChar(noColor), 72);
+}
+
 export function renderRule(noColor: boolean): string {
-  const line = repeatChar(getRuleChar(noColor), 72);
-  if (noColor) return line;
-  return `\x1b[90m${line}\x1b[0m`;
+  return dim(plainRule(noColor), noColor);
 }
 
 export function renderGauge(amount: number, reference: number, noColor: boolean): string {
@@ -76,16 +88,10 @@ export function renderPanelOk(usage: ProviderUsage, noColor: boolean): string {
 }
 
 export function renderPanelUnavailable(usage: ProviderUsage, noColor: boolean): string {
-  const rule = renderRule(noColor);
   const name = usage.displayName;
   const reason = usage.reason || 'Unknown error';
-  
   const caption = `api balance · ${name}`;
-  
-  if (noColor) {
-    return `${rule}\n${name}\n${reason}\n${caption}`;
-  }
-  return `\x1b[90m${rule}\n${name}\n${reason}\n${caption}\x1b[0m`;
+  return dim(`${plainRule(noColor)}\n${name}\n${reason}\n${caption}`, noColor);
 }
 
 export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string): string {

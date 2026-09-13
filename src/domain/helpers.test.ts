@@ -14,5 +14,3 @@ describe('formatCountdown', () => {
     expect(formatCountdown('2026-09-10T10:00:00Z', '2026-09-13T14:12:00Z')).toBe('0h0m');
   });
 });
-import type { UsageWindow } from './types.ts';
-describe('UsageWindow', () => { it('is used', () => { const w: UsageWindow = { label: 'w', usedPct: 0 }; expect(w).toBeDefined(); }); });

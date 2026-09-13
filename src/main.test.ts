@@ -1,35 +1,48 @@
-import { describe, it, expect } from 'vitest';
-import { main, runIfMain } from './main.js';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
+import type { CommandRunner } from './probes/kilo.ts';
+
+vi.mock('./app/wiring.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./app/wiring.ts')>();
+  class StubRunner implements CommandRunner {
+    async run() {
+      return { code: 0, stdout: 'Balance: $14.15', stderr: '', timedOut: false };
+    }
+  }
+  return { ...original, RealCommandRunner: StubRunner };
+});
+
+const { main, runIfMain } = await import('./main.ts');
+
+const profileRunner: CommandRunner = {
+  run: async () => ({ code: 0, stdout: 'Name: Max\nBalance: $14.15', stderr: '', timedOut: false })
+};
 
 describe('main', () => {
-  it('runs main successfully', async () => {
+  it('writes the dashboard to the stream', async () => {
     let output = '';
-    const mockStream = { write: (out: string) => { output += out; } };
-    await main({ NO_COLOR: '1' }, mockStream, '10:00:00Z');
+    await main(profileRunner, { NO_COLOR: '1' }, { write: (out: string) => { output += out; } }, '2026-09-13T10:00:00.000Z');
     expect(output).toContain('ALLOWANCE');
+    expect(output).toContain('10:00:00Z');
+    expect(output).toContain('$14.15');
+    expect(output.endsWith('\n')).toBe(true);
   });
-  
-  it('runIfMain executes main when conditions match', async () => {
-    const originalStdoutWrite = process.stdout.write;
-    let output = '';
-    
+
+  it('runIfMain writes to stdout when invoked as the entry file', async () => {
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
-      process.stdout.write = ((str: string | Uint8Array) => {
-        output += str.toString();
-        return true;
-      }) as unknown as typeof process.stdout.write;
-      
-      runIfMain('file:///path/to/main.js', 'main.js');
-      expect(output).toBeDefined();
-      await new Promise(r => setTimeout(r, 50));
+      await runIfMain('file:///path/to/main.ts', '/path/to/main.ts', profileRunner);
+      expect(write).toHaveBeenCalledWith(expect.stringContaining('$14.15'));
     } finally {
-      process.stdout.write = originalStdoutWrite;
+      write.mockRestore();
     }
   });
 
-  it('runIfMain does nothing when conditions do not match', () => {
-    runIfMain('file:///path/to/main.js', 'other.js');
+  it('runIfMain does nothing for another entry file', async () => {
+    const runner = { run: vi.fn() };
+    await runIfMain('file:///path/to/main.ts', 'other.ts', runner);
+    await runIfMain('file:///path/to/main.ts', undefined, runner);
+    expect(runner.run).not.toHaveBeenCalled();
   });
 
   it('README is updated with project details', () => {
