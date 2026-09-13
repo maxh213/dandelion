@@ -14,12 +14,20 @@ function validInstant(text: string): string | undefined {
   return ISO_INSTANT.test(text) && !Number.isNaN(Date.parse(text)) ? text : undefined;
 }
 
+function withoutWord(text: string, word: string): string {
+  return text
+    .split(' ')
+    .filter((part) => part !== word)
+    .join(' ')
+    .trim();
+}
+
 function parseRow(line: string): UsageWindow | undefined {
   const columns = line.trim().split('\t');
   const remaining = remainingPercent(columns);
   if (remaining === undefined) return undefined;
   const [group, label, , reset] = columns;
-  const windowName = label.replace(/\s*\bRemaining\b\s*/, ' ').trim();
+  const windowName = withoutWord(label, 'Remaining');
   return windowOf(`${group} · ${windowName}`, 100 - remaining, validInstant(reset));
 }
 
