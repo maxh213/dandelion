@@ -20,12 +20,20 @@ const profileRunner: CommandRunner = {
   run: async () => ({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' })
 };
 
+function writeFixture(dir: string, name: string, body: string): void {
+  const script = join(dir, name);
+  writeFileSync(script, `#!/bin/sh\n${body}\n`);
+  chmodSync(script, 0o755);
+}
+
 function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
   const dir = mkdtempSync(join(tmpdir(), 'allowance-kilo-'));
   try {
     const script = join(dir, 'kilo');
     writeFileSync(script, '#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "Name: Max\\nEmail: yeti213@googlemail.com\\nTeam: Personal\\nBalance: \\$14.15\\n"\n');
     chmodSync(script, 0o755);
+    writeFixture(dir, 'claude', "printf '%s\\n' 'Current week (all models): 86% used'");
+    writeFixture(dir, 'agy', "printf 'Claude and GPT models\\tFive Hour Limit Remaining\\t25%%\\tsoon\\n'");
     const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${dir}:${process.env.PATH}` };
     delete env.NO_COLOR;
     delete env.ALLOWANCE_KILO_REFERENCE;
@@ -51,6 +59,19 @@ describe('main', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).not.toContain('\x1b[');
     expect(result.stdout).toContain('='.repeat(72) + '\nkilo\n$14.15 ' + '#'.repeat(20) + ' '.repeat(45) + '\n');
+  });
+
+  it('prints claude, agy and kilo panels in order from fixture CLIs on PATH', () => {
+    const result = runWithFixtureKilo({ NO_COLOR: '1' });
+    expect(result.status).toBe(0);
+    const lines = result.stdout.split('\n');
+    expect(lines.indexOf('claude')).toBeLessThan(lines.indexOf('agy'));
+    expect(lines.indexOf('agy')).toBeLessThan(lines.indexOf('kilo'));
+    expect(lines).toContain('weekly                              #################---  86%');
+    expect(lines).toContain('Claude and GPT models · Five Hour…  ###############-----  75%');
+    expect(lines).toContain('claude code · claude');
+    expect(lines).toContain('agy · agy');
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
   });
 
   it('writes the dashboard to the stream', async () => {
@@ -85,6 +106,8 @@ describe('main', () => {
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('ALLOWANCE');
+    expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\nclaude\nclaude CLI not found in PATH\nclaude code · claude\x1b[0m\n');
+    expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\nagy\nagy CLI not found in PATH\nagy · agy\x1b[0m\n');
     expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\nkilo\nkilo CLI not found in PATH\n');
     expect(result.stdout).not.toContain('Command failed');
   });

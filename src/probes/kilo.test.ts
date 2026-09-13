@@ -13,6 +13,7 @@ describe('probeKilo', () => {
     expect(res).toEqual({
       id: 'kilo',
       displayName: 'kilo',
+      planLabel: 'api balance',
       windows: [],
       fetchedAt: 'now',
       status: 'ok',

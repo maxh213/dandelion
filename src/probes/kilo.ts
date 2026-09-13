@@ -1,5 +1,5 @@
 import type { ProviderUsage, Balance } from '../domain/index.ts';
-import type { CommandRunner, RunFailure } from './runner.ts';
+import { runFailureReason, type CommandRunner } from './runner.ts';
 
 const PROFILE_TIMEOUT_MS = 20000;
 const DEFAULT_REFERENCE = 20;
@@ -9,23 +9,6 @@ function parseReference(rawReference: string | undefined): number | undefined {
   if (rawReference === undefined) return DEFAULT_REFERENCE;
   if (rawReference === '') return undefined;
   return Number.parseFloat(rawReference);
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unexpected run failure: ${String(value)}`);
-}
-
-function runFailureReason(failure: RunFailure): string {
-  switch (failure) {
-    case 'missing':
-      return 'kilo CLI not found in PATH';
-    case 'timeout':
-      return 'Command timed out after 20s';
-    case 'exit':
-      return 'Command failed or timed out';
-    default:
-      return assertNever(failure);
-  }
 }
 
 function parseBalance(stdout: string, rawReference: string | undefined): Balance | undefined {
@@ -44,9 +27,11 @@ export async function probeKilo(
   env: Record<string, string | undefined>
 ): Promise<ProviderUsage> {
   const result = await runner.run('kilo', ['profile'], PROFILE_TIMEOUT_MS);
-  const usage = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: now };
+  const usage = { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: now };
 
-  if (result.failure) return { ...usage, status: 'unavailable', reason: runFailureReason(result.failure) };
+  if (result.failure) {
+    return { ...usage, status: 'unavailable', reason: runFailureReason('kilo', PROFILE_TIMEOUT_MS, result.failure) };
+  }
 
   const balance = parseBalance(result.stdout, env['ALLOWANCE_KILO_REFERENCE']);
   if (!balance) return { ...usage, status: 'unavailable', reason: 'Could not parse balance from output' };
