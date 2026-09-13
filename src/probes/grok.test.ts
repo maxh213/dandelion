@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { UsageWindow } from '../domain/index.ts';
 import { probeGrok, type FileReader, type GrokIo } from './grok.ts';
 
 const NOW = '2026-09-13T10:00:00Z';
@@ -79,7 +80,7 @@ describe('probeGrok', () => {
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok Heavy', snapshotAt: '2026-09-12T16:00:00.000Z', windows: [{ usedPct: 75 }] });
   });
 
-  it.each<[string, unknown, unknown]>([
+  it.each<[string, unknown, { planLabel: string; windows: UsageWindow[] }]>([
     ['no tier or period', { creditUsagePercent: 75 }, { planLabel: 'grok', windows: [{ label: 'credits', usedPct: 75 }] }],
     ['an empty tier and a half percent', { creditUsagePercent: 33.5 }, { planLabel: 'grok', windows: [{ label: 'credits', usedPct: 34 }] }],
     ['a zero percent', { creditUsagePercent: 0 }, { planLabel: 'grok', windows: [{ label: 'credits', usedPct: 0 }] }],
@@ -89,8 +90,8 @@ describe('probeGrok', () => {
     const tiers: Record<string, unknown> = { 'an empty tier and a half percent': '', 'a zero percent': 7, 'a bad period end': 'SuperGrok' };
     const event = { ts: '2026-09-13T09:00:00Z', msg: 'billing: fetched credits config', ctx: { config, subscriptionTier: tiers[name] } };
     const usage = await probeGrok(ioWithLog(JSON.stringify(event)), HOME, NOW);
-    expect(usage).toMatchObject({ status: 'ok', snapshotAt: '2026-09-13T09:00:00Z', ...(expected as object) });
-    expect(usage.windows).toStrictEqual((expected as { windows: unknown }).windows);
+    expect(usage).toMatchObject({ status: 'ok', snapshotAt: '2026-09-13T09:00:00Z', ...expected });
+    expect(usage.windows).toStrictEqual(expected.windows);
   });
 
   it.each<[string, Record<string, string>]>([
