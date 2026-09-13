@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { CommandRunner } from './app/index.ts';
 
 vi.mock('./app/index.ts', async (importOriginal) => {
@@ -17,7 +20,39 @@ const profileRunner: CommandRunner = {
   run: async () => ({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' })
 };
 
+function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
+  const dir = mkdtempSync(join(tmpdir(), 'allowance-kilo-'));
+  try {
+    const script = join(dir, 'kilo');
+    writeFileSync(script, '#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "Name: Max\\nEmail: yeti213@googlemail.com\\nTeam: Personal\\nBalance: \\$14.15\\n"\n');
+    chmodSync(script, 0o755);
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${dir}:${process.env.PATH}` };
+    delete env.NO_COLOR;
+    delete env.ALLOWANCE_KILO_REFERENCE;
+    Object.assign(env, extraEnv);
+    return spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 describe('main', () => {
+  it('prints the kilo panel with a 14 of 20 gauge from a fixture kilo on PATH', () => {
+    const result = runWithFixtureKilo({});
+    expect(result.status).toBe(0);
+    expect(result.stdout.startsWith('\x1b[1mALLOWANCE ')).toBe(true);
+    expect(result.stdout).toMatch(/^\S+ALLOWANCE +\d{2}:\d{2}:\d{2}Z\S+\n/);
+    expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\x1b[0m\nkilo\n$14.15 ' + '█'.repeat(14) + '░'.repeat(6) + ' '.repeat(45) + '\n\x1b[90mapi balance · kilo\x1b[0m');
+    expect(result.stdout).not.toContain('not found');
+  });
+
+  it('fills the gauge from a fixture kilo when ALLOWANCE_KILO_REFERENCE is 10', () => {
+    const result = runWithFixtureKilo({ ALLOWANCE_KILO_REFERENCE: '10', NO_COLOR: '1' });
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain('\x1b[');
+    expect(result.stdout).toContain('='.repeat(72) + '\nkilo\n$14.15 ' + '#'.repeat(20) + ' '.repeat(45) + '\n');
+  });
+
   it('writes the dashboard to the stream', async () => {
     let output = '';
     await main(profileRunner, { NO_COLOR: '1' }, { write: (out: string) => { output += out; } }, '2026-09-13T10:00:00.000Z');
