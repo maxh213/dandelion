@@ -57,7 +57,12 @@ Feature: 001 - Scaffold Kilo Probe
 
   Scenario: Kilo CLI returns unparseable output
     Given a `kilo` CLI in the PATH that responds to `kilo profile`
-    And `kilo profile` output does not contain a valid Balance line
+    And `kilo profile` output is exactly:
+      """
+      Name: Max
+      Email: yeti213@googlemail.com
+      Team: Personal
+      """
     When the user runs `npm start`
     Then the process exits with code 0
     And the output displays a dim unavailable panel for "kilo"
@@ -101,3 +106,10 @@ Feature: 001 - Scaffold Kilo Probe
     Then it should describe what allowance is
     And it should list the run commands (e.g., `npm start`)
     And it should contain an env-var ledger detailing `ALLOWANCE_KILO_REFERENCE`
+
+  Scenario: Custom ALLOWANCE_KILO_REFERENCE is parsed correctly
+    Given a working `kilo` CLI in the PATH
+    And `kilo profile` output contains "Balance: $5.00"
+    And the environment variable ALLOWANCE_KILO_REFERENCE is set to "10"
+    When the user runs `npm start`
+    Then the panel displays a 20-cell gauge with 10 filled cells (`█`) and 10 empty cells (`░`)
