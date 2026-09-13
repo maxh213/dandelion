@@ -17,6 +17,8 @@ Nothing for this task in code.
 ## Config change
 The revert `ff9c5d7` rolled back the human's intentional backend switch (`91af28f`: agy -> claude / claude-opus-5). A human should re-apply it if still wanted, and look at why the frozen-file check blames human commits on the coder (it probably compares against a base older than `91af28f`).
 
+`marestail gate --hook` (and any `--scope changed`) always fails `ts.deps` on a clean repo. In `marestail/gates/ts_deps.py::scoped_findings`, when no line matches `VIOLATION` it returns every output line as a finding, including depcruise's `✔ no dependency violations found`. It should return `[]` when depcruise exits 0 or no violation lines exist. `marestail gate --tier fast` (scope all) passes `ts.deps`, and depcruise exits 0 with no violations.
+
 ## Audit
 - Display kilo balance successfully with default reference -> src/app/wiring.test.ts::displays kilo balance with default reference
 - Gauge fill count rounds half-up -> src/app/wiring.test.ts::rounds gauge fill half-up
