@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { main, runIfMain } from './main.ts';
+import { main, runIfMain } from './main.js';
+import { readFileSync } from 'fs';
 
 describe('main', () => {
   it('runs main successfully', async () => {
