@@ -41,3 +41,6 @@ paths = ["src"]
 [qa]
 cmd = "node qa/e2e.mjs"
 cwd = "."
+
+[freeze.allow]
+qa = ["qa/**"]
