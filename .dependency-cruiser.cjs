@@ -31,6 +31,20 @@ module.exports = {
       to: { path: '^src/probes/', pathNot: '^src/probes/cli\\.ts$' }
     },
     {
+      name: 'port-probes-stand-alone',
+      severity: 'error',
+      comment: 'Probes that own an IO port (kimi launcher/fetcher, grok file reader) are not CLI probes; they know domain only, not the cli skeleton',
+      from: { path: '^src/probes/(kimi|grok)\\.ts$' },
+      to: { path: '^src/probes/' }
+    },
+    {
+      name: 'app-imported-only-by-main',
+      severity: 'error',
+      comment: 'The app composes probes, render and the real IO; only the main entry and tests reach it',
+      from: { path: '^src/', pathNot: ['^src/app/', '^src/main\\.ts$', '\\.test\\.ts$'] },
+      to: { path: '^src/app/' }
+    },
+    {
       name: 'spawn-only-in-app',
       severity: 'error',
       comment: 'Only the app edge spawns processes; everything else goes through the injected CommandRunner or Launcher',
