@@ -140,6 +140,7 @@ const HAPPY: Record<string, CommandRunnerResult> = {
   kilo: { stdout: PROFILE, stderr: '' }
 };
 const DIM = '\x1b[90m';
+const CALM = '\x1b[32m';
 const RULE = '━'.repeat(72);
 
 function routedRunner(overrides: Record<string, CommandRunnerResult> = {}, launcher = HAPPY_KIMI, reader = grokReader(grokLog())): ProbeIo {
@@ -333,8 +334,7 @@ describe('claude-work panel', () => {
   const PERSONAL_ROW = 'weekly                              #################---  86% ↻ 12h0m';
   const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
   const NAMES = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
-  const OTHERS = ['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
-  const CALM = '\x1b[32m';
+  const OTHERS = NAMES.filter((name) => name !== 'claude-work');
 
   function recordingIo(overrides: Record<string, CommandRunnerResult> = {}, isDirectory: FileReader['isDirectory'] = hasWorkConfig) {
     const io = routedRunner(overrides);
@@ -661,7 +661,6 @@ describe('real grok reader', () => {
 });
 
 describe('codex panel', () => {
-  const CALM = '\x1b[32m';
   const HOT = '\x1b[31m';
   const codexIo = (codex: CommandRunnerResult, spawner = codexSpawner()) => ({ ...routedRunner({ codex }), spawner });
 
@@ -944,7 +943,6 @@ describe('cursor panel', () => {
     'auto                                ######--------------  32% ↻ 17d6h',
     'api                                 ###-----------------  16% ↻ 17d6h'
   ];
-  const CALM = '\x1b[32m';
   type Outcome = Awaited<ReturnType<Fetcher['post']>>;
 
   function cursorIo(usage: Outcome = { status: 200, body: USAGE }, plan: Outcome = { status: 200, body: PLAN }, auth: Record<string, string> = { '/cursor/auth.json': AUTH }) {
