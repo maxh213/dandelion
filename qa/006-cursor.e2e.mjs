@@ -69,7 +69,7 @@ async function startFixture(cycleEnd) {
 async function runApp(pathDir, bin, grokHome, base, authFile) {
   const { ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_AUTH_FILE, ALLOWANCE_CURSOR_API_BASE, ...inherited } = process.env;
   const env = { ...inherited, PATH: `${pathDir}:${bin}`, NO_COLOR: '1', ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_API_BASE: base, ALLOWANCE_CURSOR_AUTH_FILE: authFile };
-  const child = spawn(join(NODE_DIR, 'npm'), ['start', '--silent'], { cwd: rootDir, env, timeout: OUTER_TIMEOUT_MS });
+  const child = spawn(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, timeout: OUTER_TIMEOUT_MS });
   let stdout = '';
   let stderr = '';
   child.stdout.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));

@@ -57,7 +57,7 @@ async function snapshotTree(dir) {
 function runApp(binDir, grokHome) {
   const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, ...inherited } = process.env;
   const env = { ...inherited, PATH: `${binDir}:${nodeBinDir}`, NO_COLOR: '1', ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(binDir, 'no-cursor-auth.json') };
-  const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
+  const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   assert.equal(result.error, undefined, `spawn failed or hit the outer timeout: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   return result.stdout;

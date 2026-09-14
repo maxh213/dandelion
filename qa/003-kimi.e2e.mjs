@@ -63,7 +63,7 @@ async function runApp(dir) {
   const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_CURSOR_API_BASE, ...inherited } = process.env;
   const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, NO_COLOR: '1', ALLOWANCE_KIMI_PORT: String(await freePort()), ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json') };
   const started = Date.now();
-  const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
+  const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   const elapsed = Date.now() - started;
   assert.equal(result.error, undefined, `spawn failed or hit the outer timeout: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);

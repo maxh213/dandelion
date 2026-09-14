@@ -36,7 +36,7 @@ function runApp(path, extraEnv) {
   const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, ...inherited } = process.env;
   const home = path.split(':')[0];
   const env = { ...inherited, PATH: path, ALLOWANCE_GROK_HOME: home, ALLOWANCE_CURSOR_AUTH_FILE: join(home, 'no-cursor-auth.json'), ...extraEnv };
-  const result = spawnSync(process.execPath, ['src/main.ts'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
+  const result = spawnSync(process.execPath, ['src/main.ts', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
   return result.stdout;
