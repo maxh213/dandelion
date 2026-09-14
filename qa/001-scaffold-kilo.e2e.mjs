@@ -10,6 +10,7 @@ const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalan
 const ESC = '\x1b[';
 const ALLOWED_GLYPHS = /[↻·…—]/g;
 let nodeBinDir = '';
+let workConfigDir = '';
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const KIMI_FIXTURE = '#!/bin/sh\nexit 0\n';
@@ -33,9 +34,9 @@ async function emptyPathFixture() {
 }
 
 function runApp(path, extraEnv) {
-  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, ...inherited } = process.env;
+  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
   const home = path.split(':')[0];
-  const env = { ...inherited, PATH: path, ALLOWANCE_GROK_HOME: home, ALLOWANCE_CURSOR_AUTH_FILE: join(home, 'no-cursor-auth.json'), ...extraEnv };
+  const env = { ...inherited, PATH: path, ALLOWANCE_GROK_HOME: home, ALLOWANCE_CURSOR_AUTH_FILE: join(home, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -102,6 +103,7 @@ async function nodeBin() {
 
 export default async function () {
   nodeBinDir = await nodeBin();
+  workConfigDir = await mkdtemp(join(tmpdir(), 'allowance-qa-work-'));
   try {
     const kiloDir = await kiloFixture();
     const emptyDir = await emptyPathFixture();
@@ -115,5 +117,6 @@ export default async function () {
     }
   } finally {
     await rm(nodeBinDir, { recursive: true, force: true });
+    await rm(workConfigDir, { recursive: true, force: true });
   }
 }

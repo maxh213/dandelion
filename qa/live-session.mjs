@@ -11,10 +11,11 @@ export const NPM = join(dirname(process.execPath), 'npm');
 export const ENTER = '\x1b[?1049h';
 export const CLEAR = '\x1b[H\x1b[2J';
 export const RESTORE = '\x1b[?25h\x1b[?1049l';
-export const IDS = ['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+export const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
 export const KIMI_EXITS = '#!/bin/sh\nexit 0\n';
 export const OTHER_PANELS = [
-  /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude code · claude\n/,
+  /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude · personal · claude\n/,
+  /\nclaude-work\nweekly +#+-* +86%( ↻ \S+)?\nclaude · work · claude-work\n/,
   /\nagy\nGemini Models · Weekly Limit +-+ +0%( ↻ \S+)?\nagy · agy\n/,
   /\nkimi\nkimi web exited without printing a token\nkimi code · kimi\n/,
   /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\n/,
@@ -51,7 +52,8 @@ export async function appEnv(pathDir) {
   await symlink(process.execPath, join(bin, 'node'));
   await symlink('/bin/sh', join(bin, 'sh'));
   const grokHome = await tempDir();
-  const { ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_CURSOR_API_BASE, ...inherited } = process.env;
+  const workConfigDir = await tempDir();
+  const { ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
   return {
     ...inherited,
     PATH: `${pathDir}:${bin}`,
@@ -59,7 +61,8 @@ export async function appEnv(pathDir) {
     NO_COLOR: '1',
     ALLOWANCE_REFRESH_SECONDS: '1',
     ALLOWANCE_GROK_HOME: grokHome,
-    ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json')
+    ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
+    ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir
   };
 }
 

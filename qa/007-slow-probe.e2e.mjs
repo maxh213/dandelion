@@ -14,7 +14,7 @@ function othersDoneKiloPending(frame) {
 
 async function hangingKiloLive() {
   const run = startLive(await appEnv(await fixtureDir(KIMI_EXITS, SLOW_KILO)));
-  await waitWithin(run, () => completeFrames(run).some(othersDoneKiloPending), 5000, 'frame with six settled panels and a pending kilo');
+  await waitWithin(run, () => completeFrames(run).some(othersDoneKiloPending), 5000, 'frame with seven settled panels and a pending kilo');
   await waitWithin(run, () => completeFrames(run).some((frame) => frame.includes(KILO_TIMED_OUT)), 30000, 'kilo timeout reason');
   run.child.stdin.write('q');
   await assertClosed(run);

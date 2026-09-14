@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 let nodeBinDir = '';
+let workConfigDir = '';
 const ESC = '\x1b[';
 const COUNTDOWN = String.raw`↻ (\d+h\d+m|\d+d\d+h)`;
 const CLAUDE_LINES = [
@@ -56,8 +57,8 @@ async function fixtureDir(overrides) {
 }
 
 function runApp(dir, extraEnv) {
-  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), ...extraEnv };
+  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
+  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -84,9 +85,10 @@ function assertPanelOrder(plain) {
   const lines = plain.split('\n');
   const banner = lineIndex(lines, /^ALLOWANCE +\d{2}:\d{2}:\d{2}Z$/);
   const claude = lineIndex(lines, /^claude$/);
+  const claudeWork = lineIndex(lines, /^claude-work$/);
   const agy = lineIndex(lines, /^agy$/);
   const kilo = lineIndex(lines, /^kilo$/);
-  assert.ok(banner < claude && claude < agy && agy < kilo, `panels out of order:\n${plain}`);
+  assert.ok(banner < claude && claude < claudeWork && claudeWork < agy && agy < kilo, `panels out of order:\n${plain}`);
   return lines;
 }
 
@@ -94,10 +96,10 @@ async function threeProvidersInOrder(dir) {
   const stdout = runApp(dir, {});
   const plain = stripAnsi(stdout);
   const lines = assertPanelOrder(plain);
-  assert.ok(lines.indexOf('claude code · claude') > lines.indexOf('claude'), 'claude caption missing');
+  assert.ok(lines.indexOf('claude · personal · claude') > lines.indexOf('claude'), 'claude caption missing');
   assert.ok(lines.indexOf('agy · agy') > lines.indexOf('agy'), 'agy caption missing');
   assert.ok(lines.indexOf('api balance · kilo') > lines.indexOf('kilo'), 'kilo caption missing');
-  assert.ok(stdout.includes(`${ESC}90mclaude code · claude`), 'claude caption is not dim');
+  assert.ok(stdout.includes(`${ESC}90mclaude · personal · claude`), 'claude caption is not dim');
   assert.ok(plain.includes(`$14.15 ${'█'.repeat(14)}${'░'.repeat(6)}`), `kilo gauge changed:\n${plain}`);
   assert.match(plain, new RegExp(`^weekly {30}${'█'.repeat(17)}${'░'.repeat(3)}  86% ${COUNTDOWN}$`, 'm'));
   assert.match(plain, new RegExp(`^session {29}█${'░'.repeat(19)}   3% ${COUNTDOWN}$`, 'm'));
@@ -149,7 +151,7 @@ async function failingClaude() {
   const dir = await fixtureDir({ claude: '#!/bin/sh\nexit 1\n' });
   try {
     const stdout = runApp(dir, {});
-    unavailablePanel(stdout, 'claude', 'Command failed or timed out', 'claude code · claude');
+    unavailablePanel(stdout, 'claude', 'Command failed or timed out', 'claude · personal · claude');
     assert.match(stripAnsi(stdout), /^Gemini Models · Weekly Limit /m);
     assert.ok(stripAnsi(stdout).includes('$14.15 '), 'kilo panel missing');
   } finally {
@@ -174,7 +176,7 @@ async function noCliOnPath() {
   try {
     const stdout = runApp(dir, {});
     assertPanelOrder(stripAnsi(stdout));
-    unavailablePanel(stdout, 'claude', 'claude CLI not found in PATH', 'claude code · claude');
+    unavailablePanel(stdout, 'claude', 'claude CLI not found in PATH', 'claude · personal · claude');
     unavailablePanel(stdout, 'agy', 'agy CLI not found in PATH', 'agy · agy');
     unavailablePanel(stdout, 'kilo', 'kilo CLI not found in PATH', 'api balance · kilo');
   } finally {
@@ -191,6 +193,7 @@ async function nodeBin() {
 
 export default async function () {
   nodeBinDir = await nodeBin();
+  workConfigDir = await mkdtemp(join(tmpdir(), 'allowance-qa-002-work-'));
   try {
     const dir = await fixtureDir({});
     try {
@@ -205,5 +208,6 @@ export default async function () {
     await noCliOnPath();
   } finally {
     await rm(nodeBinDir, { recursive: true, force: true });
+    await rm(workConfigDir, { recursive: true, force: true });
   }
 }

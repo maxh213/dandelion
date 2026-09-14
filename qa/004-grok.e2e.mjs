@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NODE_DIR = dirname(process.execPath);
 let nodeBinDir = '';
+let workConfigDir = '';
 const OUTER_TIMEOUT_MS = 60000;
 const PREFIX = 'allowance-qa-004-';
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
@@ -55,8 +56,8 @@ async function snapshotTree(dir) {
 }
 
 function runApp(binDir, grokHome) {
-  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${binDir}:${nodeBinDir}`, NO_COLOR: '1', ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(binDir, 'no-cursor-auth.json') };
+  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
+  const env = { ...inherited, PATH: `${binDir}:${nodeBinDir}`, NO_COLOR: '1', ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(binDir, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir };
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   assert.equal(result.error, undefined, `spawn failed or hit the outer timeout: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -120,6 +121,7 @@ async function nodeBin() {
 
 export default async function () {
   nodeBinDir = await nodeBin();
+  workConfigDir = await mkdtemp(join(tmpdir(), 'allowance-qa-004-work-'));
   try {
     await noRuntimeDependencies();
     const binDir = await fixtureBin();
@@ -131,5 +133,6 @@ export default async function () {
     }
   } finally {
     await rm(nodeBinDir, { recursive: true, force: true });
+    await rm(workConfigDir, { recursive: true, force: true });
   }
 }
