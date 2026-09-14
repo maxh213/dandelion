@@ -1,4 +1,13 @@
-import { formatCountdown, type Balance, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import {
+  HOT_PCT,
+  formatCountdown,
+  summariseFleet,
+  type Balance,
+  type FleetReset,
+  type FleetSummary,
+  type ProviderUsage,
+  type UsageWindow
+} from '../domain/index.ts';
 
 const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -9,7 +18,6 @@ const DIM = '\x1b[90m';
 const RESET = '\x1b[0m';
 const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
 const TITLE = 'ALLOWANCE';
-const HOT_PCT = 80;
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
 const HELP_FOOTER = 'keys: r refresh · q quit · ? help';
@@ -197,8 +205,6 @@ export type LiveSlot = { id: string; usage: ProviderUsage | undefined };
 
 export type LiveView = { slots: LiveSlot[]; spinner: number; refreshing: boolean; footer: boolean };
 
-type FleetWindow = { id: string; window: UsageWindow };
-
 function settledUsages(slots: LiveSlot[]): ProviderUsage[] {
   return slots.flatMap((slot) => (slot.usage === undefined ? [] : [slot.usage]));
 }
@@ -219,37 +225,20 @@ function liveBanner(view: LiveView, usages: ProviderUsage[], noColor: boolean, n
   return view.refreshing ? refreshingBanner(tail, noColor) : bannerLine(tail, noColor);
 }
 
-function fleetWindows(usages: ProviderUsage[]): FleetWindow[] {
-  return usages.flatMap((usage) => (usage.status === 'ok' ? usage.windows.map((window) => ({ id: usage.id, window })) : []));
+function hotSegment({ hot, windows }: FleetSummary): string {
+  return hot === 0 ? `all windows below ${HOT_PCT}%` : `${hot}/${windows} windows above ${HOT_PCT}%`;
 }
 
-function hotSegment(windows: FleetWindow[]): string {
-  const hot = windows.filter(({ window }) => window.usedPct >= HOT_PCT).length;
-  return hot === 0 ? `all windows below ${HOT_PCT}%` : `${hot}/${windows.length} windows above ${HOT_PCT}%`;
-}
-
-function futureResetMs({ window }: FleetWindow, now: string): number {
-  const resetMs = Date.parse(window.resetsAt ?? '');
-  return resetMs > Date.parse(now) ? resetMs : Number.POSITIVE_INFINITY;
-}
-
-function soonestReset(windows: FleetWindow[], now: string): FleetWindow | undefined {
-  const future = windows.filter((entry) => Number.isFinite(futureResetMs(entry, now)));
-  future.sort((a, b) => futureResetMs(a, now) - futureResetMs(b, now));
-  return future[0];
-}
-
-function resetSegment(head: string, next: FleetWindow, now: string): string {
+function resetSegment(head: string, next: FleetReset, now: string): string {
   const prefix = `${head}${next.id} `;
-  const suffix = ` in ${formatCountdown(new Date(futureResetMs(next, now)).toISOString(), now)}`;
-  return `${prefix}${cutCells(next.window.label, WIDTH - cellCount(prefix) - cellCount(suffix))}${suffix}`;
+  const suffix = ` in ${formatCountdown(next.resetsAt, now)}`;
+  return `${prefix}${cutCells(next.label, WIDTH - cellCount(prefix) - cellCount(suffix))}${suffix}`;
 }
 
 function summaryLine(usages: ProviderUsage[], now: string): string {
-  const windows = fleetWindows(usages);
-  const head = `${hotSegment(windows)} · next reset: `;
-  const next = soonestReset(windows, now);
-  return next === undefined ? `${head}none` : resetSegment(head, next, now);
+  const fleet = summariseFleet(usages, now);
+  const head = `${hotSegment(fleet)} · next reset: `;
+  return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now);
 }
 
 function pendingPanel(id: string, spinner: number, noColor: boolean): string {

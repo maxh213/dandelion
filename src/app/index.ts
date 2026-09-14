@@ -7,7 +7,6 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { PassThrough, pipeline, type Readable, type Writable } from 'node:stream';
 import {
-  probeProviders,
   providerProbes,
   type CommandRunner,
   type CommandRunnerResult,
@@ -176,7 +175,7 @@ const realReader: FileReader = {
 export const realIo: ProbeIo = { runner: realCommandRunner, launcher: realLauncher, fetcher: realFetcher, reader: realReader, spawner: realSpawner };
 
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
-  const usages = await probeProviders(io, env, now);
+  const usages = await Promise.all(providerProbes(io, env).map(({ probe }) => probe(now)));
   const noColor = env['NO_COLOR'] !== undefined;
   return renderDashboard(usages, noColor, now);
 }

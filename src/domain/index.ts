@@ -51,6 +51,30 @@ export function validInstant(value: unknown): string | undefined {
   return typeof value === 'string' && DATE_BEFORE_TIME.test(value) && !Number.isNaN(Date.parse(value)) ? value : undefined;
 }
 
+export const HOT_PCT = 80;
+
+export type FleetReset = { id: string; label: string; resetsAt: string };
+
+export type FleetSummary = { hot: number; windows: number; next: FleetReset | undefined };
+
+function fleetResets(usages: ProviderUsage[]): FleetReset[] {
+  return usages.flatMap((usage) =>
+    usage.status === 'ok' ? usage.windows.map((window) => ({ id: usage.id, label: window.label, resetsAt: window.resetsAt ?? '' })) : []
+  );
+}
+
+function soonestReset(resets: FleetReset[], now: string): FleetReset | undefined {
+  const future = resets.filter((reset) => Date.parse(reset.resetsAt) > Date.parse(now));
+  future.sort((a, b) => Date.parse(a.resetsAt) - Date.parse(b.resetsAt));
+  return future[0];
+}
+
+export function summariseFleet(usages: ProviderUsage[], now: string): FleetSummary {
+  const hot = usages.flatMap((usage) => (usage.status === 'ok' ? usage.windows : [])).filter((window) => window.usedPct >= HOT_PCT).length;
+  const resets = fleetResets(usages);
+  return { hot, windows: resets.length, next: soonestReset(resets, now) };
+}
+
 const MS_PER_MINUTE = 60 * 1000;
 const MS_PER_HOUR = 60 * MS_PER_MINUTE;
 

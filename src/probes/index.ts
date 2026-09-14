@@ -29,7 +29,3 @@ export function providerProbes(io: ProbeIo, env: Record<string, string | undefin
     { id: kilo.id, probe: (now) => probeCli(io.runner, kilo, now) }
   ];
 }
-
-export function probeProviders(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage[]> {
-  return Promise.all(providerProbes(io, env).map(({ probe }) => probe(now)));
-}

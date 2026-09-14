@@ -10,7 +10,7 @@ export type Keyboard = {
   pause(): unknown;
 };
 
-export type LiveOptions = {
+type LiveOptions = {
   probes: ProviderProbe[];
   env: Record<string, string | undefined>;
   screen: Screen;

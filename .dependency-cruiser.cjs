@@ -80,6 +80,20 @@ module.exports = {
       to: { path: '^(node:)?(fs|fs/promises|os|net|http|https|http2|dgram|dns|tls|readline|readline/promises|stream|stream/promises)$' }
     },
     {
+      name: 'live-session-no-io',
+      severity: 'error',
+      comment: 'The live session controller (rounds, ticks, keys, quit) owns no IO; the screen, keyboard and child stopping are injected by app/index.ts',
+      from: { path: '^src/app/live\\.ts$' },
+      to: { path: `^(node:)?(${builtinModules.join('|')})(/|$)` }
+    },
+    {
+      name: 'live-session-takes-probe-types-only',
+      severity: 'error',
+      comment: 'The live session receives its ProviderProbe list from app/index.ts; it never builds or runs probes from the probes layer itself',
+      from: { path: '^src/app/live\\.ts$' },
+      to: { path: '^src/probes/', dependencyTypesNot: ['type-only'] }
+    },
+    {
       name: 'main-is-the-entry',
       severity: 'error',
       comment: 'main.ts is the process entry; nothing but its own test imports it',
