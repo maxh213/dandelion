@@ -29,7 +29,7 @@ type Stop = () => Promise<void>;
 
 const KILL_GRACE_MS = 5000;
 const liveStops = new Set<Stop>();
-const registry = { closed: false };
+const registry: { closed?: boolean } = {};
 
 function tracked(stop: Stop): Stop {
   const untracked: Stop = () => {
