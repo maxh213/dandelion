@@ -6,15 +6,25 @@ Feature: 007 - Live dashboard with parallel probes, auto-refresh and keys
   Live mode writes "\e[?1049h\e[?25l" on start, starts every frame with "\e[H\e[2J", and on quit writes "\e[?25h\e[?1049l",
   leaves raw mode and exits 0 only after every in-flight probe child has been stopped.
   A live frame is: live banner, fleet summary line, the seven panels in the 006 order, then the help footer when it is on.
-  Live banner: "ALLOWANCE" left, and right-aligned to 72 columns "[refreshing… · ][data <age> old · ]HH:MM:SSZ" (frame time).
+  Frames are drawn: the first one synchronously at start, before any probe is started (so all seven panels are pending);
+  then at once on every settled result and on every key that changes something; and on a timer, every 100ms while any
+  panel is pending and every 1000ms while none is, including during a refresh. Drawing never waits for a probe.
+  The frame time is the wall clock when the frame is drawn. The banner clock, the data age, every "↻" countdown, grok's
+  snapshot age and its 48h stale test, and the summary's next reset all use the frame time, never a result's fetchedAt.
+  (Once mode keeps using the single start time, as in 006.)
+  Live banner: "ALLOWANCE" left, and right-aligned to 72 columns "[refreshing… · ][data <age> old · ]HH:MM:SSZ".
   "refreshing… · " shows only while a refresh round runs and some result is on screen; "data <age> old · " shows once any
   result has settled, where age = frame time minus the oldest on-screen result's fetchedAt, in the countdown format.
-  Pending panel (before a provider's first result): rule, name, "<frame> probing…", all dim. Frames cycle ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏, one per 100ms.
+  Pending panel (before a provider's first result), three lines: the rule ("=" x72 under NO_COLOR, "━" x72 otherwise), the
+  provider id, "<frame> probing…". Frames cycle ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏, advancing one per 100ms tick; they stay braille under NO_COLOR.
   Fleet summary: "<k>/<n> windows above 80% · next reset: <id> <window label> in <countdown>" over on-screen results.
   n counts every window of every ok result, k those with usedPct >= 80 (the hot threshold). When k is 0 the first segment is
   "all windows below 80%". The next reset is the soonest resetsAt after the frame time, ties by panel order then row order;
   with none, the second segment is "next reset: none". Balances are not windows.
-  Help footer: "keys: r refresh · q quit · ? help". The summary, footer and "refreshing…" are dim.
+  Help footer: "keys: r refresh · q quit · ? help".
+  Colour (without NO_COLOR), with B="\e[1m", D="\e[90m", R="\e[0m": a banner without the marker is one span
+  B<whole line>R, as in 006. With the marker it is B"ALLOWANCE<gap>"R D"refreshing…"R B" · data <age> old · HH:MM:SSZ"R.
+  The summary line is D<line>R, the footer D<line>R, and a pending panel is D<rule>\n<id>\n<frame> probing…R.
   A round probes all seven in parallel and each result replaces its panel as it settles. The next automatic round starts
   ALLOWANCE_REFRESH_SECONDS after the previous round fully settles; the value is a positive integer, otherwise 300.
   A refresh never shows a pending panel for a provider that already has a result. "r" during a running round does nothing.
@@ -40,13 +50,14 @@ Feature: 007 - Live dashboard with parallel probes, auto-refresh and keys
       | -- --once   | stdout piped to a file, stdin an open terminal   |
 
   Scenario: Live mode shows pending panels, then fills each one as it lands
-    Given the kimi fixture waits 3 seconds before printing its token
+    Given "kimi" earlier on PATH is a node script that waits 3 seconds, then runs the 003 kimi fixture in mode "ok"
     When the user runs `npm start` on a terminal with NO_COLOR set
     Then the terminal switches to the alternate screen and hides the cursor
-    And the first frame shows seven pending panels in order claude, agy, kimi, grok, codex, cursor, kilo, each "⠋ probing…"
-    And the spinner advances one frame every 100ms
-    And within 1 second every panel except kimi shows its 006 content while kimi still shows "probing…"
-    And the kimi panel shows its 003 rows once the token is printed, with the other panels unchanged
+    And the first frame is written before any probe starts and shows seven pending panels in order claude, agy, kimi, grok,
+      codex, cursor, kilo, each the lines "======…" (72), "<id>", "⠋ probing…"
+    And while any panel is pending a new frame is drawn every 100ms and the spinner advances one frame each time
+    And within 1 second every panel except kimi shows its 006 content while kimi still shows a spinner and "probing…"
+    And 3 to 4 seconds after start the kimi panel shows its 003 rows, with the other panels unchanged
 
   Scenario: Fleet summary and banner once every probe has settled
     When the user runs `npm start` on a terminal with NO_COLOR set and every probe has settled at "2026-09-13T10:00:00Z"
@@ -56,6 +67,17 @@ Feature: 007 - Live dashboard with parallel probes, auto-refresh and keys
       2/13 windows above 80% · next reset: claude session in 8h40m
       """
     And every line is at most 72 columns wide
+
+  Scenario: Frames keep time without new data
+    Given every probe settled with fetchedAt "2026-09-13T10:00:00Z" and ALLOWANCE_REFRESH_SECONDS is "300"
+    When a frame is drawn at "2026-09-13T10:00:00Z" and a later one at "2026-09-13T10:01:05Z" with no new result between
+    Then the later frame is drawn by the 1000ms timer and begins with the lines
+      """
+      ALLOWANCE                                      data 0h1m old · 10:01:05Z
+      2/13 windows above 80% · next reset: claude session in 8h38m
+      """
+    And its claude "session" row ends in "↻ 8h38m" where the earlier frame's ended in "↻ 8h40m"
+    And frames are drawn at about 1 per second while nothing is pending, so the clock changes every second
 
   Scenario Outline: Fleet summary variations
     Given the on-screen results hold only <windows>
@@ -128,8 +150,14 @@ Feature: 007 - Live dashboard with parallel probes, auto-refresh and keys
     Then it exits 0 after 20 to 30 seconds with that kilo panel and the other six panels unchanged
 
   Scenario: Colours in live mode
-    When the user runs `npm start` on a terminal without NO_COLOR during a refresh with the footer on
-    Then the "refreshing…" marker, the summary line and the footer carry the dim escape, and the panels carry their 006 escapes
+    Given every probe settled with fetchedAt "2026-09-13T10:00:00Z"
+    When a frame is drawn without NO_COLOR at "2026-09-13T10:01:05Z" during a refresh with the footer on
+    Then its banner bytes are "\e[1mALLOWANCE" + 24 spaces + "\e[0m\e[90mrefreshing…\e[0m\e[1m · data 0h1m old · 10:01:05Z\e[0m"
+    And its summary bytes are "\e[90m2/13 windows above 80% · next reset: claude session in 8h38m\e[0m"
+    And its last line is "\e[90mkeys: r refresh · q quit · ? help\e[0m"
+    And every panel is byte-for-byte its 006 colour rendering at that frame time
+    When the kimi panel is pending on the first frame without NO_COLOR
+    Then its bytes are "\e[90m" + "━" x72 + "\nkimi\n⠋ probing…\e[0m"
 
   Scenario: README documents live mode
     When I read "README.md"
