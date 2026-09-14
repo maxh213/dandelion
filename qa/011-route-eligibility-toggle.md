@@ -31,17 +31,17 @@ once() { rt A=--once NO_COLOR=1 DANDELION_STATE_FILE="$ST" "$@"; }
 7. Run `mkdir -p "$RX/xdg/dandelion" "$RH/.local/state/dandelion"; echo '{"claude": false}' | tee "$RX/xdg/dandelion/eligibility.json" > "$RH/.local/state/dandelion/eligibility.json"; rt XDG_STATE_HOME="$RX/xdg" Q_CLAUDE=0,86,2 Q_AGY=0,0,72; rm "$RX/xdg/dandelion/eligibility.json"; rt Q_CLAUDE=0,86,2 Q_AGY=0,0,72; rm -r "$RH/.local"`.
    - **Expected:** `gemini-3.1-pro-high medium` twice, each with `exit=0`: first from the XDG path, then from the `~/.local/state` default.
 
-8. Run `echo '{"claude": false}' > "$ST"; M=$(stat -c %Y "$ST"); sleep 1; once Q_CLAUDE=0,86,2 | grep -B1 -A1 'routing off'; [ "$(stat -c %Y "$ST")" = "$M" ] && echo untouched`.
-   - **Expected:** the line under the claude rule is `claude`, spaces, then `routing off` ending at column 72. The claude rows are unchanged, and no `▸` appears. `exit=0`, then `untouched`.
+8. Run `echo '{"claude": false}' > "$ST"; M=$(stat -c %Y "$ST"); sleep 1; once Q_CLAUDE=0,86,2 > "$RX/o"; grep -B1 -A2 'routing off' "$RX/o"; tail -1 "$RX/o"; [ "$(stat -c %Y "$ST")" = "$M" ] && echo untouched; once DANDELION_STATE_FILE="$RX/none" Q_CLAUDE=0,86,2 | diff - "$RX/o"`.
+   - **Expected:** the rule, then `claude`, spaces, and `routing off` ending at column 72, then claude's two rows. No `▸` appears. Then `exit=0`, then `untouched`. `diff` shows only the claude header line and, at most, the banner clock.
 
 9. Run `rm -rf "$RX/state"; lv Q_CLAUDE=0,86,2 Q_AGY=0,0,72`. Once every panel settles, press `?`, then `j`.
-   - **Expected:** the footer is `keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help`. After `j`, claude's header reads `▸ claude` and no other panel has `▸`.
+   - **Expected:** before `j`, the banner and panels look as in 010's dashboard, with no `▸` and no `routing off`. The footer is `keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help`. After `j`, claude's header reads `▸ claude`, no other panel has `▸`, and nothing else changes.
 
 10. Press space. In a second terminal, run `cat "$RX/state/eligibility.json"; ls -A "$RX/state"` (first `export RX=<the value from terminal 1>`). Back in the dashboard, press space again, then run the same commands.
     - **Expected:** the claude header gets `routing off` at the right edge at once, and the claude rows and summary stay the same. The file reads `{ "claude": false }` over three lines, and `ls` shows only `eligibility.json`. After the second space, the tag is gone and the file holds `"claude": true`.
 
 11. Press space once more so claude is off, then `q`. Run `rt DANDELION_STATE_FILE="$ST" Q_CLAUDE=0,86,2 Q_AGY=0,0,72`, then `lv Q_CLAUDE=0,86,2 Q_AGY=0,0,72` and wait for it to settle.
-    - **Expected:** `exit=0`, then `gemini-3.1-pro-high medium`. The new dashboard shows claude with `routing off` and no `▸` anywhere: the choice survived the restart.
+    - **Expected:** `exit=0`, then `gemini-3.1-pro-high medium`. The new dashboard shows claude with `routing off` and no `▸` anywhere: the choice survived the restart. Apart from that tag, the banner and panels match step 9's before `j`.
 
 12. In the same dashboard, press `k`, then space. Then press `k` twice more, so codex is selected, and press space.
     - **Expected:** `k` selects kilo. Its caption line reads `not routable (no usage windows)` for 2 to 3 seconds, then `api balance · kilo` again. codex does the same and returns to `codex · codex`. In the second terminal, the file still holds only `"claude": false`.
@@ -49,8 +49,8 @@ once() { rt A=--once NO_COLOR=1 DANDELION_STATE_FILE="$ST" "$@"; }
 13. Press Down repeatedly past kilo, then Up and `k` past claude.
     - **Expected:** the `▸` stops on kilo, then stops on claude, and never wraps. Press `q`, and `exit=0` prints.
 
-14. Run `rt A= TERM="$TERM" DANDELION_STATE_FILE="$ST" Q_CLAUDE=0,86,2 Q_AGY=0,0,72` and press `j` once it settles, then `q`.
-    - **Expected:** claude's rule is bright/bold, while every other rule is grey. `routing off` is grey, and `▸ claude` is in normal text.
+14. Run `rt A= TERM="$TERM" DANDELION_STATE_FILE="$ST" Q_CLAUDE=0,86,2 Q_AGY=0,0,72`. Once it settles, note claude's two rows (gauges, colours, percentages). Press `j`, then space, then `q`.
+    - **Expected:** after `j`, claude's rule is bright/bold, while every other rule is grey. `routing off` is grey, and `▸ claude` is in normal text. After space, the tag is gone. claude's two rows keep the same gauges, colours and percentages throughout.
 
 15. Run `lv DANDELION_STATE_FILE="$RX/q/eligibility.json" Q_CLAUDE=0,86,2`. Once it settles, press `j`, then space, then `q`.
     - **Expected:** claude's caption reads `routing state not saved` for 2 to 3 seconds, and no `routing off` tag appears. The dashboard keeps running, and `q` prints `exit=0`.
