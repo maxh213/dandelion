@@ -1512,7 +1512,7 @@ describe('quitting the live dashboard', () => {
 });
 
 describe('isEntryFile', () => {
-  it('matches the module file itself or a symlink to it, and not a missing, absent or different file', () => {
+  it('matches the module file itself or a symlink to it, and not a missing or different file', () => {
     const dir = mkdtempSync(join(tmpdir(), 'dandelion-realpath-'));
     try {
       const target = join(dir, 'main.ts');
@@ -1524,7 +1524,6 @@ describe('isEntryFile', () => {
       expect(isEntryFile(url, target)).toBe(true);
       expect(isEntryFile(url, join(dir, 'other.ts'))).toBe(false);
       expect(isEntryFile(url, join(dir, 'missing'))).toBe(false);
-      expect(isEntryFile(url, undefined)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -187,8 +187,8 @@ function realPath(path: string): string | undefined {
   return existsSync(path) ? realpathSync(path) : undefined;
 }
 
-export function isEntryFile(moduleUrl: string, argv1: string | undefined): boolean {
-  return argv1 !== undefined && realPath(argv1) === realPath(fileURLToPath(moduleUrl));
+export function isEntryFile(moduleUrl: string, argv1: string): boolean {
+  return realPath(argv1) === realPath(fileURLToPath(moduleUrl));
 }
 
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {

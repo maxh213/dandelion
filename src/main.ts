@@ -30,7 +30,7 @@ async function live(io: ProbeIo, proc: Proc): Promise<void> {
   proc.exit(0);
 }
 
-export function runIfMain(metaUrl: string, argv1: string | undefined, io: ProbeIo, proc: Proc): Promise<void> {
+export function runIfMain(metaUrl: string, argv1: string, io: ProbeIo, proc: Proc): Promise<void> {
   if (!isEntryFile(metaUrl, argv1)) return Promise.resolve();
   if (isLive(proc)) return live(io, proc);
   return main(io, proc.env, proc.stdout, new Date().toISOString());

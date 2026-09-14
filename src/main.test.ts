@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { chmodSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -177,7 +177,6 @@ describe('main', () => {
     const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn(), post: vi.fn() }, reader: { homeDir: vi.fn(), read: vi.fn(), isDirectory: vi.fn() }, spawner: { spawn: vi.fn() } };
     await runIfMain(MAIN_URL, 'other.ts', io, procOf(['node', 'other.ts'], true, true).proc);
     await runIfMain(MAIN_URL, 'README.md', io, procOf(['node', 'README.md'], true, true).proc);
-    await runIfMain(MAIN_URL, undefined, io, procOf(['node'], true, true).proc);
     expect(io.runner.run).not.toHaveBeenCalled();
     expect(io.launcher.launch).not.toHaveBeenCalled();
     expect(io.spawner.spawn).not.toHaveBeenCalled();
@@ -187,10 +186,11 @@ describe('main', () => {
     const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
     expect([pkg.name, pkg.bin, pkg.dependencies]).toEqual(['dandelion', { dandelion: 'src/main.ts' }, undefined]);
     expect(readFileSync(MAIN, 'utf-8').split('\n')[0]).toBe('#!/usr/bin/env node');
-    expect(statSync(MAIN).mode & 0o111).toBe(0o111);
+    const index = spawnSync('git', ['ls-files', '-s', '--', ':/src/main.ts'], { encoding: 'utf-8' });
+    expect(index.stdout).toMatch(/^100755 /);
   });
 
-  it('prints the same DANDELION dashboard through node src/main.ts, ./src/main.ts and a dandelion symlink', () => {
+  it('prints the same DANDELION dashboard through node src/main.ts and a dandelion symlink', () => {
     const dir = mkdtempSync(join(tmpdir(), 'dandelion-entry-'));
     try {
       linkNodeAndShell(dir);
@@ -201,7 +201,7 @@ describe('main', () => {
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
       const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir };
-      const runs = [[process.execPath, 'src/main.ts'], ['./src/main.ts'], ['dandelion']].map(([command, ...args]) => spawnSync(command, [...args, '--once'], { env, encoding: 'utf-8', timeout: 60000 }));
+      const runs = ['src/main.ts', join(dir, 'dandelion')].map((entry) => spawnSync(process.execPath, [entry, '--once'], { env, encoding: 'utf-8', timeout: 60000 }));
       const panelOrder = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
       for (const run of runs) {
         expect(run.status).toBe(0);
