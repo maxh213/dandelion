@@ -84,7 +84,7 @@ Feature: 010 - dandelion route picks the subscription to burn
 
     Examples:
       | case                                    | candidates                                                                                                                  | line                                |
-      | raw floats, headroom                    | claude: rolling 50.6 @-; agy: rolling 50.4 @-                                                                               | gemini-3.1-pro-high medium          |
+      | raw floats, headroom                    | claude: rolling 50.4 @-; agy: rolling 50.2 @-                                                                               | gemini-3.1-pro-high medium          |
       | 96.9 left evaporates                    | claude: weekly 3.1 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-                                                             | claude-opus-5 max                   |
       | 97 left does not evaporate              | claude: weekly 3 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-                                                               | gemini-3.1-pro-high medium          |
       | reset already past never evaporates     | claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.1-pro-high medium          |
