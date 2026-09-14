@@ -98,7 +98,10 @@ describe('probeCursor', () => {
     ['a zero, a string and a negative', { planUsage: { totalPercentUsed: 0, autoPercentUsed: '32', apiPercentUsed: -1 } }, [{ label: 'total', usedPct: 0 }]],
     ['a numeric cycle end and an uncapped percent', { billingCycleEnd: 1790786706000, planUsage: { totalPercentUsed: 130 } }, [{ label: 'total', usedPct: 130 }]],
     ['a word cycle end and a half percent', { billingCycleEnd: 'soon', planUsage: { autoPercentUsed: 32.5 } }, [{ label: 'auto', usedPct: 33 }]],
-    ['an out-of-range cycle end', { billingCycleEnd: '99999999999999999999', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', usedPct: 1 }]]
+    ['an out-of-range cycle end', { billingCycleEnd: '99999999999999999999', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', usedPct: 1 }]],
+    ['an exponent cycle end', { billingCycleEnd: '1e12', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', usedPct: 1 }]],
+    ['a space-led cycle end', { billingCycleEnd: ' 1790786706000', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', usedPct: 1 }]],
+    ['a signed cycle end', { billingCycleEnd: '-1790786706000', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', usedPct: 1 }]]
   ])('reads a usage body with %s', async (_case, body, windows) => {
     const usage = await probeCursor(withAuth(answer(body)).io, ENV, NOW);
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'Ultra · $200/mo' });

@@ -33,23 +33,23 @@ function isFilled(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
 }
 
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}
-
 function authFile(reader: FileReader, env: Env): string {
   return env['ALLOWANCE_CURSOR_AUTH_FILE'] || `${reader.homeDir()}/.config/cursor/auth.json`;
 }
 
-async function readToken(reader: FileReader, env: Env): Promise<string> {
-  const text = await reader.read(authFile(reader, env));
-  const token = text === undefined ? undefined : fieldOf(parseJson(text), 'accessToken');
+function tokenOf(auth: unknown): string {
+  const token = fieldOf(auth, 'accessToken');
   if (!isFilled(token)) throw new ProbeUnavailable(NO_AUTH);
   return token;
+}
+
+async function readToken(reader: FileReader, env: Env): Promise<string> {
+  const text = await reader.read(authFile(reader, env));
+  try {
+    return tokenOf(JSON.parse(String(text)));
+  } catch {
+    throw new ProbeUnavailable(NO_AUTH);
+  }
 }
 
 function postTo(io: CursorIo, env: Env, token: string, method: string): Promise<FetchOutcome> {
@@ -86,13 +86,18 @@ function labelOf(name: unknown, price: unknown): string {
   return isFilled(price) ? `${name} · ${price}` : name;
 }
 
-function planInfoOf(outcome: FetchOutcome): unknown {
-  return isSuccess(outcome) ? fieldOf(parseJson(outcome.body), 'planInfo') : undefined;
+function planLabelFrom(body: string): string {
+  const info = fieldOf(JSON.parse(body), 'planInfo');
+  return labelOf(fieldOf(info, 'planName'), fieldOf(info, 'price'));
 }
 
 async function planLabelOf(pending: Promise<FetchOutcome>): Promise<string> {
-  const info = planInfoOf(await pending);
-  return labelOf(fieldOf(info, 'planName'), fieldOf(info, 'price'));
+  const outcome = await pending;
+  try {
+    return isSuccess(outcome) ? planLabelFrom(outcome.body) : FALLBACK_LABEL;
+  } catch {
+    return FALLBACK_LABEL;
+  }
 }
 
 async function readCursor(io: CursorIo, env: Env): Promise<{ planLabel: string; windows: UsageWindow[] }> {

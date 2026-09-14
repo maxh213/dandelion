@@ -827,7 +827,9 @@ describe('cursor panel', () => {
     ['{"billingCycleEnd":"1790786706000","planUsage":{"totalPercentUsed":31.09,"apiPercentUsed":15.81}}', [ROWS[0], ROWS[2]]],
     ['{"planUsage":{"totalPercentUsed":0,"autoPercentUsed":"32","apiPercentUsed":-1}}', ['total                               --------------------   0%']],
     ['{"billingCycleEnd":1790786706000,"planUsage":{"totalPercentUsed":130}}', ['total                               #################### 130%']],
-    ['{"billingCycleEnd":"soon","planUsage":{"autoPercentUsed":32.5}}', ['auto                                #######-------------  33%']]
+    ['{"billingCycleEnd":"soon","planUsage":{"autoPercentUsed":32.5}}', ['auto                                #######-------------  33%']],
+    ['{"billingCycleEnd":"1e12","planUsage":{"totalPercentUsed":0}}', ['total                               --------------------   0%']],
+    ['{"billingCycleEnd":" 1790786706000","planUsage":{"totalPercentUsed":0}}', ['total                               --------------------   0%']]
   ])('renders the usage body %s', async (body, rows) => {
     const output = await runApp(cursorIo({ status: 200, body }), { ...CURSOR_ENV, NO_COLOR: '1' }, NOW);
     expect(panelOf(output, 'cursor')).toEqual(['cursor', ...rows, 'Ultra · $200/mo · cursor']);
