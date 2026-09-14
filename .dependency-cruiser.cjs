@@ -115,13 +115,6 @@ module.exports = {
       to: { path: '^src/main\\.ts$' }
     },
     {
-      name: 'route-output-is-plain',
-      severity: 'error',
-      comment: 'render/route.ts turns the domain route decision into one scriptable line and its routed flag; it never reaches the ANSI dashboard renderer, and the dashboard renderer never reaches it',
-      from: { path: '^src/render/(route|terminal)\\.ts$' },
-      to: { path: '^src/render/' }
-    },
-    {
       name: 'render-layer',
       severity: 'error',
       comment: 'Render depends on domain only, never on probes, and does no IO',

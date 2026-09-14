@@ -74,6 +74,7 @@ describe('agyProbe', () => {
   it.each([
     ['Gemini Models', 'Five Hour Limit', 'rolling'],
     ['Claude and GPT models', 'Five Hour Limit', 'rolling'],
+    ['Gemini Models', 'Flash Five Hour Limit', 'rolling'],
     ['Gemini Models', 'Weekly Limit', 'weekly'],
     ['Claude and GPT models', 'Weekly Limit', 'weekly'],
     ['Gemini Models', 'Daily Limit', 'other']
