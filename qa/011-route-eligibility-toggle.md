@@ -28,8 +28,8 @@ once() { rt A=--once NO_COLOR=1 DANDELION_STATE_FILE="$ST" "$@"; }
 6. Run `printf '{not json' > "$ST"; rt DANDELION_STATE_FILE="$ST" Q_CLAUDE=0,86,2 Q_AGY=0,0,72; once Q_CLAUDE=0,86,2 | grep -c 'routing off'`.
    - **Expected:** `claude-opus-5 max`, `exit=0`. Then `0`: a corrupt file means everything is eligible, with no error printed.
 
-7. Run `mkdir -p "$RX/xdg/dandelion" "$RH/.local/state/dandelion"; echo '{"claude": false}' | tee "$RX/xdg/dandelion/eligibility.json" > "$RH/.local/state/dandelion/eligibility.json"; rt XDG_STATE_HOME="$RX/xdg" Q_CLAUDE=0,86,2 Q_AGY=0,0,72; rm "$RX/xdg/dandelion/eligibility.json"; rt Q_CLAUDE=0,86,2 Q_AGY=0,0,72; rm -r "$RH/.local"`.
-   - **Expected:** `gemini-3.1-pro-high medium` twice, each with `exit=0`: first from the XDG path, then from the `~/.local/state` default.
+7. Run `rm -rf "$RH/.local"; mkdir -p "$RX/xdg/dandelion"; echo '{"claude": false}' > "$RX/xdg/dandelion/eligibility.json"; rt XDG_STATE_HOME="$RX/xdg" Q_CLAUDE=0,86,2 Q_AGY=0,0,72; rm "$RX/xdg/dandelion/eligibility.json"; mkdir -p "$RH/.local/state/dandelion"; echo '{"claude": false}' > "$RH/.local/state/dandelion/eligibility.json"; rt Q_CLAUDE=0,86,2 Q_AGY=0,0,72; rm -r "$RH/.local"`.
+   - **Expected:** `gemini-3.1-pro-high medium` twice, each with `exit=0`. The first run has no `~/.local/state` file, so its result comes from the XDG path. The second comes from the `~/.local/state` default.
 
 8. Run `echo '{"claude": false}' > "$ST"; M=$(stat -c %Y "$ST"); sleep 1; once Q_CLAUDE=0,86,2 > "$RX/o"; grep -B1 -A2 'routing off' "$RX/o"; tail -1 "$RX/o"; [ "$(stat -c %Y "$ST")" = "$M" ] && echo untouched; once DANDELION_STATE_FILE="$RX/none" Q_CLAUDE=0,86,2 | diff - "$RX/o"`.
    - **Expected:** the rule, then `claude`, spaces, and `routing off` ending at column 72, then claude's two rows. No `▸` appears. Then `exit=0`, then `untouched`. `diff` shows only the claude header line and, at most, the banner clock.

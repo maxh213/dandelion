@@ -16,9 +16,10 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
   "not routable (no usage windows)". Space on a pending panel, or with nothing selected, does nothing at all.
   The selection and the tag never change a panel's rows, the fleet summary, the panel order or what any probe runs.
   Header line (the line holding the id): "▸ " before the id when selected; for an ineligible provider "routing off" right-aligned to end
-  at column 72. Without NO_COLOR, in a panel that is not all dim the tag is "\e[90mrouting off\e[0m"; in an all-dim panel (unavailable,
-  error, stale ok) the tag adds no escape codes and sits inside the panel's one dim span. A selected panel's rule is "\e[1m" + "━" x72 +
-  "\e[0m", and an all-dim panel's dim span then starts at the header line. Under NO_COLOR the rule stays "=" x72.
+  at column 72, on every panel kind including pending. Without NO_COLOR, in a fresh ok panel the tag is "\e[90mrouting off\e[0m"; in an
+  all-dim panel (unavailable, error, stale ok, pending) the tag adds no escape codes and sits inside the panel's one dim span. A selected
+  panel's rule is "\e[1m" + "━" x72 + "\e[0m", and an all-dim panel's dim span then starts at the header line. Unselected rules keep
+  their 010 bytes. Under NO_COLOR the rule stays "=" x72.
   Flash: drawn at once. The pressed panel's caption line reads the message instead of its caption, in the caption's style, and a frame is
   drawn when 2 s have passed since the key, with the caption back. The flash stays on the pressed panel when the selection moves. At most
   one flash shows: a new flash replaces it and restarts the 2 s; a successful toggle leaves a running flash alone.
@@ -67,14 +68,16 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
     Then the output has no "routing off", no "▸", and "<tmp>/state" still does not exist
 
   Scenario Outline: Tag bytes in an all-dim panel
-    Given claude is unavailable with reason "<reason>" and the state file {"claude": false}
+    Given claude is <kind> and the state file {"claude": false}
     When the claude panel is drawn without NO_COLOR, <selected>
     Then the claude panel is exactly <bytes>
 
     Examples:
-      | selected       | bytes                                                                                                                      |
-      | not selected   | "\e[90m" + "━" x72 + "\nclaude" + " " x55 + "routing off\n<reason>\nclaude · personal · claude\e[0m"                        |
-      | selected       | "\e[1m" + "━" x72 + "\e[0m\n\e[90m▸ claude" + " " x53 + "routing off\n<reason>\nclaude · personal · claude\e[0m"             |
+      | kind                                | selected     | bytes                                                                                                          |
+      | unavailable with reason "<reason>"  | not selected | "\e[90m" + "━" x72 + "\nclaude" + " " x55 + "routing off\n<reason>\nclaude · personal · claude\e[0m"            |
+      | unavailable with reason "<reason>"  | selected     | "\e[1m" + "━" x72 + "\e[0m\n\e[90m▸ claude" + " " x53 + "routing off\n<reason>\nclaude · personal · claude\e[0m" |
+      | pending with spinner frame "<frame>" | not selected | "\e[90m" + "━" x72 + "\nclaude" + " " x55 + "routing off\n<frame> probing…\e[0m"                                |
+      | pending with spinner frame "<frame>" | selected     | "\e[1m" + "━" x72 + "\e[0m\n\e[90m▸ claude" + " " x53 + "routing off\n<frame> probing…\e[0m"                     |
 
   Scenario: Toggle a provider off and on in live mode
     Given the usages claude 0/86@2, agy 0/0@72 and no state file
@@ -112,7 +115,7 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
 
   Scenario: The flash stays put, and a second flash restarts it
     Given no state file and the Background usages
-    When the user presses "k" then space in live mode once settled, and "k" 0.5 s later
+    When the user presses "k" then space in live mode once settled, and "k" twice 0.5 s later
     Then the kilo caption line still reads "not routable (no usage windows)", "▸" is on codex, and codex's caption is "codex · codex"
     When the user presses space 1.5 s after the first space
     Then kilo's caption is "api balance · kilo" and codex's caption line reads "not routable (no usage windows)"
@@ -151,10 +154,11 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
       | "k", Up, "k"                  | codex       |
 
   Scenario: Colours and footer in live mode
-    Given the state file {"claude": false}
+    Given the usages claude 0/86@2 and the state file {"claude": false}
     When the user presses "?" then "j" in live mode without NO_COLOR once settled
     Then the claude panel starts "\e[1m" + "━" x72 + "\e[0m\n▸ claude", and its header line ends "\e[90mrouting off\e[0m"
-    And every other panel's rule is "\e[90m" + "━" x72 + "\e[0m" as in 007, and the claude rows are the bytes they were before "j"
+    And every other fresh ok panel's rule is "\e[90m" + "━" x72 + "\e[0m" as in 007, every other panel keeps its 010 bytes, and the
+      claude rows are the bytes they were before "j"
     And the last line is "\e[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help\e[0m"
     And "r", "q", Ctrl-C and "?" behave as in 007, and "x", "R" and Enter change nothing
 
