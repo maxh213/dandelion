@@ -62,7 +62,7 @@ function timeCli() {
 }
 
 const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
-const stub = { ...runner, runner, launcher: { launch: async () => undefined }, fetcher: { get: async () => ({ failure: 'network' }) }, reader: { homeDir: () => fixture, read: async () => undefined } };
+const stub = { ...runner, runner, launcher: { launch: async () => undefined }, fetcher: { get: async () => ({ failure: 'network' }) }, reader: { homeDir: () => fixture, read: async () => undefined, isDirectory: async () => false } };
 const usages = [
   {
     id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok',

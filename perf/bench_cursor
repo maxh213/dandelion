@@ -91,7 +91,7 @@ const stubIo = {
     get: async () => ({ failure: 'network' }),
     post: async (url) => ({ status: 200, body: url.endsWith('/GetPlanInfo') ? PLAN_BODY : USAGE_BODY })
   },
-  reader: { homeDir: () => fixture, read: async (path) => (path === authFile ? authText : undefined) }
+  reader: { homeDir: () => fixture, read: async (path) => (path === authFile ? authText : undefined), isDirectory: async () => false }
 };
 
 const cursorUsage = {

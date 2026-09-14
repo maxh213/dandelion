@@ -105,7 +105,7 @@ function ioWith(login, spawner) {
     spawner,
     launcher: { launch: async () => undefined },
     fetcher: { get: async () => ({ failure: 'network' }) },
-    reader: { homeDir: () => fixture, read: async () => undefined }
+    reader: { homeDir: () => fixture, read: async () => undefined, isDirectory: async () => false }
   };
 }
 

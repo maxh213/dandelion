@@ -94,7 +94,7 @@ function ioWith(log) {
     runner,
     launcher: { launch: async () => undefined },
     fetcher: { get: async () => ({ failure: 'network' }) },
-    reader: { homeDir: () => fixture, read: async () => log }
+    reader: { homeDir: () => fixture, read: async () => log, isDirectory: async () => false }
   };
 }
 

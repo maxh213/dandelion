@@ -86,7 +86,7 @@ const io = {
   runner,
   launcher: { launch: async () => child },
   fetcher: { get: async () => ({ status: 200, body: BODY }) },
-  reader: { homeDir: () => tmpdir(), read: async () => undefined }
+  reader: { homeDir: () => tmpdir(), read: async () => undefined, isDirectory: async () => false }
 };
 const usages = [
   { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' }] },

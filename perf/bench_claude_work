@@ -1,0 +1,159 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { VALUES, absent, emit, perCall, perCallSync, repeat } from './timing.mjs';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const terminalEntry = join(tree, 'src', 'render', 'terminal.ts');
+const domainEntry = join(tree, 'src', 'domain', 'index.ts');
+const claudeEntry = join(tree, 'src', 'probes', 'claude.ts');
+const cliEntry = join(tree, 'src', 'probes', 'cli.ts');
+const NOW = '2026-09-13T10:00:00.000Z';
+const ITERATIONS = 2000;
+
+const TARGETS = {
+  cliBoth: 'cli one-shot eight providers both claude accounts ok',
+  cliMissing: 'cli one-shot eight providers work config missing',
+  probePersonal: 'probeCli claude personal stub runner (in-process, per call)',
+  probeWork: 'probeCli claude-work ok stub runner (in-process, per call)',
+  probeWorkMissing: 'probeCli claude-work config missing real reader (in-process, per call)',
+  isDirectory: 'realIo reader isDirectory existing dir (in-process, per call)',
+  runnerEnv: 'realIo runner run sh with per-spawn env (in-process, per call)',
+  runApp: 'runApp eight providers both claude accounts stub (in-process, per call)',
+  render: 'renderDashboard eight providers two claude accounts (in-process, per call)',
+  fleet: 'summariseFleet eight providers (in-process, per call)',
+  frame: 'renderLiveFrame eight settled refreshing footer (in-process, per call)'
+};
+
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry) || !existsSync(claudeEntry) || !existsSync(cliEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const PERSONAL_OUT = [
+  'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)',
+  'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)',
+  'Current week (Fable): 100% used · resets Sep 13, 11pm (Europe/London)'
+].join('\n') + '\n';
+const WORK_OUT = [
+  'Current session: 0% used · resets Sep 13, 11:10pm (Europe/London)',
+  'Current week (all models): 12% used · resets Sep 15, 6pm (Europe/London)',
+  'Current week (Fable): 23% used · resets Sep 15, 6pm (Europe/London)'
+].join('\n') + '\n';
+const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z\n';
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-claude-work-'));
+const bin = join(fixture, 'bin');
+const workDir = join(fixture, '.claude-work');
+const missingDir = join(fixture, 'no-claude-work');
+mkdirSync(bin);
+mkdirSync(workDir);
+writeFileSync(join(bin, 'claude'), `#!/bin/sh\nif [ -n "$CLAUDE_CONFIG_DIR" ]; then\ncat <<'OUT'\n${WORK_OUT}OUT\nelse\ncat <<'OUT'\n${PERSONAL_OUT}OUT\nfi\n`);
+writeFileSync(join(bin, 'agy'), `#!/bin/sh\ncat <<'OUT'\n${AGY_OUT}OUT\n`);
+writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
+for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
+const envScript = join(fixture, 'env-echo');
+writeFileSync(envScript, '#!/bin/sh\nprintf "%s\\n" "$CLAUDE_CONFIG_DIR"\n');
+chmodSync(envScript, 0o755);
+
+function timeCli(workConfigDir) {
+  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir };
+  delete env.NO_COLOR;
+  delete env.CLAUDE_CONFIG_DIR;
+  delete env.ALLOWANCE_CURSOR_API_BASE;
+  const start = process.hrtime.bigint();
+  execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  return Number(process.hrtime.bigint() - start) / 1e6;
+}
+
+const runner = { run: async (command, _args, _timeout, env) => ({ stdout: command === 'claude' ? (env?.CLAUDE_CONFIG_DIR ? WORK_OUT : PERSONAL_OUT) : command === 'agy' ? AGY_OUT : command === 'kilo' ? KILO_OUT : '', stderr: '' }) };
+const stubReader = { homeDir: () => fixture, read: async () => undefined, isDirectory: async (path) => path === workDir };
+const stubIo = {
+  ...runner,
+  runner,
+  launcher: { launch: async () => undefined },
+  spawner: { spawn: () => undefined },
+  fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
+  reader: stubReader
+};
+const appEnv = { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') };
+
+const win = (label, usedPct, resetsAt) => ({ label, usedPct, resetsAt });
+const usages = [
+  { id: 'claude', displayName: 'claude', planLabel: 'claude · personal', fetchedAt: NOW, status: 'ok', windows: [win('session', 3, '2026-09-13T18:40:00.000Z'), win('weekly', 86, '2026-09-13T22:00:00.000Z'), win('weekly Fable', 100, '2026-09-13T22:00:00.000Z')] },
+  { id: 'claude-work', displayName: 'claude-work', planLabel: 'claude · work', fetchedAt: NOW, status: 'ok', windows: [win('session', 0, '2026-09-13T22:10:00.000Z'), win('weekly', 12, '2026-09-15T17:00:00.000Z'), win('weekly Fable', 23, '2026-09-15T17:00:00.000Z')] },
+  { id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok', windows: [win('Claude and GPT models · Five Hour Limit', 100, '2026-09-13T11:59:00Z'), win('Gemini Models · Weekly Limit', 0, '2026-09-20T17:13:45Z')] },
+  { id: 'kimi', displayName: 'kimi', planLabel: 'kimi', fetchedAt: NOW, status: 'ok', windows: [win('weekly', 20, '2026-09-18T00:00:00Z'), win('5h', 10, '2026-09-13T14:00:00Z')] },
+  { id: 'grok', displayName: 'grok', planLabel: 'grok', fetchedAt: '2026-09-12T10:00:00.000Z', status: 'ok', windows: [win('monthly', 55, '2026-10-01T00:00:00Z')] },
+  { id: 'codex', displayName: 'codex', planLabel: 'codex', fetchedAt: NOW, status: 'unavailable', windows: [], reason: 'codex CLI not found' },
+  { id: 'cursor', displayName: 'cursor', planLabel: 'Ultra · $200/mo', fetchedAt: NOW, status: 'ok', windows: [win('total', 31, '2026-09-30T16:45:06.000Z'), win('auto', 32, '2026-09-30T16:45:06.000Z'), win('api', 16, '2026-09-30T16:45:06.000Z')] },
+  { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
+];
+
+try {
+  const { runApp, realIo } = await import(pathToFileURL(appEntry).href);
+  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+  const claude = await import(pathToFileURL(claudeEntry).href);
+  const { probeCli } = await import(pathToFileURL(cliEntry).href);
+
+  timeCli(workDir);
+  timeCli(missingDir);
+  emit(TARGETS.cliBoth, await repeat(VALUES, () => timeCli(workDir)), 'ms');
+  emit(TARGETS.cliMissing, await repeat(VALUES, () => timeCli(missingDir)), 'ms');
+
+  const cliIo = { run: runner.run, runner, reader: stubReader };
+  const personal = await probeCli(cliIo, claude.claudeProbe, NOW);
+  if (personal.status !== 'ok' || personal.windows.length !== 3) throw new Error(`personal probe failed: ${JSON.stringify(personal)}`);
+  emit(TARGETS.probePersonal, await perCall(ITERATIONS, () => probeCli(cliIo, claude.claudeProbe, NOW)), 'us');
+
+  if (claude.claudeWorkProbe && realIo.reader.isDirectory) {
+    const work = claude.claudeWorkProbe({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir }, fixture);
+    const missing = claude.claudeWorkProbe({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: missingDir }, fixture);
+    const realReaderIo = { runner, reader: realIo.reader };
+    const workUsage = await probeCli(cliIo, work, NOW);
+    if (workUsage.status !== 'ok' || workUsage.windows[1]?.usedPct !== 12) throw new Error(`work probe failed: ${JSON.stringify(workUsage)}`);
+    const missingUsage = await probeCli(realReaderIo, missing, NOW);
+    if (missingUsage.status !== 'unavailable') throw new Error(`missing work probe ran: ${JSON.stringify(missingUsage)}`);
+    emit(TARGETS.probeWork, await perCall(ITERATIONS, () => probeCli(cliIo, work, NOW)), 'us');
+    emit(TARGETS.probeWorkMissing, await perCall(ITERATIONS, () => probeCli(realReaderIo, missing, NOW)), 'us');
+    emit(TARGETS.isDirectory, await perCall(ITERATIONS, () => realIo.reader.isDirectory(workDir)), 'us');
+  } else {
+    absent(TARGETS.probeWork, TARGETS.probeWorkMissing, TARGETS.isDirectory);
+  }
+
+  const spawnEnv = { CLAUDE_CONFIG_DIR: workDir };
+  await realIo.runner.run(envScript, [], 5000, spawnEnv);
+  emit(TARGETS.runnerEnv, await perCall(VALUES, () => realIo.runner.run(envScript, [], 5000, spawnEnv)), 'us');
+
+  await runApp(stubIo, appEnv, NOW);
+  emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(stubIo, appEnv, NOW)), 'us');
+
+  renderDashboard(usages, false, NOW);
+  emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW)), 'us');
+
+  const domain = await import(pathToFileURL(domainEntry).href);
+  if (domain.summariseFleet) {
+    domain.summariseFleet(usages, NOW);
+    emit(TARGETS.fleet, perCallSync(ITERATIONS, () => domain.summariseFleet(usages, NOW)), 'us');
+  } else {
+    absent(TARGETS.fleet);
+  }
+
+  const terminal = existsSync(terminalEntry) ? await import(pathToFileURL(terminalEntry).href) : {};
+  if (terminal.renderLiveFrame) {
+    const view = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true };
+    terminal.renderLiveFrame(view, false, NOW);
+    emit(TARGETS.frame, perCallSync(ITERATIONS, () => terminal.renderLiveFrame(view, false, NOW)), 'us');
+  } else {
+    absent(TARGETS.frame);
+  }
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}

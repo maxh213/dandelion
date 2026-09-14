@@ -42,7 +42,7 @@ function timeCli(pathValue) {
 
 const okPath = `${fixture}:/usr/bin:/bin`;
 const runner = { run: async () => ({ stdout: 'Name: Max\nBalance: $14.15\n', stderr: '' }) };
-const stub = { ...runner, runner, launcher: { launch: async () => undefined }, fetcher: { get: async () => ({ failure: 'network' }) }, reader: { homeDir: () => empty, read: async () => undefined } };
+const stub = { ...runner, runner, launcher: { launch: async () => undefined }, fetcher: { get: async () => ({ failure: 'network' }) }, reader: { homeDir: () => empty, read: async () => undefined, isDirectory: async () => false } };
 const usage = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } };
 
 try {
