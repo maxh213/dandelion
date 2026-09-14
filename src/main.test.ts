@@ -11,7 +11,7 @@ vi.mock('./app/index.ts', async (importOriginal) => {
   const stubIo: ProbeIo = {
     runner: { run: async () => ({ stdout: 'Balance: $14.15', stderr: '' }) },
     launcher: { launch: async () => undefined },
-    fetcher: { get: async () => ({ failure: 'network' }) },
+    fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
     reader: { homeDir: () => '/nowhere', read: async () => undefined },
     spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
   };
@@ -23,7 +23,7 @@ const { main, runIfMain } = await import('./main.ts');
 const profileIo: ProbeIo = {
   runner: { run: async () => ({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' }) },
   launcher: { launch: async () => undefined },
-  fetcher: { get: async () => ({ failure: 'network' }) },
+  fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
   reader: { homeDir: () => '/nowhere', read: async () => undefined },
   spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
 };
@@ -48,7 +48,8 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
     delete env.NO_COLOR;
     delete env.ALLOWANCE_KILO_REFERENCE;
     delete env.ALLOWANCE_KIMI_PORT;
-    Object.assign(env, { ALLOWANCE_GROK_HOME: dir }, extraEnv);
+    delete env.ALLOWANCE_CURSOR_API_BASE;
+    Object.assign(env, { ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json') }, extraEnv);
     return spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -110,7 +111,7 @@ describe('main', () => {
   });
 
   it('runIfMain does nothing for another entry file', async () => {
-    const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn() }, reader: { homeDir: vi.fn(), read: vi.fn() }, spawner: { spawn: vi.fn() } };
+    const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn(), post: vi.fn() }, reader: { homeDir: vi.fn(), read: vi.fn() }, spawner: { spawn: vi.fn() } };
     await runIfMain('file:///path/to/main.ts', 'other.ts', io);
     await runIfMain('file:///path/to/main.ts', undefined, io);
     expect(io.runner.run).not.toHaveBeenCalled();
@@ -124,19 +125,19 @@ describe('main', () => {
       symlinkSync(process.execPath, join(dir, 'node'));
       symlinkSync('/bin/sh', join(dir, 'sh'));
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', ALLOWANCE_GROK_HOME: dir };
+      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json') };
       const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8', timeout: 60000 });
       expect(result.status).toBe(0);
-      expect(result.stdout).toMatch(/\ngrok\n[^]*\ncodex\napi-key billing · no usage windows\ncodex · codex\n[^]*\nkilo\n/);
+      expect(result.stdout).toMatch(/\ngrok\n[^]*\ncodex\napi-key billing · no usage windows\ncodex · codex\n[^]*\ncursor\n[^]*\nkilo\n/);
       expect(JSON.parse(readFileSync('package.json', 'utf-8')).dependencies).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('prints six dim unavailable panels in order when no CLI is on PATH and grok home is empty', () => {
+  it('prints seven dim unavailable panels in order when no CLI is on PATH, grok home is empty and cursor auth is missing', () => {
     const grokHome = mkdtempSync(join(tmpdir(), 'allowance-grok-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', ALLOWANCE_GROK_HOME: grokHome };
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing.json') };
     delete env.NO_COLOR;
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
     rmSync(grokHome, { recursive: true, force: true });
@@ -148,6 +149,7 @@ describe('main', () => {
       ['kimi', 'kimi CLI not found in PATH', 'kimi code · kimi'],
       ['grok', 'no grok billing snapshot — run grok once', 'grok · grok'],
       ['codex', 'codex CLI not found in PATH', 'codex · codex'],
+      ['cursor', 'no cursor auth — run cursor-agent login', 'cursor · cursor'],
       ['kilo', 'kilo CLI not found in PATH', 'api balance · kilo']
     ].map((lines) => `\x1b[90m${'━'.repeat(72)}\n${lines.join('\n')}\x1b[0m`);
     expect(result.stdout).toBe(`${result.stdout.split('\n')[0]}\n${panels.join('\n')}\n`);
@@ -185,7 +187,6 @@ describe('main', () => {
 
   it('README documents codex', () => {
     const readme = readFileSync('README.md', 'utf-8');
-    expect(readme).toContain('subscription usage windows for `claude`, `agy`, `kimi`, `grok` and `codex`, and the API balance for `kilo`');
     const providers = readme.split('\n').filter((line) => /^- `(claude|agy|kimi|grok|codex|kilo)` /.test(line));
     expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'kilo']);
     const codex = providers[4];
@@ -195,7 +196,22 @@ describe('main', () => {
     expect(codex).toContain('`codex app-server`');
     expect(codex).toContain('30s timeout');
     expect(codex).toContain('SIGTERM, then SIGKILL after 5s');
-    expect(readme).toContain('All six probes run in parallel');
-    expect(readme).not.toContain('All five probes run in parallel');
+  });
+
+  it('README documents cursor', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    expect(readme).toContain('subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, and the API balance for `kilo`');
+    const providers = readme.split('\n').filter((line) => /^- `(claude|agy|kimi|grok|codex|cursor|kilo)` /.test(line));
+    expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
+    const cursor = providers[5];
+    expect(cursor).toContain('without running cursor-agent');
+    expect(cursor).toContain('`GetCurrentPeriodUsage`');
+    expect(cursor).toContain('`GetPlanInfo`');
+    expect(cursor).toContain('15s timeout each');
+    expect(cursor).toContain('total, auto and api windows with a reset countdown');
+    expect(readme).toContain('All seven probes run in parallel');
+    expect(readme).not.toContain('All six probes run in parallel');
+    expect(readme).toMatch(/^- `ALLOWANCE_CURSOR_AUTH_FILE` - .*Defaults to `~\/\.config\/cursor\/auth\.json`/m);
+    expect(readme).toMatch(/^- `ALLOWANCE_CURSOR_API_BASE` - .*Defaults to `https:\/\/api2\.cursor\.sh`/m);
   });
 });

@@ -133,15 +133,18 @@ function isTimeout(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'TimeoutError';
 }
 
-const realFetcher: Fetcher = {
-  async get(url, headers, timeoutMs) {
-    try {
-      const response = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
-      return { status: response.status, body: await response.text() };
-    } catch (error) {
-      return { failure: isTimeout(error) ? 'timeout' : 'network' };
-    }
+async function fetchWithin(url: string, init: RequestInit, timeoutMs: number): ReturnType<Fetcher['get']> {
+  try {
+    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    return { status: response.status, body: await response.text() };
+  } catch (error) {
+    return { failure: isTimeout(error) ? 'timeout' : 'network' };
   }
+}
+
+const realFetcher: Fetcher = {
+  get: (url, headers, timeoutMs) => fetchWithin(url, { headers }, timeoutMs),
+  post: (url, headers, body, timeoutMs) => fetchWithin(url, { method: 'POST', headers, body }, timeoutMs)
 };
 
 const realReader: FileReader = {

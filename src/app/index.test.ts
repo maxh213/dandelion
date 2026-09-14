@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,7 +21,7 @@ const KIMI_CHILD: LaunchedProcess = {
   stop: async () => undefined
 };
 const HAPPY_KIMI: Launcher = { launch: async () => KIMI_CHILD };
-const KIMI_FETCHER: Fetcher = { get: async () => ({ status: 200, body: KIMI_BODY }) };
+const KIMI_FETCHER: Fetcher = { get: async () => ({ status: 200, body: KIMI_BODY }), post: async () => ({ failure: 'network' }) };
 const PERIOD = { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: '2026-09-06T21:15:36.133376+00:00', end: '2026-09-13T21:15:36.133376+00:00' };
 
 function billingEvent(ts: string, creditUsagePercent: number, subscriptionTier: string): string {
@@ -136,12 +136,12 @@ function panelOf(output: string, name: string): string[] {
 }
 
 describe('claude and agy windows', () => {
-  it('renders claude, agy, kimi, grok, codex and kilo panels in fixed order with captions', async () => {
+  it('renders claude, agy, kimi, grok, codex, cursor and kilo panels in fixed order with captions', async () => {
     const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const lines = plain(output).split('\n');
     expect(lines[0]).toMatch(/^ALLOWANCE +10:00:00Z$/);
-    expect(lines.filter((line) => line === RULE)).toHaveLength(6);
-    expect(['claude', 'agy', 'kimi', 'grok', 'codex', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25, 30]);
+    expect(lines.filter((line) => line === RULE)).toHaveLength(7);
+    expect(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25, 30, 34]);
     expect(lines[1]).toBe(RULE);
     expect(panelOf(output, 'claude').at(-1)).toBe('claude code · claude');
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
@@ -182,7 +182,7 @@ describe('claude and agy windows', () => {
     expect(output).not.toContain('\x1b');
     expect(output).not.toMatch(/[█░━]/);
     expect(output.split('\n')).toContain('Gemini Models · Weekly Limit        --------------------   0% ↻ 7d7h');
-    expect(new Set(output.replaceAll(/[\x20-\x7e\n]/g, ''))).toEqual(new Set(['↻', '·', '…']));
+    expect(new Set(output.replaceAll(/[\x20-\x7e\n]/g, ''))).toEqual(new Set(['↻', '·', '…', '—']));
   });
 
   it('colours only the gauge and percent of each row by its style token', async () => {
@@ -273,12 +273,13 @@ describe('claude and agy windows', () => {
         'kimi\nkimi web exited without printing a token\nkimi code · kimi',
         'grok\nno grok billing snapshot — run grok once\ngrok · grok',
         'codex\nCommand timed out after 15s\ncodex · codex',
+        'cursor\nno cursor auth — run cursor-agent login\ncursor · cursor',
         'kilo\nCommand timed out after 20s\napi balance · kilo'
       ].join(`\n${RULE}\n`)
     );
   });
 
-  it('renders six unavailable panels when no CLI is on the PATH and grok home is empty', async () => {
+  it('renders seven unavailable panels when no CLI is on the PATH, grok home is empty and cursor has no auth', async () => {
     const output = await runApp(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW);
     expect(output).toContain(
       [
@@ -287,6 +288,7 @@ describe('claude and agy windows', () => {
         `${DIM}${RULE}\nkimi\nkimi CLI not found in PATH\nkimi code · kimi\x1b[0m`,
         `${DIM}${RULE}\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m`,
         `${DIM}${RULE}\ncodex\ncodex CLI not found in PATH\ncodex · codex\x1b[0m`,
+        `${DIM}${RULE}\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor\x1b[0m`,
         `${DIM}${RULE}\nkilo\nkilo CLI not found in PATH\napi balance · kilo\x1b[0m`
       ].join('\n')
     );
@@ -519,7 +521,7 @@ describe('codex panel', () => {
     const spawned: string[][] = [];
     const output = await runApp(codexIo(CODEX_CHATGPT, codexSpawner(codexLines(), spawned)), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
     const lines = output.split('\n');
-    expect(['claude', 'agy', 'kimi', 'grok', 'codex', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25, 30]);
+    expect(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25, 30, 34]);
     expect(lines.slice(24, 30)).toEqual([
       '='.repeat(72),
       'codex',
@@ -766,9 +768,136 @@ describe('real kimi launcher', () => {
   });
 });
 
+describe('cursor panel', () => {
+  const TOKEN = 'unit-dummy-cursor-token';
+  const AUTH = JSON.stringify({ accessToken: TOKEN, refreshToken: 'unit-dummy-refresh' });
+  const USAGE = JSON.stringify({
+    billingCycleStart: '1788108306000',
+    billingCycleEnd: '1790786706000',
+    planUsage: { totalSpend: 101050, includedSpend: 40000, limit: 40000, autoPercentUsed: 32.36, apiPercentUsed: 15.81, totalPercentUsed: 31.09 }
+  });
+  const PLAN = JSON.stringify({ planInfo: { planName: 'Ultra', includedAmountCents: 40000, price: '$200/mo', billingCycleEnd: '1790786706000' } });
+  const CURSOR_ENV = { ...GROK_ENV, ALLOWANCE_CURSOR_AUTH_FILE: '/cursor/auth.json', ALLOWANCE_CURSOR_API_BASE: 'http://127.0.0.1:48006' };
+  const ROWS = [
+    'total                               ######--------------  31% ↻ 17d6h',
+    'auto                                ######--------------  32% ↻ 17d6h',
+    'api                                 ###-----------------  16% ↻ 17d6h'
+  ];
+  const CALM = '\x1b[32m';
+  type Outcome = Awaited<ReturnType<Fetcher['post']>>;
+
+  function cursorIo(usage: Outcome = { status: 200, body: USAGE }, plan: Outcome = { status: 200, body: PLAN }, auth: Record<string, string> = { '/cursor/auth.json': AUTH }) {
+    const files: Record<string, string> = { '/grok/logs/unified.jsonl': grokLog(), ...auth };
+    const reader: FileReader = { homeDir: () => '/home/tester', read: async (path) => files[path] };
+    const fetcher: Fetcher = { get: KIMI_FETCHER.get, post: async (url) => (url.endsWith('/GetPlanInfo') ? plan : usage) };
+    return { ...routedRunner({ codex: CODEX_API_KEY }, HAPPY_KIMI, reader), fetcher };
+  }
+
+  it('renders the total, auto and api windows between codex and kilo', async () => {
+    const output = await runApp(cursorIo(), { ...CURSOR_ENV, NO_COLOR: '1' }, NOW);
+    const lines = output.split('\n');
+    expect(plain(output).split('\n').filter((line) => /^(claude|agy|kimi|grok|codex|cursor|kilo)$/.test(line))).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
+    const cursor = lines.indexOf('cursor');
+    expect(lines.slice(cursor - 1, cursor + 6)).toEqual(['='.repeat(72), 'cursor', ...ROWS, 'Ultra · $200/mo · cursor', '='.repeat(72)]);
+    expect(lines[cursor + 6]).toBe('kilo');
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+    expect(output).not.toContain(TOKEN);
+  });
+
+  it('keeps the other panels unchanged next to cursor', async () => {
+    const withCursor = await runApp(cursorIo(), CURSOR_ENV, NOW);
+    const withoutCursor = await runApp(cursorIo(undefined, undefined, {}), CURSOR_ENV, NOW);
+    for (const name of ['claude', 'agy', 'kimi', 'grok', 'codex', 'kilo']) expect(panelOf(withCursor, name)).toEqual(panelOf(withoutCursor, name));
+  });
+
+  it('colours the three cursor windows calm and the caption dim', async () => {
+    const output = await runApp(cursorIo(), CURSOR_ENV, NOW);
+    expect(output).toContain(
+      [
+        '\ncursor',
+        `${'total'.padEnd(35)} ${CALM}${'█'.repeat(6)}${'░'.repeat(14)}\x1b[0m ${CALM} 31%\x1b[0m ↻ 17d6h`,
+        `${'auto'.padEnd(35)} ${CALM}${'█'.repeat(6)}${'░'.repeat(14)}\x1b[0m ${CALM} 32%\x1b[0m ↻ 17d6h`,
+        `${'api'.padEnd(35)} ${CALM}${'█'.repeat(3)}${'░'.repeat(17)}\x1b[0m ${CALM} 16%\x1b[0m ↻ 17d6h`,
+        `${DIM}Ultra · $200/mo · cursor\x1b[0m\n`
+      ].join('\n')
+    );
+  });
+
+  it.each<[string, string[]]>([
+    ['{"billingCycleEnd":"1790786706000","planUsage":{"totalPercentUsed":31.09,"apiPercentUsed":15.81}}', [ROWS[0], ROWS[2]]],
+    ['{"planUsage":{"totalPercentUsed":0,"autoPercentUsed":"32","apiPercentUsed":-1}}', ['total                               --------------------   0%']],
+    ['{"billingCycleEnd":1790786706000,"planUsage":{"totalPercentUsed":130}}', ['total                               #################### 130%']],
+    ['{"billingCycleEnd":"soon","planUsage":{"autoPercentUsed":32.5}}', ['auto                                #######-------------  33%']]
+  ])('renders the usage body %s', async (body, rows) => {
+    const output = await runApp(cursorIo({ status: 200, body }), { ...CURSOR_ENV, NO_COLOR: '1' }, NOW);
+    expect(panelOf(output, 'cursor')).toEqual(['cursor', ...rows, 'Ultra · $200/mo · cursor']);
+  });
+
+  it.each<[string, Outcome, string]>([
+    ['a name only', { status: 200, body: '{"planInfo":{"planName":"Pro"}}' }, 'Pro · cursor'],
+    ['an empty price', { status: 200, body: '{"planInfo":{"planName":"Pro","price":""}}' }, 'Pro · cursor'],
+    ['a price only', { status: 200, body: '{"planInfo":{"price":"$200/mo"}}' }, 'cursor · cursor'],
+    ['an empty object', { status: 200, body: '{}' }, 'cursor · cursor'],
+    ['a non-JSON body', { status: 200, body: 'not json' }, 'cursor · cursor'],
+    ['HTTP 500', { status: 500, body: PLAN }, 'cursor · cursor'],
+    ['a timeout', { failure: 'timeout' }, 'cursor · cursor']
+  ])('captions the cursor panel for GetPlanInfo with %s', async (_case, plan, caption) => {
+    const output = await runApp(cursorIo(undefined, plan), { ...CURSOR_ENV, NO_COLOR: '1' }, NOW);
+    expect(panelOf(output, 'cursor')).toEqual(['cursor', ...ROWS, caption]);
+  });
+
+  it.each<[string, Outcome, Record<string, string>, string]>([
+    ['a missing auth file', { status: 200, body: USAGE }, {}, 'no cursor auth — run cursor-agent login'],
+    ['an auth file without a token', { status: 200, body: USAGE }, { '/cursor/auth.json': '{"refreshToken":"r"}' }, 'no cursor auth — run cursor-agent login'],
+    ['HTTP 401 echoing the token', { status: 401, body: `{"error":"bad token ${TOKEN}"}` }, { '/cursor/auth.json': AUTH }, 'cursor usage request failed: HTTP 401'],
+    ['a network failure', { failure: 'network' }, { '/cursor/auth.json': AUTH }, 'cursor usage request failed'],
+    ['a timeout', { failure: 'timeout' }, { '/cursor/auth.json': AUTH }, 'cursor usage request timed out after 15s'],
+    ['a null plan usage', { status: 200, body: '{"planUsage":null}' }, { '/cursor/auth.json': AUTH }, 'Could not parse usage from response']
+  ])('renders a dim cursor panel for %s while the others render normally', async (_case, usage, auth, reason) => {
+    const output = await runApp(cursorIo(usage, undefined, auth), CURSOR_ENV, NOW);
+    expect(output).toContain(`${DIM}${RULE}\ncursor\n${reason}\ncursor · cursor\x1b[0m\n`);
+    expect(panelOf(output, 'claude')).toHaveLength(5);
+    expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
+    expect(plain(output).split('\n').filter((line) => /^(claude|agy|kimi|grok|codex|cursor|kilo)$/.test(line))).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
+    expect(output).not.toContain(TOKEN);
+  });
+
+  it('reads a real auth file without writing the token anywhere', async () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'allowance-cursor-'));
+    try {
+      const authFile = join(scratch, 'auth.json');
+      writeFileSync(authFile, AUTH);
+      const before = readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs]);
+      const io = { ...cursorIo(), reader: realIo.reader };
+      const output = await runApp(io, { ALLOWANCE_CURSOR_AUTH_FILE: authFile, NO_COLOR: '1' }, NOW);
+      expect(panelOf(output, 'cursor')).toEqual(['cursor', ...ROWS, 'Ultra · $200/mo · cursor']);
+      expect(readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs])).toEqual(before);
+      expect(readFileSync(authFile, 'utf8')).toBe(AUTH);
+      expect(output).not.toContain(TOKEN);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('real fetcher', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('POSTs the body with headers and a timeout signal', async () => {
+    const fetchMock = vi.fn(async () => new Response('{"planInfo":{}}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = { Authorization: 'Bearer t', 'Content-Type': 'application/json' };
+    expect(await realIo.fetcher.post('http://127.0.0.1:1/y', headers, '{}', 15000)).toEqual({ status: 200, body: '{"planInfo":{}}' });
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:1/y', { method: 'POST', headers, body: '{}', signal: expect.any(AbortSignal) });
+  });
+
+  it('maps a POST timeout to a failure', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new DOMException('slow', 'TimeoutError');
+    });
+    expect(await realIo.fetcher.post('http://127.0.0.1:1/y', {}, '{}', 10)).toEqual({ failure: 'timeout' });
   });
 
   it('returns the status and body with headers and a timeout signal', async () => {
