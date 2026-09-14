@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { probeKimi, type FetchOutcome, type Fetcher, type KimiIo, type LaunchedProcess, type Launcher } from './kimi.ts';
+import type { FetchOutcome } from '../domain/index.ts';
+import { probeKimi, type KimiIo, type LaunchedProcess, type Launcher } from './kimi.ts';
 
 const NOW = '2026-09-13T10:00:00Z';
 const BODY = JSON.stringify({
@@ -34,7 +35,7 @@ function ioWith(child: FakeChild | undefined, outcome: FetchOutcome = { status: 
       return child;
     }
   };
-  const fetcher: Fetcher = {
+  const fetcher: KimiIo['fetcher'] = {
     get: async (url, headers, timeoutMs) => {
       requests.push([url, headers, timeoutMs]);
       return outcome;

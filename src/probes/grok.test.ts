@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { UsageWindow } from '../domain/index.ts';
-import { probeGrok, type FileReader, type GrokIo } from './grok.ts';
+import type { FileReader, UsageWindow } from '../domain/index.ts';
+import { probeGrok, type GrokIo } from './grok.ts';
 
 const NOW = '2026-09-13T10:00:00Z';
 const PERIOD = { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: '2026-09-06T21:15:36.133376+00:00', end: '2026-09-13T21:15:36.133376+00:00' };

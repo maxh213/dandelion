@@ -33,9 +33,23 @@ module.exports = {
     {
       name: 'port-probes-stand-alone',
       severity: 'error',
-      comment: 'Probes that own an IO port (kimi launcher/fetcher, grok file reader) are not CLI probes; they know domain only, not the cli skeleton',
-      from: { path: '^src/probes/(kimi|grok)\\.ts$' },
+      comment: 'Probes that own an IO port (kimi launcher/fetcher, grok file reader, cursor fetcher/reader) are not CLI probes; they know domain only, not the cli skeleton',
+      from: { path: '^src/probes/(kimi|grok|cursor)\\.ts$' },
       to: { path: '^src/probes/' }
+    },
+    {
+      name: 'domain-ports-behind-index',
+      severity: 'error',
+      comment: 'The shared Fetcher and FileReader ports and the request-failure reasons live in domain/ports.ts; everything, tests included, reaches them only through domain/index.ts',
+      from: { path: '^src/', pathNot: '^src/domain/index\\.ts$' },
+      to: { path: '^src/domain/', pathNot: '^src/domain/index\\.ts$' }
+    },
+    {
+      name: 'domain-leaf-files',
+      severity: 'error',
+      comment: 'Files behind domain/index.ts are leaves: they import nothing, not even each other',
+      from: { path: '^src/domain/', pathNot: '^src/domain/index(\\.test)?\\.ts$' },
+      to: {}
     },
     {
       name: 'cli-skeleton-run-only-by-index',
@@ -82,9 +96,9 @@ module.exports = {
     {
       name: 'app-layer',
       severity: 'error',
-      comment: 'App depends on probes, render, domain',
+      comment: 'App depends on probes and render; the port types it implements come through probes/index.ts, never straight from domain',
       from: { path: '^src/app' },
-      to: { path: '^src/', pathNot: '^src/(domain|probes|render|app)/' }
+      to: { path: '^src/', pathNot: '^src/(probes|render|app)/' }
     },
     {
       name: 'main-entry',

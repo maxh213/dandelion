@@ -1,4 +1,4 @@
-import type { ProviderUsage } from '../domain/index.ts';
+import type { Fetcher, FileReader, ProviderUsage } from '../domain/index.ts';
 import { agyProbe } from './agy.ts';
 import { claudeProbe } from './claude.ts';
 import { probeCli } from './cli.ts';
@@ -10,12 +10,10 @@ import { probeKimi, type KimiIo } from './kimi.ts';
 
 export type { CommandRunner, CommandRunnerResult, RunFailure } from './cli.ts';
 export type { RpcChild, RpcSpawner } from './codex.ts';
-export type { FileReader } from './grok.ts';
 export type { LaunchedProcess, Launcher } from './kimi.ts';
+export type { Fetcher, FileReader };
 
-export type ProbeIo = KimiIo & GrokIo & CodexIo & CursorIo;
-
-export type Fetcher = ProbeIo['fetcher'];
+export type ProbeIo = KimiIo & GrokIo & CodexIo & CursorIo & { fetcher: Fetcher; reader: FileReader };
 
 export function probeProviders(
   io: ProbeIo,

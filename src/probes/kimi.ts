@@ -1,4 +1,15 @@
-import { fieldOf, isCount, validInstant, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import {
+  ProbeUnavailable,
+  USAGE_PARSE_FAILURE,
+  fieldOf,
+  isCount,
+  successBody,
+  unavailableReason,
+  validInstant,
+  type Fetcher,
+  type ProviderUsage,
+  type UsageWindow
+} from '../domain/index.ts';
 
 export type LaunchedProcess = {
   output(): Promise<string>;
@@ -10,13 +21,7 @@ export interface Launcher {
   launch(command: string, args: string[]): Promise<LaunchedProcess | undefined>;
 }
 
-export type FetchOutcome = { status: number; body: string } | { failure: 'network' | 'timeout' };
-
-export interface Fetcher {
-  get(url: string, headers: Record<string, string>, timeoutMs: number): Promise<FetchOutcome>;
-}
-
-export type KimiIo = { launcher: Launcher; fetcher: Fetcher };
+export type KimiIo = { launcher: Launcher; fetcher: Pick<Fetcher, 'get'> };
 
 const DEFAULT_PORT = 59177;
 const MAX_PORT = 65535;
@@ -25,13 +30,6 @@ const TOKEN_WAIT_MS = 20000;
 const REQUEST_TIMEOUT_MS = 10000;
 const TOKEN = /token=([A-Za-z0-9._-]+)|Bearer ([A-Za-z0-9._-]+)/;
 const DIGITS = /^\d+$/;
-const PARSE_FAILURE = 'Could not parse usage from response';
-const FETCH_FAILURES = {
-  network: 'kimi usage request failed',
-  timeout: `kimi usage request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`
-};
-
-class KimiUnavailable extends Error {}
 
 function isDefaultPort(raw: string | undefined): raw is undefined | '' {
   return raw === undefined || raw === '';
@@ -43,7 +41,7 @@ function isValidPort(raw: string): boolean {
 
 function parsePort(raw: string | undefined): number {
   if (isDefaultPort(raw)) return DEFAULT_PORT;
-  if (!isValidPort(raw)) throw new KimiUnavailable(`ALLOWANCE_KIMI_PORT must be an integer from 1 to ${MAX_PORT}`);
+  if (!isValidPort(raw)) throw new ProbeUnavailable(`ALLOWANCE_KIMI_PORT must be an integer from 1 to ${MAX_PORT}`);
   return Number(raw);
 }
 
@@ -67,21 +65,15 @@ async function waitForToken(child: LaunchedProcess, waitedMs: number): Promise<s
   const token = findToken(await child.output());
   if (token !== undefined) return token;
   const failure = tokenFailure(exited, waitedMs);
-  if (failure !== undefined) throw new KimiUnavailable(failure);
+  if (failure !== undefined) throw new ProbeUnavailable(failure);
   await sleep(POLL_MS);
   return waitForToken(child, waitedMs + POLL_MS);
 }
 
-function isSuccess(status: number): boolean {
-  return status >= 200 && status < 300;
-}
-
-async function requestUsage(fetcher: Fetcher, port: number, token: string): Promise<string> {
+async function requestUsage(fetcher: KimiIo['fetcher'], port: number, token: string): Promise<string> {
   const url = `http://127.0.0.1:${port}/api/v1/oauth/usage`;
   const outcome = await fetcher.get(url, { Authorization: `Bearer ${token}` }, REQUEST_TIMEOUT_MS);
-  if ('failure' in outcome) throw new KimiUnavailable(FETCH_FAILURES[outcome.failure]);
-  if (!isSuccess(outcome.status)) throw new KimiUnavailable(`kimi usage request failed: HTTP ${outcome.status}`);
-  return outcome.body;
+  return successBody(outcome, 'kimi usage request', REQUEST_TIMEOUT_MS);
 }
 
 function percentOf(entry: unknown): number | undefined {
@@ -93,7 +85,7 @@ function percentOf(entry: unknown): number | undefined {
 
 function weeklyWindow(summary: unknown): UsageWindow {
   const usedPct = percentOf(summary);
-  if (usedPct === undefined) throw new KimiUnavailable(PARSE_FAILURE);
+  if (usedPct === undefined) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
   const resetsAt = validInstant(fieldOf(summary, 'reset_at'));
   return resetsAt === undefined ? { label: 'weekly', usedPct } : { label: 'weekly', usedPct, resetsAt };
 }
@@ -116,7 +108,7 @@ function parseUsage(body: string): UsageWindow[] {
 async function readKimi(io: KimiIo, env: Record<string, string | undefined>): Promise<UsageWindow[]> {
   const port = parsePort(env['ALLOWANCE_KIMI_PORT']);
   const child = await io.launcher.launch('kimi', ['web', '--no-open', '--port', String(port)]);
-  if (child === undefined) throw new KimiUnavailable('kimi CLI not found in PATH');
+  if (child === undefined) throw new ProbeUnavailable('kimi CLI not found in PATH');
   try {
     return parseUsage(await requestUsage(io.fetcher, port, await waitForToken(child, 0)));
   } finally {
@@ -124,15 +116,11 @@ async function readKimi(io: KimiIo, env: Record<string, string | undefined>): Pr
   }
 }
 
-function reasonOf(error: unknown): string {
-  return error instanceof KimiUnavailable ? error.message : PARSE_FAILURE;
-}
-
 export async function probeKimi(io: KimiIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
   const usage = { id: 'kimi', displayName: 'kimi', planLabel: 'kimi code', fetchedAt: now };
   try {
     return { ...usage, windows: await readKimi(io, env), status: 'ok' };
   } catch (error) {
-    return { ...usage, windows: [], status: 'unavailable', reason: reasonOf(error) };
+    return { ...usage, windows: [], status: 'unavailable', reason: unavailableReason(error) };
   }
 }

@@ -1,17 +1,19 @@
-import { fieldOf, isCount, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import {
+  ProbeUnavailable,
+  USAGE_PARSE_FAILURE,
+  fieldOf,
+  isCount,
+  isSuccess,
+  successBody,
+  unavailableReason,
+  type FetchOutcome,
+  type Fetcher,
+  type FileReader,
+  type ProviderUsage,
+  type UsageWindow
+} from '../domain/index.ts';
 
-type PostOutcome = { status: number; body: string } | { failure: 'network' | 'timeout' };
-
-export interface PostFetcher {
-  post(url: string, headers: Record<string, string>, body: string, timeoutMs: number): Promise<PostOutcome>;
-}
-
-type AuthReader = {
-  homeDir(): string;
-  read(path: string): Promise<string | undefined>;
-};
-
-export type CursorIo = { reader: AuthReader; fetcher: PostFetcher };
+export type CursorIo = { reader: FileReader; fetcher: Pick<Fetcher, 'post'> };
 
 type Env = Record<string, string | undefined>;
 
@@ -21,18 +23,11 @@ const REQUEST_TIMEOUT_MS = 15000;
 const DIGITS = /^\d+$/;
 const FALLBACK_LABEL = 'cursor';
 const NO_AUTH = 'no cursor auth — run cursor-agent login';
-const PARSE_FAILURE = 'Could not parse usage from response';
-const FETCH_FAILURES = {
-  network: 'cursor usage request failed',
-  timeout: `cursor usage request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`
-};
 const WINDOW_FIELDS = [
   ['total', 'totalPercentUsed'],
   ['auto', 'autoPercentUsed'],
   ['api', 'apiPercentUsed']
 ] as const;
-
-class CursorUnavailable extends Error {}
 
 function isFilled(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
@@ -46,31 +41,21 @@ function parseJson(text: string): unknown {
   }
 }
 
-function authFile(reader: AuthReader, env: Env): string {
+function authFile(reader: FileReader, env: Env): string {
   return env['ALLOWANCE_CURSOR_AUTH_FILE'] || `${reader.homeDir()}/.config/cursor/auth.json`;
 }
 
-async function readToken(reader: AuthReader, env: Env): Promise<string> {
+async function readToken(reader: FileReader, env: Env): Promise<string> {
   const text = await reader.read(authFile(reader, env));
   const token = text === undefined ? undefined : fieldOf(parseJson(text), 'accessToken');
-  if (!isFilled(token)) throw new CursorUnavailable(NO_AUTH);
+  if (!isFilled(token)) throw new ProbeUnavailable(NO_AUTH);
   return token;
 }
 
-function postTo(io: CursorIo, env: Env, token: string, method: string): Promise<PostOutcome> {
+function postTo(io: CursorIo, env: Env, token: string, method: string): Promise<FetchOutcome> {
   const url = `${env['ALLOWANCE_CURSOR_API_BASE'] || API_BASE}${SERVICE}/${method}`;
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   return io.fetcher.post(url, headers, '{}', REQUEST_TIMEOUT_MS);
-}
-
-function isSuccess(status: number): boolean {
-  return status >= 200 && status < 300;
-}
-
-function usageBody(outcome: PostOutcome): string {
-  if ('failure' in outcome) throw new CursorUnavailable(FETCH_FAILURES[outcome.failure]);
-  if (!isSuccess(outcome.status)) throw new CursorUnavailable(`cursor usage request failed: HTTP ${outcome.status}`);
-  return outcome.body;
 }
 
 function epochMs(value: unknown): number {
@@ -92,7 +77,7 @@ function windowsOf(usage: unknown): UsageWindow[] {
   const planUsage = fieldOf(usage, 'planUsage');
   const resetsAt = cycleEnd(fieldOf(usage, 'billingCycleEnd'));
   const windows = WINDOW_FIELDS.flatMap(([label, key]) => windowOf(label, fieldOf(planUsage, key), resetsAt));
-  if (windows.length === 0) throw new CursorUnavailable(PARSE_FAILURE);
+  if (windows.length === 0) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
   return windows;
 }
 
@@ -101,11 +86,11 @@ function labelOf(name: unknown, price: unknown): string {
   return isFilled(price) ? `${name} · ${price}` : name;
 }
 
-function planInfoOf(outcome: PostOutcome): unknown {
-  return 'body' in outcome && isSuccess(outcome.status) ? fieldOf(parseJson(outcome.body), 'planInfo') : undefined;
+function planInfoOf(outcome: FetchOutcome): unknown {
+  return isSuccess(outcome) ? fieldOf(parseJson(outcome.body), 'planInfo') : undefined;
 }
 
-async function planLabelOf(pending: Promise<PostOutcome>): Promise<string> {
+async function planLabelOf(pending: Promise<FetchOutcome>): Promise<string> {
   const info = planInfoOf(await pending);
   return labelOf(fieldOf(info, 'planName'), fieldOf(info, 'price'));
 }
@@ -114,12 +99,8 @@ async function readCursor(io: CursorIo, env: Env): Promise<{ planLabel: string; 
   const token = await readToken(io.reader, env);
   const usage = postTo(io, env, token, 'GetCurrentPeriodUsage');
   const plan = postTo(io, env, token, 'GetPlanInfo');
-  const windows = windowsOf(JSON.parse(usageBody(await usage)));
+  const windows = windowsOf(JSON.parse(successBody(await usage, 'cursor usage request', REQUEST_TIMEOUT_MS)));
   return { planLabel: await planLabelOf(plan), windows };
-}
-
-function reasonOf(error: unknown): string {
-  return error instanceof CursorUnavailable ? error.message : PARSE_FAILURE;
 }
 
 export async function probeCursor(io: CursorIo, env: Env, now: string): Promise<ProviderUsage> {
@@ -127,6 +108,6 @@ export async function probeCursor(io: CursorIo, env: Env, now: string): Promise<
   try {
     return { ...usage, ...(await readCursor(io, env)), status: 'ok' };
   } catch (error) {
-    return { ...usage, planLabel: FALLBACK_LABEL, windows: [], status: 'unavailable', reason: reasonOf(error) };
+    return { ...usage, planLabel: FALLBACK_LABEL, windows: [], status: 'unavailable', reason: unavailableReason(error) };
   }
 }

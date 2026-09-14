@@ -1,3 +1,14 @@
+export {
+  ProbeUnavailable,
+  USAGE_PARSE_FAILURE,
+  isSuccess,
+  successBody,
+  unavailableReason,
+  type FetchOutcome,
+  type Fetcher,
+  type FileReader
+} from './ports.ts';
+
 export type UsageWindow = {
   label: string;
   usedPct: number;

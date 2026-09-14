@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { probeCursor, type CursorIo, type PostFetcher } from './cursor.ts';
+import type { FetchOutcome } from '../domain/index.ts';
+import { probeCursor, type CursorIo } from './cursor.ts';
 
 const NOW = '2026-09-13T10:00:00Z';
 const TOKEN = 'unit-dummy-cursor-token';
@@ -21,7 +22,7 @@ const WINDOWS = [
   { label: 'api', usedPct: 16, resetsAt: RESET }
 ];
 
-type Outcome = Awaited<ReturnType<PostFetcher['post']>>;
+type Outcome = FetchOutcome;
 type Answer = Outcome | Promise<Outcome>;
 
 function answer(value: unknown, status = 200): Outcome {

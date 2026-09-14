@@ -1,9 +1,4 @@
-import { fieldOf, isCount, validInstant, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
-
-export interface FileReader {
-  homeDir(): string;
-  read(path: string): Promise<string | undefined>;
-}
+import { fieldOf, isCount, validInstant, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type GrokIo = { reader: FileReader };
 
