@@ -8,6 +8,7 @@ import { createInterface } from 'node:readline';
 import { PassThrough, pipeline, type Readable, type Writable } from 'node:stream';
 import {
   probeProviders,
+  providerProbes,
   type CommandRunner,
   type CommandRunnerResult,
   type Fetcher,
@@ -20,10 +21,28 @@ import {
   type RunFailure
 } from '../probes/index.ts';
 import { renderDashboard } from '../render/index.ts';
+import { startLive, type Keyboard, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
+export type { Keyboard, Screen } from './live.ts';
+
+type Stop = () => Promise<void>;
 
 const KILL_GRACE_MS = 5000;
+const liveStops = new Set<Stop>();
+
+function tracked(stop: Stop): Stop {
+  const untracked: Stop = () => {
+    liveStops.delete(untracked);
+    return stop();
+  };
+  liveStops.add(untracked);
+  return untracked;
+}
+
+async function stopChildren(): Promise<void> {
+  await Promise.all([...liveStops].map((stop) => stop()));
+}
 
 function wasKilledByTimeout(error: ExecException): boolean {
   return error.killed === true;
@@ -43,9 +62,11 @@ function toRunnerResult(error: ExecException | null, stdout: string, stderr: str
 const realCommandRunner: CommandRunner = {
   run(command, args, timeoutMs) {
     return new Promise((resolve) => {
-      execFile(command, args, { timeout: timeoutMs }, (error, stdout, stderr) => {
+      const child = execFile(command, args, { timeout: timeoutMs }, (error, stdout, stderr) => {
+        liveStops.delete(stop);
         resolve(toRunnerResult(error, stdout, stderr));
       });
+      const stop = tracked(() => terminate(child));
     });
   }
 };
@@ -85,10 +106,10 @@ function launchedProcess(child: ChildProcess, logDir: string): LaunchedProcess {
   return {
     output: () => readLog(logDir),
     hasExited: () => hasExited(child),
-    async stop() {
+    stop: tracked(async () => {
       await terminate(child);
       removeLogDir(logDir);
-    }
+    })
   };
 }
 
@@ -121,7 +142,7 @@ function rpcChild(child: ChildProcessByStdio<Writable, Readable, null>): RpcChil
   return {
     lines: { [Symbol.asyncIterator]: () => lines },
     send: (message) => input.write(`${message}\n`),
-    stop: () => signalUntil(child, exited)
+    stop: tracked(() => signalUntil(child, exited))
   };
 }
 
@@ -158,4 +179,8 @@ export async function runApp(io: ProbeIo, env: Record<string, string | undefined
   const usages = await probeProviders(io, env, now);
   const noColor = env['NO_COLOR'] !== undefined;
   return renderDashboard(usages, noColor, now);
+}
+
+export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {
+  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren });
 }

@@ -8,6 +8,11 @@ const BOLD = '\x1b[1m';
 const DIM = '\x1b[90m';
 const RESET = '\x1b[0m';
 const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
+const TITLE = 'ALLOWANCE';
+const HOT_PCT = 80;
+const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
+const REFRESHING = 'refreshing…';
+const HELP_FOOTER = 'keys: r refresh · q quit · ? help';
 
 function styled(text: string, code: string, noColor: boolean): string {
   if (noColor) return text;
@@ -26,11 +31,20 @@ function clockTime(instant: string): string {
   return `${instant.slice(11, 19)}Z`;
 }
 
+function cellCount(text: string): number {
+  return [...text].length;
+}
+
+function bannerGap(right: string): string {
+  return repeatChar(' ', WIDTH - TITLE.length - cellCount(right));
+}
+
+function bannerLine(right: string, noColor: boolean): string {
+  return styled(`${TITLE}${bannerGap(right)}${right}`, BOLD, noColor);
+}
+
 export function renderBanner(instant: string, noColor: boolean): string {
-  const title = 'ALLOWANCE';
-  const time = clockTime(instant);
-  const gap = repeatChar(' ', WIDTH - title.length - time.length);
-  return styled(`${title}${gap}${time}`, BOLD, noColor);
+  return bannerLine(clockTime(instant), noColor);
 }
 
 function plainRule(noColor: boolean): string {
@@ -66,7 +80,7 @@ type StyleToken = keyof typeof STYLE_TOKENS;
 
 const RAMP: [number, StyleToken][] = [
   [95, 'critical'],
-  [80, 'hot'],
+  [HOT_PCT, 'hot'],
   [50, 'warm']
 ];
 
@@ -74,10 +88,13 @@ export function styleToken(usedPct: number): StyleToken {
   return RAMP.find(([threshold]) => usedPct >= threshold)?.[1] ?? 'calm';
 }
 
+function cutCells(text: string, limit: number): string {
+  const cells = [...text];
+  return cells.length > limit ? `${cells.slice(0, limit - 1).join('').trimEnd()}…` : text;
+}
+
 function fitLabel(label: string): string {
-  const cells = [...label];
-  const fitted = cells.length > LABEL_CELLS ? `${cells.slice(0, LABEL_CELLS - 1).join('').trimEnd()}…` : label;
-  return fitted.padEnd(LABEL_CELLS);
+  return cutCells(label, LABEL_CELLS).padEnd(LABEL_CELLS);
 }
 
 function countdown(resetsAt: string | undefined, now: string): string {
@@ -174,4 +191,77 @@ function renderPanel(usage: ProviderUsage, noColor: boolean, now: string): strin
 export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string): string {
   const panels = usages.map((usage) => renderPanel(usage, noColor, now));
   return [renderBanner(now, noColor), ...panels].join('\n');
+}
+
+export type LiveSlot = { id: string; usage: ProviderUsage | undefined };
+
+export type LiveView = { slots: LiveSlot[]; spinner: number; refreshing: boolean; footer: boolean };
+
+type FleetWindow = { id: string; window: UsageWindow };
+
+function settledUsages(slots: LiveSlot[]): ProviderUsage[] {
+  return slots.flatMap((slot) => (slot.usage === undefined ? [] : [slot.usage]));
+}
+
+function dataAge(usages: ProviderUsage[], now: string): string {
+  const oldest = usages.map((usage) => usage.fetchedAt).sort()[0];
+  return oldest === undefined ? '' : `data ${formatCountdown(now, oldest)} old · `;
+}
+
+function refreshingBanner(tail: string, noColor: boolean): string {
+  const rest = ` · ${tail}`;
+  return styled(`${TITLE}${bannerGap(`${REFRESHING}${rest}`)}`, BOLD, noColor) + dim(REFRESHING, noColor) + styled(rest, BOLD, noColor);
+}
+
+function liveBanner(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string {
+  const tail = `${dataAge(usages, now)}${clockTime(now)}`;
+  return view.refreshing ? refreshingBanner(tail, noColor) : bannerLine(tail, noColor);
+}
+
+function fleetWindows(usages: ProviderUsage[]): FleetWindow[] {
+  return usages.flatMap((usage) => (usage.status === 'ok' ? usage.windows.map((window) => ({ id: usage.id, window })) : []));
+}
+
+function hotSegment(windows: FleetWindow[]): string {
+  const hot = windows.filter(({ window }) => window.usedPct >= HOT_PCT).length;
+  return hot === 0 ? `all windows below ${HOT_PCT}%` : `${hot}/${windows.length} windows above ${HOT_PCT}%`;
+}
+
+function futureResetMs({ window }: FleetWindow, now: string): number {
+  const resetMs = Date.parse(window.resetsAt ?? '');
+  return resetMs > Date.parse(now) ? resetMs : Number.POSITIVE_INFINITY;
+}
+
+function soonestReset(windows: FleetWindow[], now: string): FleetWindow | undefined {
+  const future = windows.filter((entry) => Number.isFinite(futureResetMs(entry, now)));
+  return future.sort((a, b) => futureResetMs(a, now) - futureResetMs(b, now))[0];
+}
+
+function resetSegment(head: string, next: FleetWindow, now: string): string {
+  const prefix = `${head}${next.id} `;
+  const suffix = ` in ${formatCountdown(new Date(futureResetMs(next, now)).toISOString(), now)}`;
+  return `${prefix}${cutCells(next.window.label, WIDTH - cellCount(prefix) - cellCount(suffix))}${suffix}`;
+}
+
+function summaryLine(usages: ProviderUsage[], now: string): string {
+  const windows = fleetWindows(usages);
+  const head = `${hotSegment(windows)} · next reset: `;
+  const next = soonestReset(windows, now);
+  return next === undefined ? `${head}none` : resetSegment(head, next, now);
+}
+
+function pendingPanel(id: string, spinner: number, noColor: boolean): string {
+  const frame = SPINNER_FRAMES[spinner % SPINNER_FRAMES.length];
+  return dim([plainRule(noColor), id, `${frame} probing…`].join('\n'), noColor);
+}
+
+function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string): string {
+  return slot.usage === undefined ? pendingPanel(slot.id, spinner, noColor) : renderPanel(slot.usage, noColor, now);
+}
+
+export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
+  const usages = settledUsages(view.slots);
+  const panels = view.slots.map((slot) => livePanel(slot, view.spinner, noColor, now));
+  const footer = view.footer ? [dim(HELP_FOOTER, noColor)] : [];
+  return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...panels, ...footer].join('\n');
 }

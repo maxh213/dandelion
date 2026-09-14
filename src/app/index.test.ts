@@ -1,9 +1,10 @@
+import { EventEmitter } from 'node:events';
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, it, expect, vi } from 'vitest';
-import { runApp, realIo } from './index.ts';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { runApp, runLive, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
@@ -74,6 +75,17 @@ function codexSpawner(lines: string[] = codexLines(), spawned: string[][] = []):
       return { lines: linesOf(lines), send: () => undefined, stop: async () => undefined };
     }
   };
+}
+
+const LIVE_CLEAR = '\x1b[H\x1b[2J';
+
+function startDashboard(io: ProbeIo, env: Record<string, string>) {
+  const writes: string[] = [];
+  const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
+  const finished = runLive(io, env, keyboard, { write: (text: string) => writes.push(text) });
+  const frames = () => writes.filter((text) => text.startsWith(LIVE_CLEAR)).map((text) => text.slice(LIVE_CLEAR.length));
+  const press = (key: string) => keyboard.emit('data', key);
+  return { finished, frames, press, lastFrame: () => frames().at(-1) ?? '' };
 }
 
 function ioOf(runner: CommandRunner, launcher: Launcher = MISSING_KIMI, reader: FileReader = NO_GROK, spawner = codexSpawner()): ProbeIo {
@@ -880,6 +892,115 @@ describe('cursor panel', () => {
       rmSync(scratch, { recursive: true, force: true });
     }
   });
+
+  describe('live dashboard', () => {
+    const LIVE_ENV = { ...CURSOR_ENV, NO_COLOR: '1' };
+    const LATER = '2026-09-13T10:01:05.000Z';
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      vi.setSystemTime(new Date(NOW));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function settleProbes(): Promise<void> {
+      for (let turn = 0; turn < 10; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    function kimiOnlyOnce(): Launcher {
+      return { launch: vi.fn<Launcher['launch']>().mockResolvedValueOnce(KIMI_CHILD).mockReturnValue(new Promise(() => undefined)) };
+    }
+
+    function sessionRow(frame: string): string | undefined {
+      return frame.split('\n').find((line) => line.startsWith('session '));
+    }
+
+    it('begins the frame with the data age banner and the fleet summary once every probe has settled', async () => {
+      const dashboard = startDashboard(cursorIo(), LIVE_ENV);
+      await settleProbes();
+      const frame = dashboard.lastFrame();
+      expect(frame).not.toContain('probing…');
+      expect(frame.split('\n').slice(0, 2)).toEqual(['ALLOWANCE'.padEnd(47) + 'data 0h0m old · 10:00:00Z', '2/13 windows above 80% · next reset: claude session in 8h40m']);
+      expect(frame.split('\n').every((line) => [...line].length <= 72)).toBe(true);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it('keeps time between frames drawn by the 1000ms timer without new data', async () => {
+      const dashboard = startDashboard(cursorIo(), { ...LIVE_ENV, ALLOWANCE_REFRESH_SECONDS: '300' });
+      await settleProbes();
+      expect(sessionRow(dashboard.lastFrame())).toMatch(/ ↻ 8h40m$/);
+      const count = dashboard.frames().length;
+      await vi.advanceTimersByTimeAsync(65100);
+      const frame = dashboard.lastFrame();
+      expect(frame.split('\n').slice(0, 2)).toEqual(['ALLOWANCE'.padEnd(47) + 'data 0h1m old · 10:01:05Z', '2/13 windows above 80% · next reset: claude session in 8h38m']);
+      expect(sessionRow(frame)).toMatch(/ ↻ 8h38m$/);
+      expect(dashboard.frames().length - count).toBe(66);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it('turns a grok snapshot stale between frames', async () => {
+      const files: Record<string, string> = { '/grok/logs/unified.jsonl': grokLog('2026-09-11T10:01:00.000Z'), '/cursor/auth.json': AUTH };
+      const io = { ...cursorIo(), reader: { homeDir: () => '/home/tester', read: async (path: string) => files[path] } };
+      const dashboard = startDashboard(io, { ...CURSOR_ENV, ALLOWANCE_REFRESH_SECONDS: '300' });
+      await settleProbes();
+      const earlier = dashboard.lastFrame();
+      expect(earlier).toContain(`\ngrok\n${'credits'.padEnd(35)} \x1b[33m`);
+      expect(earlier).toContain(`\n${DIM}snapshot 1d23h old\x1b[0m\n`);
+      await vi.advanceTimersByTimeAsync(120100);
+      const later = dashboard.lastFrame();
+      expect(later).toContain(`${DIM}${RULE}\ngrok\n${'credits'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 11h13m\nstale snapshot 2d0h old\nSuperGrok Heavy · grok\x1b[0m\n`);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it('colours a refreshing frame with the footer and keeps every panel as its once rendering', async () => {
+      const dashboard = startDashboard({ ...cursorIo(), launcher: kimiOnlyOnce() }, CURSOR_ENV);
+      expect(dashboard.lastFrame()).toContain(`${DIM}${RULE}\nkimi\n⠋ probing…\x1b[0m`);
+      await settleProbes();
+      dashboard.press('?');
+      await vi.advanceTimersByTimeAsync(65000);
+      dashboard.press('r');
+      const lines = dashboard.lastFrame().split('\n');
+      expect(lines[0]).toBe(`\x1b[1mALLOWANCE${' '.repeat(24)}\x1b[0m\x1b[90mrefreshing…\x1b[0m\x1b[1m · data 0h1m old · 10:01:05Z\x1b[0m`);
+      expect(lines[1]).toBe('\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
+      expect(lines.at(-1)).toBe('\x1b[90mkeys: r refresh · q quit · ? help\x1b[0m');
+      const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
+      expect(lines.slice(2, -1).join('\n')).toBe(once.split('\n').slice(1).join('\n'));
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it('answers ?, r and other keys as the key scenario says', async () => {
+      const io = { ...cursorIo(), launcher: kimiOnlyOnce() };
+      const run = vi.spyOn(io.runner, 'run');
+      const codexLogins = () => run.mock.calls.filter(([command, args]) => command === 'codex' && args.join(' ') === 'login status').length;
+      const dashboard = startDashboard(io, LIVE_ENV);
+      await settleProbes();
+      dashboard.press('?');
+      expect(dashboard.lastFrame().split('\n').at(-1)).toBe('keys: r refresh · q quit · ? help');
+      dashboard.press('?');
+      expect(dashboard.lastFrame()).not.toContain('keys:');
+      dashboard.press('r');
+      expect(dashboard.lastFrame().split('\n')[0]).toContain('refreshing…');
+      await settleProbes();
+      expect(codexLogins()).toBe(2);
+      dashboard.press('r');
+      await settleProbes();
+      expect(codexLogins()).toBe(2);
+      const count = dashboard.frames().length;
+      dashboard.press('x');
+      dashboard.press('R');
+      dashboard.press('\r');
+      expect(dashboard.frames()).toHaveLength(count);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+  });
 });
 
 describe('real fetcher', () => {
@@ -1037,4 +1158,40 @@ describe('wiring', () => {
     const result = await realIo.runner.run('node', ['-e', 'process.kill(process.pid, "SIGTERM")'], 2000);
     expect(result.failure).toBe('exit');
   });
+});
+
+describe('quitting the live dashboard', () => {
+  const HOLD = 'require("node:fs").writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)';
+  const CHILDREN = ['agy', 'app-server', 'claude', 'kilo', 'kimi'];
+  let scratch = '';
+
+  afterEach(() => {
+    rmSync(scratch, { recursive: true, force: true });
+  });
+
+  function isRunning(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  it.each([['q'], ['\x03']])('stops every in-flight probe child before finishing on %j', async (key) => {
+    scratch = mkdtempSync(join(tmpdir(), 'allowance-live-'));
+    const hold = (name: string) => ['-e', HOLD, join(scratch, name)];
+    const runner: CommandRunner = {
+      run: (command, _args, timeoutMs) => (command === 'codex' ? Promise.resolve(CODEX_CHATGPT) : realIo.runner.run(process.execPath, hold(command), timeoutMs))
+    };
+    const launcher: Launcher = { launch: () => realIo.launcher.launch(process.execPath, hold('kimi')) };
+    const spawner: RpcSpawner = { spawn: () => realIo.spawner.spawn(process.execPath, hold('app-server')) };
+    const dashboard = startDashboard(ioOf(runner, launcher, NO_GROK, spawner), { NO_COLOR: '1' });
+    const pids = () => CHILDREN.map((name) => Number(readFileSync(join(scratch, name), 'utf8')));
+    await vi.waitFor(() => expect(pids().every((pid) => pid > 0)).toBe(true), { timeout: 10000 });
+    expect(pids().every(isRunning)).toBe(true);
+    dashboard.press(key);
+    await dashboard.finished;
+    expect(pids().filter(isRunning)).toEqual([]);
+  }, 20000);
 });

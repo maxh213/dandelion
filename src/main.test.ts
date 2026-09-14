@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -27,6 +28,16 @@ const profileIo: ProbeIo = {
   reader: { homeDir: () => '/nowhere', read: async () => undefined },
   spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
 };
+
+const ENTER_ALTERNATE = '\x1b[?1049h\x1b[?25l';
+
+function procOf(argv: string[], stdinTTY: boolean | undefined, stdoutTTY: boolean | undefined) {
+  const writes: string[] = [];
+  const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), isTTY: stdinTTY });
+  const stdout = { isTTY: stdoutTTY, write: (text: string) => writes.push(text) };
+  const proc = { argv, env: { NO_COLOR: '1' }, stdin: keyboard, stdout, exit: vi.fn() };
+  return { proc, keyboard, output: () => writes.join('') };
+}
 
 function writeFixture(dir: string, name: string, body: string): void {
   const script = join(dir, name);
@@ -101,19 +112,43 @@ describe('main', () => {
   });
 
   it('runIfMain writes to stdout when invoked as the entry file', async () => {
-    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    try {
-      await runIfMain('file:///path/to/main.ts', '/path/to/main.ts', profileIo);
-      expect(write).toHaveBeenCalledWith(expect.stringContaining('$14.15'));
-    } finally {
-      write.mockRestore();
-    }
+    const { proc, output } = procOf(['node', '/path/to/main.ts'], true, undefined);
+    await runIfMain('file:///path/to/main.ts', '/path/to/main.ts', profileIo, proc);
+    expect(output()).toContain('$14.15');
+    expect(output().endsWith('\n')).toBe(true);
+    expect(output()).not.toContain(ENTER_ALTERNATE);
+    expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, string[], boolean | undefined, boolean | undefined]>([
+    ['--once on two terminals', ['node', 'main.ts', '--once'], true, true],
+    ['stdout piped', ['node', 'main.ts'], true, false],
+    ['stdin not a terminal', ['node', 'main.ts'], undefined, true]
+  ])('runIfMain runs once with %s', async (_case, argv, stdinTTY, stdoutTTY) => {
+    const { proc, output, keyboard } = procOf(argv, stdinTTY, stdoutTTY);
+    await runIfMain('file:///path/to/main.ts', '/path/to/main.ts', profileIo, proc);
+    expect(output()).toMatch(/^ALLOWANCE +\d{2}:\d{2}:\d{2}Z\n/);
+    expect(output()).not.toContain('probing…');
+    expect(output()).not.toContain(ENTER_ALTERNATE);
+    expect(keyboard.setRawMode).not.toHaveBeenCalled();
+  });
+
+  it('runIfMain runs the live dashboard on two terminals and exits 0 after q', async () => {
+    const { proc, output, keyboard } = procOf(['node', '/path/to/main.ts'], true, true);
+    const running = runIfMain('file:///path/to/main.ts', '/path/to/main.ts', profileIo, proc);
+    expect(output().startsWith(`${ENTER_ALTERNATE}\x1b[H\x1b[2J`)).toBe(true);
+    expect(keyboard.setRawMode).toHaveBeenCalledWith(true);
+    await vi.waitFor(() => expect(output()).toContain('$14.15'));
+    keyboard.emit('data', 'q');
+    await running;
+    expect(output().endsWith('\x1b[?25h\x1b[?1049l')).toBe(true);
+    expect(proc.exit).toHaveBeenCalledWith(0);
   });
 
   it('runIfMain does nothing for another entry file', async () => {
     const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn(), post: vi.fn() }, reader: { homeDir: vi.fn(), read: vi.fn() }, spawner: { spawn: vi.fn() } };
-    await runIfMain('file:///path/to/main.ts', 'other.ts', io);
-    await runIfMain('file:///path/to/main.ts', undefined, io);
+    await runIfMain('file:///path/to/main.ts', 'other.ts', io, procOf(['node', 'other.ts'], true, true).proc);
+    await runIfMain('file:///path/to/main.ts', undefined, io, procOf(['node'], true, true).proc);
     expect(io.runner.run).not.toHaveBeenCalled();
     expect(io.launcher.launch).not.toHaveBeenCalled();
     expect(io.spawner.spawn).not.toHaveBeenCalled();
@@ -213,5 +248,14 @@ describe('main', () => {
     expect(readme).not.toContain('All six probes run in parallel');
     expect(readme).toMatch(/^- `ALLOWANCE_CURSOR_AUTH_FILE` - .*Defaults to `~\/\.config\/cursor\/auth\.json`/m);
     expect(readme).toMatch(/^- `ALLOWANCE_CURSOR_API_BASE` - .*Defaults to `https:\/\/api2\.cursor\.sh`/m);
+  });
+
+  it('README documents live mode', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const commands = readme.split('## Run Commands')[1]?.split('## ')[0] ?? '';
+    expect(commands).toMatch(/^- `npm start` - .*live dashboard.*`r` refresh.*`q` quit.*`\?` help/m);
+    expect(commands).toMatch(/^- `npm start -- --once` - Run the dashboard once and exit$/m);
+    expect(commands).toContain('runs once when stdout or stdin is not a terminal');
+    expect(readme).toMatch(/^- `ALLOWANCE_REFRESH_SECONDS` - .*Defaults to `300`/m);
   });
 });

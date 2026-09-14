@@ -18,9 +18,12 @@ All seven probes run in parallel. Window gauges are coloured by usage: below 50%
 
 ## Run Commands
 
-- `npm start` - Run the dashboard once and exit
+- `npm start` - Run the live dashboard: panels fill in as each probe settles, a fleet summary line shows how many windows are above 80% and the next reset, and everything is re-probed every `ALLOWANCE_REFRESH_SECONDS`. Keys: `r` refresh, `q` quit (or Ctrl-C), `?` help.
+- `npm start -- --once` - Run the dashboard once and exit
 - `npm test` - Run unit tests
 - `npm run qa` - Run E2E tests
+
+The app runs once when stdout or stdin is not a terminal, as if `--once` were given.
 
 ## Env-var Ledger
 
@@ -29,4 +32,5 @@ All seven probes run in parallel. Window gauges are coloured by usage: below 50%
 - `ALLOWANCE_GROK_HOME` - The grok home directory the `grok` probe reads `logs/unified.jsonl` from. Defaults to `~/.grok` when unset or empty. The app never writes to it.
 - `ALLOWANCE_CURSOR_AUTH_FILE` - The cursor-agent auth file the `cursor` probe reads `accessToken` from. Defaults to `~/.config/cursor/auth.json` when unset or empty. Without a token the panel says to run `cursor-agent login`.
 - `ALLOWANCE_CURSOR_API_BASE` - The base URL of the cursor dashboard API the `cursor` probe POSTs to. Defaults to `https://api2.cursor.sh` when unset or empty.
+- `ALLOWANCE_REFRESH_SECONDS` - Seconds the live dashboard waits after a round of probes settles before it probes again. Defaults to `300`; any value that is not a positive integer uses the default.
 - `NO_COLOR` - If set, disables ANSI colors and uses ASCII fallback rendering.
