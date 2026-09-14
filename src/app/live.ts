@@ -40,11 +40,15 @@ const LEAVE_ALTERNATE = '\x1b[?25h\x1b[?1049l';
 const PENDING_TICK_MS = 100;
 const SETTLED_TICK_MS = 1000;
 const DEFAULT_REFRESH_SECONDS = 300;
-const POSITIVE_INTEGER = /^\d*[1-9]\d*$/;
+const DIGITS_ONLY = /^\d+$/;
+
+function refreshSecondsOf(raw: string): number {
+  const seconds = DIGITS_ONLY.test(raw) ? Number(raw) : 0;
+  return seconds > 0 ? seconds : DEFAULT_REFRESH_SECONDS;
+}
 
 function refreshMsOf(env: Record<string, string | undefined>): number {
-  const raw = String(env['ALLOWANCE_REFRESH_SECONDS']);
-  return (POSITIVE_INTEGER.test(raw) ? Number(raw) : DEFAULT_REFRESH_SECONDS) * 1000;
+  return refreshSecondsOf(String(env['ALLOWANCE_REFRESH_SECONDS'])) * 1000;
 }
 
 function viewOf(session: Session): LiveView {

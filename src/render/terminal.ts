@@ -204,13 +204,14 @@ function settledUsages(slots: LiveSlot[]): ProviderUsage[] {
 }
 
 function dataAge(usages: ProviderUsage[], now: string): string {
-  const oldest = usages.map((usage) => usage.fetchedAt).sort()[0];
+  const oldest = usages.map((usage) => usage.fetchedAt).sort((a, b) => a.localeCompare(b))[0];
   return oldest === undefined ? '' : `data ${formatCountdown(now, oldest)} old · `;
 }
 
 function refreshingBanner(tail: string, noColor: boolean): string {
   const rest = ` · ${tail}`;
-  return styled(`${TITLE}${bannerGap(`${REFRESHING}${rest}`)}`, BOLD, noColor) + dim(REFRESHING, noColor) + styled(rest, BOLD, noColor);
+  const lead = TITLE + bannerGap(REFRESHING + rest);
+  return styled(lead, BOLD, noColor) + dim(REFRESHING, noColor) + styled(rest, BOLD, noColor);
 }
 
 function liveBanner(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string {
@@ -234,7 +235,8 @@ function futureResetMs({ window }: FleetWindow, now: string): number {
 
 function soonestReset(windows: FleetWindow[], now: string): FleetWindow | undefined {
   const future = windows.filter((entry) => Number.isFinite(futureResetMs(entry, now)));
-  return future.sort((a, b) => futureResetMs(a, now) - futureResetMs(b, now))[0];
+  future.sort((a, b) => futureResetMs(a, now) - futureResetMs(b, now));
+  return future[0];
 }
 
 function resetSegment(head: string, next: FleetWindow, now: string): string {
