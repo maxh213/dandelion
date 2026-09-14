@@ -53,7 +53,7 @@ for (const [name, out] of Object.entries(OUTPUTS)) {
 }
 
 function timeCli() {
-  const env = bothNames({ ...process.env, PATH: `${fixture}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${fixture}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
   delete env.NO_COLOR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
   delete env.DANDELION_CURSOR_API_BASE;
@@ -92,13 +92,13 @@ try {
 
   timeCli();
   await runApp(stub, {}, NOW);
-  if (hasWindows) renderDashboard(usages, false, NOW);
+  if (hasWindows) renderDashboard(usages, false, NOW, []);
 
   emit(TARGETS.cli, await repeat(VALUES, () => timeCli()), 'ms');
   emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(stub, {}, NOW)), 'us');
 
   if (hasWindows) {
-    emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW)), 'us');
+    emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW, [])), 'us');
   } else {
     console.log(JSON.stringify({ target: TARGETS.render, absent: true }));
   }

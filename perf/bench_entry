@@ -39,7 +39,7 @@ symlinkSync(main, link);
 const moduleUrl = pathToFileURL(main).href;
 
 function timeCli() {
-  const env = bothNames({ ...process.env, PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: empty, ALLOWANCE_CURSOR_AUTH_FILE: join(empty, 'missing-auth.json') });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: empty, ALLOWANCE_CURSOR_AUTH_FILE: join(empty, 'missing-auth.json') });
   delete env.NO_COLOR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
   delete env.DANDELION_CURSOR_API_BASE;

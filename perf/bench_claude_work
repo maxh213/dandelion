@@ -64,7 +64,7 @@ writeFileSync(envScript, '#!/bin/sh\nprintf "%s\\n" "$CLAUDE_CONFIG_DIR"\n');
 chmodSync(envScript, 0o755);
 
 function timeCli(workConfigDir) {
-  const env = bothNames({ ...process.env, PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir });
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
@@ -136,8 +136,8 @@ try {
   await runApp(stubIo, appEnv, NOW);
   emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(stubIo, appEnv, NOW)), 'us');
 
-  renderDashboard(usages, false, NOW);
-  emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW)), 'us');
+  renderDashboard(usages, false, NOW, []);
+  emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW, [])), 'us');
 
   const domain = await import(pathToFileURL(domainEntry).href);
   if (domain.summariseFleet) {
@@ -149,7 +149,7 @@ try {
 
   const terminal = existsSync(terminalEntry) ? await import(pathToFileURL(terminalEntry).href) : {};
   if (terminal.renderLiveFrame) {
-    const view = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true };
+    const view = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [] };
     terminal.renderLiveFrame(view, false, NOW);
     emit(TARGETS.frame, perCallSync(ITERATIONS, () => terminal.renderLiveFrame(view, false, NOW)), 'us');
   } else {

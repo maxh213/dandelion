@@ -32,7 +32,7 @@ writeFileSync(kilo, '#!/bin/sh\nprintf "Name: Max\\nEmail: a@b.c\\nTeam: Persona
 chmodSync(kilo, 0o755);
 
 function timeCli(pathValue) {
-  const env = bothNames({ ...process.env, PATH: pathValue, ALLOWANCE_GROK_HOME: empty, ALLOWANCE_CURSOR_AUTH_FILE: join(empty, 'missing-auth.json') });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: pathValue, ALLOWANCE_GROK_HOME: empty, ALLOWANCE_CURSOR_AUTH_FILE: join(empty, 'missing-auth.json') });
   delete env.NO_COLOR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
   delete env.DANDELION_CURSOR_API_BASE;
@@ -53,12 +53,12 @@ try {
   timeCli(okPath);
   timeCli(empty);
   await runApp(stub, {}, NOW);
-  renderDashboard([usage], false, NOW);
+  renderDashboard([usage], false, NOW, []);
 
   emit(TARGETS[0], await repeat(VALUES, () => timeCli(okPath)), 'ms');
   emit(TARGETS[1], await repeat(VALUES, () => timeCli(empty)), 'ms');
   emit(TARGETS[2], await perCall(INPROC_ITERATIONS, () => runApp(stub, {}, NOW)), 'us');
-  emit(TARGETS[3], perCallSync(INPROC_ITERATIONS, () => renderDashboard([usage], false, NOW)), 'us');
+  emit(TARGETS[3], perCallSync(INPROC_ITERATIONS, () => renderDashboard([usage], false, NOW, [])), 'us');
 } finally {
   rmSync(fixture, { recursive: true, force: true });
   rmSync(empty, { recursive: true, force: true });

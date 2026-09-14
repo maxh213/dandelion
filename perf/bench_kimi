@@ -71,7 +71,7 @@ function freePort() {
 }
 
 async function timeCli(fixture) {
-  const env = bothNames({ ...process.env, PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_KIMI_PORT: String(await freePort()), ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_KIMI_PORT: String(await freePort()), ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
   delete env.NO_COLOR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
   delete env.DANDELION_CURSOR_API_BASE;
@@ -115,8 +115,8 @@ try {
   } else {
     absent(TARGETS.cliOk, TARGETS.cliNoToken, TARGETS.probe, TARGETS.runApp);
   }
-  renderDashboard(usages, false, NOW);
-  emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW)), 'us');
+  renderDashboard(usages, false, NOW, []);
+  emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW, [])), 'us');
 } finally {
   rmSync(okFixture, { recursive: true, force: true });
   rmSync(noTokenFixture, { recursive: true, force: true });

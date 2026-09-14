@@ -71,7 +71,7 @@ await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 async function timeCli(auth) {
-  const env = bothNames({ ...process.env, PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: auth, ALLOWANCE_CURSOR_API_BASE: base });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: auth, ALLOWANCE_CURSOR_API_BASE: base });
   delete env.NO_COLOR;
   const start = process.hrtime.bigint();
   await run(process.execPath, [main], { cwd: tree, env });
@@ -142,8 +142,8 @@ try {
   await runApp(stubIo, env, NOW);
   emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(stubIo, env, NOW)), 'us');
 
-  renderDashboard(usages, false, NOW);
-  emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW)), 'us');
+  renderDashboard(usages, false, NOW, []);
+  emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW, [])), 'us');
 } finally {
   server.close();
   server.closeAllConnections();

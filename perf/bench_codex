@@ -77,7 +77,7 @@ chmodSync(codexFile, 0o755);
 process.env.PATH = `${bin}:${process.env.PATH}`;
 
 function timeCli(mode) {
-  const env = bothNames({ ...process.env, PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, CODEX_BENCH_MODE: mode, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, CODEX_BENCH_MODE: mode, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
   delete env.NO_COLOR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
   delete env.DANDELION_CURSOR_API_BASE;
@@ -152,10 +152,10 @@ try {
     emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(chatIo, {}, NOW)), 'us');
   }
 
-  renderDashboard(apiKeyUsages, false, NOW);
-  renderDashboard(windowUsages, false, NOW);
-  emit(TARGETS.renderApiKey, perCallSync(ITERATIONS, () => renderDashboard(apiKeyUsages, false, NOW)), 'us');
-  emit(TARGETS.renderChatGpt, perCallSync(ITERATIONS, () => renderDashboard(windowUsages, false, NOW)), 'us');
+  renderDashboard(apiKeyUsages, false, NOW, []);
+  renderDashboard(windowUsages, false, NOW, []);
+  emit(TARGETS.renderApiKey, perCallSync(ITERATIONS, () => renderDashboard(apiKeyUsages, false, NOW, [])), 'us');
+  emit(TARGETS.renderChatGpt, perCallSync(ITERATIONS, () => renderDashboard(windowUsages, false, NOW, [])), 'us');
 } finally {
   rmSync(fixture, { recursive: true, force: true });
 }

@@ -59,7 +59,7 @@ writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
 for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
 
 function timeCli() {
-  const env = bothNames({ ...process.env, PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
@@ -104,21 +104,21 @@ function expect(actual, wanted, what) {
 }
 
 try {
-  expect(domain.routeLine(evaporating, NOW, MIDNIGHT), 'claude-opus-5 max', 'evaporation');
-  expect(domain.routeLine(headroom, NOW, MIDNIGHT), 'kimi-code/kimi-for-coding-highspeed', 'headroom');
-  expect(domain.routeLine(nothing, NOW, MIDNIGHT), 'none', 'nothing');
+  expect(domain.routeLine(evaporating, NOW, MIDNIGHT, []), 'claude-opus-5 max', 'evaporation');
+  expect(domain.routeLine(headroom, NOW, MIDNIGHT, []), 'kimi-code/kimi-for-coding-highspeed', 'headroom');
+  expect(domain.routeLine(nothing, NOW, MIDNIGHT, []), 'none', 'nothing');
   expect(domain.nextLocalMidnight('UTC', NOW), MIDNIGHT, 'utc midnight');
   expect(domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z'), '2026-10-25T23:00:00.000Z', 'berlin midnight');
-  expect(render.renderRoute(evaporating, NOW, 'Europe/London').routed, true, 'renderRoute');
+  expect(render.renderRoute(evaporating, NOW, 'Europe/London', []).routed, true, 'renderRoute');
   expect((await app.runRoute(stubIo, appEnv, NOW, 'Europe/London')).routed, true, 'runRoute');
 
   timeCli();
   emit(TARGETS.cliRoute, await repeat(VALUES, timeCli), 'ms');
   emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, NOW, 'Europe/London')), 'us');
-  emit(TARGETS.renderRoute, perCallSync(ITERATIONS, () => render.renderRoute(evaporating, NOW, 'Europe/London')), 'us');
-  emit(TARGETS.routeEvaporation, perCallSync(ITERATIONS, () => domain.routeLine(evaporating, NOW, MIDNIGHT)), 'us');
-  emit(TARGETS.routeHeadroom, perCallSync(ITERATIONS, () => domain.routeLine(headroom, NOW, MIDNIGHT)), 'us');
-  emit(TARGETS.routeNone, perCallSync(ITERATIONS, () => domain.routeLine(nothing, NOW, MIDNIGHT)), 'us');
+  emit(TARGETS.renderRoute, perCallSync(ITERATIONS, () => render.renderRoute(evaporating, NOW, 'Europe/London', [])), 'us');
+  emit(TARGETS.routeEvaporation, perCallSync(ITERATIONS, () => domain.routeLine(evaporating, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeHeadroom, perCallSync(ITERATIONS, () => domain.routeLine(headroom, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeNone, perCallSync(ITERATIONS, () => domain.routeLine(nothing, NOW, MIDNIGHT, [])), 'us');
   emit(TARGETS.midnightUtc, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('UTC', NOW)), 'us');
   emit(TARGETS.midnightBerlinDst, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z')), 'us');
 } finally {

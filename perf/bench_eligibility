@@ -1,0 +1,172 @@
+#!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { VALUES, absent, bothNames, emit, perCall, perCallSync, repeat } from './timing.mjs';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'terminal.ts');
+const domainEntry = join(tree, 'src', 'domain', 'index.ts');
+const NOW = '2026-09-14T11:00:00.000Z';
+const MIDNIGHT = '2026-09-15T00:00:00.000Z';
+const ITERATIONS = 2000;
+const SESSIONS = VALUES;
+
+const TARGETS = {
+  cliRoute: 'cli route eight providers claude ineligible state file',
+  runRoute: 'runRoute eight providers claude ineligible state file (in-process, per call)',
+  runApp: 'runApp eight providers claude ineligible state file (in-process, per call)',
+  routeLine: 'routeLine eight providers evaporation claude ineligible (in-process, per call)',
+  open: 'openEligibility eight-key state then ineligible (in-process, per call)',
+  toggle: 'Eligibility toggle in-memory state file (in-process, per call)',
+  dashboard: 'renderDashboard eight providers two ineligible tags (in-process, per call)',
+  frame: 'renderLiveFrame eight settled selected ineligible flash (in-process, per call)',
+  live: 'runLive eight providers j space space real state file (in-process, per session)'
+};
+
+const domain = existsSync(domainEntry) ? await import(pathToFileURL(domainEntry).href) : {};
+
+if (typeof domain.openEligibility !== 'function') {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const app = await import(pathToFileURL(appEntry).href);
+const render = await import(pathToFileURL(renderEntry).href);
+
+const PERSONAL_OUT = [
+  'Current session: 3% used · resets Sep 14, 7:40pm (Europe/London)',
+  'Current week (all models): 86% used · resets Sep 14, 11pm (Europe/London)',
+  'Current week (Fable): 100% used · resets Sep 14, 11pm (Europe/London)'
+].join('\n') + '\n';
+const WORK_OUT = [
+  'Current session: 0% used · resets Sep 14, 11:10pm (Europe/London)',
+  'Current week (all models): 12% used · resets Sep 16, 6pm (Europe/London)',
+  'Current week (Fable): 23% used · resets Sep 16, 6pm (Europe/London)'
+].join('\n') + '\n';
+const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z\n';
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-eligibility-'));
+const bin = join(fixture, 'bin');
+const workDir = join(fixture, '.claude-work');
+const stateFile = join(fixture, 'state', 'eligibility.json');
+const liveStateFile = join(fixture, 'live-state', 'eligibility.json');
+const STATE_TEXT = `${JSON.stringify({ claude: false, 'claude-work': true, agy: true, kimi: true, grok: true, codex: true, cursor: true, kilo: true }, null, 2)}\n`;
+mkdirSync(bin);
+mkdirSync(workDir);
+mkdirSync(join(fixture, 'state'));
+writeFileSync(stateFile, STATE_TEXT);
+writeFileSync(join(bin, 'claude'), `#!/bin/sh\nif [ -n "$CLAUDE_CONFIG_DIR" ]; then\ncat <<'OUT'\n${WORK_OUT}OUT\nelse\ncat <<'OUT'\n${PERSONAL_OUT}OUT\nfi\n`);
+writeFileSync(join(bin, 'agy'), `#!/bin/sh\ncat <<'OUT'\n${AGY_OUT}OUT\n`);
+writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
+for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
+
+function timeCli() {
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: stateFile, PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
+  delete env.NO_COLOR;
+  delete env.CLAUDE_CONFIG_DIR;
+  delete env.XDG_STATE_HOME;
+  delete env.ALLOWANCE_CURSOR_API_BASE;
+  delete env.DANDELION_CURSOR_API_BASE;
+  const start = process.hrtime.bigint();
+  const result = spawnSync(process.execPath, [main, 'route'], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
+  if (result.status !== 0 || result.stdout.split('\n').length !== 2) throw new Error(`route printed no single line (exit ${result.status}):\n${result.stdout}${result.stderr}`);
+  if (result.stdout.startsWith('claude-opus')) throw new Error(`route picked the ineligible claude: ${result.stdout}`);
+  return elapsed;
+}
+
+const runner = { run: async (command, _args, _timeout, env) => ({ stdout: command === 'claude' ? (env?.CLAUDE_CONFIG_DIR ? WORK_OUT : PERSONAL_OUT) : command === 'agy' ? AGY_OUT : command === 'kilo' ? KILO_OUT : '', stderr: '' }) };
+const stubIo = {
+  ...runner,
+  runner,
+  launcher: { launch: async () => undefined },
+  spawner: { spawn: () => undefined },
+  fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
+  reader: { homeDir: () => fixture, read: async () => undefined, isDirectory: async (path) => path === workDir }
+};
+const baseEnv = { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') };
+const appEnv = bothNames({ ...baseEnv, ALLOWANCE_STATE_FILE: stateFile });
+const liveEnv = bothNames({ ...baseEnv, ALLOWANCE_STATE_FILE: liveStateFile });
+
+const win = (label, kind, usedPct, resetsAt) => ({ label, kind, usedPct, resetsAt });
+const fleet = [
+  { id: 'claude', displayName: 'claude', planLabel: 'claude · personal', fetchedAt: NOW, status: 'ok', windows: [win('session', 'rolling', 3, '2026-09-14T18:40:00.000Z'), win('weekly', 'weekly', 86, '2026-09-14T22:00:00.000Z'), win('weekly Fable', 'weekly', 100, '2026-09-14T22:00:00.000Z')] },
+  { id: 'claude-work', displayName: 'claude-work', planLabel: 'claude · work', fetchedAt: NOW, status: 'ok', windows: [win('session', 'rolling', 0, '2026-09-14T22:10:00.000Z'), win('weekly', 'weekly', 12, '2026-09-16T17:00:00.000Z'), win('weekly Fable', 'weekly', 23, '2026-09-16T17:00:00.000Z')] },
+  { id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok', windows: [win('Claude and GPT models · Five Hour Limit', 'rolling', 40, '2026-09-14T15:59:00Z'), win('Gemini Models · Weekly Limit', 'weekly', 0, '2026-09-20T17:13:45Z'), win('Gemini Models · Daily Limit', 'other', 5, '2026-09-15T00:00:00Z')] },
+  { id: 'kimi', displayName: 'kimi', planLabel: 'kimi', fetchedAt: NOW, status: 'ok', windows: [win('weekly', 'weekly', 20, '2026-09-18T00:00:00Z'), win('5h', 'rolling', 10, '2026-09-14T14:00:00Z')] },
+  { id: 'grok', displayName: 'grok', planLabel: 'grok', fetchedAt: '2026-09-12T10:00:00.000Z', status: 'ok', windows: [win('credits', 'weekly', 55, '2026-10-01T00:00:00Z')] },
+  { id: 'codex', displayName: 'codex', planLabel: 'codex', fetchedAt: NOW, status: 'unavailable', windows: [], reason: 'codex CLI not found' },
+  { id: 'cursor', displayName: 'cursor', planLabel: 'Ultra · $200/mo', fetchedAt: NOW, status: 'ok', windows: [win('total', 'weekly', 31, '2026-09-30T16:45:06.000Z'), win('auto', 'weekly', 32, '2026-09-30T16:45:06.000Z'), win('api', 'weekly', 16, '2026-09-30T16:45:06.000Z')] },
+  { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
+];
+const INELIGIBLE = ['claude', 'codex'];
+const frameView = { slots: fleet.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: INELIGIBLE, selected: 7, flash: { index: 7, message: 'not routable (no usage windows)' } };
+
+const memoryFile = { read: () => STATE_TEXT, replace: () => true };
+const held = domain.openEligibility({}, fixture, memoryFile);
+
+function expect(actual, wanted, what) {
+  if (actual !== wanted) throw new Error(`${what}: got ${JSON.stringify(actual)}, wanted ${JSON.stringify(wanted)}`);
+}
+
+function keyboardStub() {
+  const listeners = [];
+  return {
+    setRawMode: () => undefined,
+    setEncoding: () => undefined,
+    on: (_event, listener) => listeners.push(listener),
+    pause: () => undefined,
+    press: (key) => listeners.forEach((listener) => listener(key))
+  };
+}
+
+const turn = () => new Promise((resolve) => setImmediate(resolve));
+
+async function liveSession() {
+  const keyboard = keyboardStub();
+  let last = '';
+  const screen = { write: (text) => { last = text; } };
+  const ended = app.runLive(stubIo, liveEnv, keyboard, screen);
+  const deadline = Date.now() + 10000;
+  while (!(last.includes('api balance') && !last.includes('probing…'))) {
+    if (Date.now() > deadline) throw new Error(`live never settled:\n${last}`);
+    await turn();
+  }
+  keyboard.press('j');
+  keyboard.press(' ');
+  if (!last.includes('routing off')) throw new Error(`space drew no routing off tag:\n${last}`);
+  keyboard.press(' ');
+  if (last.includes('routing off')) throw new Error(`second space kept the routing off tag:\n${last}`);
+  keyboard.press('q');
+  await ended;
+}
+
+try {
+  expect(domain.routeLine(fleet, NOW, MIDNIGHT, ['claude']), 'kimi-code/kimi-for-coding-highspeed', 'routeLine without claude');
+  expect(held.ineligible().join(), 'claude', 'ineligible');
+  expect((await app.runRoute(stubIo, appEnv, NOW, 'Europe/London')).line.startsWith('claude-opus'), false, 'runRoute skips claude');
+  expect((await app.runApp(stubIo, appEnv, NOW)).includes('routing off'), true, 'runApp tags claude');
+  expect(render.renderDashboard(fleet, false, NOW, INELIGIBLE).split('routing off').length, 3, 'dashboard tags');
+  expect(render.renderLiveFrame(frameView, false, NOW).includes('not routable'), true, 'frame flash');
+  await liveSession();
+  expect(readFileSync(liveStateFile, 'utf8'), `${JSON.stringify({ claude: true }, null, 2)}\n`, 'live state file');
+
+  timeCli();
+  emit(TARGETS.cliRoute, await repeat(VALUES, timeCli), 'ms');
+  emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, NOW, 'Europe/London')), 'us');
+  emit(TARGETS.runApp, await perCall(ITERATIONS, () => app.runApp(stubIo, appEnv, NOW)), 'us');
+  emit(TARGETS.routeLine, perCallSync(ITERATIONS, () => domain.routeLine(fleet, NOW, MIDNIGHT, ['claude'])), 'us');
+  emit(TARGETS.open, perCallSync(ITERATIONS, () => domain.openEligibility({}, fixture, memoryFile).ineligible()), 'us');
+  emit(TARGETS.toggle, perCallSync(ITERATIONS, () => held.toggle('kimi')), 'us');
+  emit(TARGETS.dashboard, perCallSync(ITERATIONS, () => render.renderDashboard(fleet, false, NOW, INELIGIBLE)), 'us');
+  emit(TARGETS.frame, perCallSync(ITERATIONS, () => render.renderLiveFrame(frameView, false, NOW)), 'us');
+  emit(TARGETS.live, await perCall(SESSIONS, liveSession), 'us');
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}
