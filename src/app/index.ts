@@ -29,6 +29,7 @@ type Stop = () => Promise<void>;
 
 const KILL_GRACE_MS = 5000;
 const liveStops = new Set<Stop>();
+const registry = { closed: false };
 
 function tracked(stop: Stop): Stop {
   const untracked: Stop = () => {
@@ -36,10 +37,12 @@ function tracked(stop: Stop): Stop {
     return stop();
   };
   liveStops.add(untracked);
+  if (registry.closed) void untracked();
   return untracked;
 }
 
 async function stopChildren(): Promise<void> {
+  registry.closed = true;
   await Promise.all([...liveStops].map((stop) => stop()));
 }
 
@@ -124,8 +127,9 @@ const realLauncher: Launcher = {
   launch(command, args) {
     const logDir = mkdtempSync(join(tmpdir(), 'allowance-kimi-'));
     const child = spawnLoggingTo(logDir, command, args);
+    const launched = launchedProcess(child, logDir);
     return new Promise((resolve) => {
-      child.once('spawn', () => resolve(launchedProcess(child, logDir)));
+      child.once('spawn', () => resolve(launched));
       child.on('error', () => {
         removeLogDir(logDir);
         resolve(undefined);
@@ -182,5 +186,6 @@ export async function runApp(io: ProbeIo, env: Record<string, string | undefined
 }
 
 export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {
+  registry.closed = false;
   return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren });
 }

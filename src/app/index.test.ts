@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, s
 import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { runApp, runLive, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
@@ -1048,6 +1048,17 @@ describe('real fetcher', () => {
 });
 
 describe('wiring', () => {
+  const session: { dashboard?: ReturnType<typeof startDashboard> } = {};
+
+  beforeAll(() => {
+    session.dashboard = startDashboard(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), { NO_COLOR: '1' });
+  });
+
+  afterAll(async () => {
+    session.dashboard?.press('q');
+    await session.dashboard?.finished;
+  });
+
   it('displays kilo balance with default reference', async () => {
     const output = await runApp(profileRunner(PROFILE), {}, NOW);
     expect(output).toContain('ALLOWANCE');
@@ -1164,9 +1175,23 @@ describe('wiring', () => {
 describe('quitting the live dashboard', () => {
   const HOLD = 'require("node:fs").writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)';
   const CHILDREN = ['agy', 'app-server', 'claude', 'kilo', 'kimi'];
+  const MISSING_RUN: CommandRunnerResult = { stdout: '', stderr: '', failure: 'missing' };
   let scratch = '';
 
+  function cmdlineOf(pid: string): string {
+    try {
+      return readFileSync(join('/proc', pid, 'cmdline'), 'utf8');
+    } catch {
+      return '';
+    }
+  }
+
+  function runningWith(marker: string): string[] {
+    return readdirSync('/proc').filter((pid) => cmdlineOf(pid).includes(marker));
+  }
+
   afterEach(() => {
+    if (scratch !== '') runningWith(scratch).forEach((pid) => process.kill(Number(pid), 'SIGKILL'));
     rmSync(scratch, { recursive: true, force: true });
   });
 
@@ -1205,22 +1230,48 @@ describe('quitting the live dashboard', () => {
     expect(pids().filter(isRunning)).toEqual([]);
   }, 20000);
 
-  it('does not signal a child again on quit once it has settled or been stopped', async () => {
-    const quit = async () => {
-      const dashboard = startDashboard(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), { NO_COLOR: '1' });
-      dashboard.press('q');
-      await dashboard.finished;
-    };
-    await quit();
+  it('does not signal a child again on quit once it has settled, been stopped or failed to launch', async () => {
+    const dashboard = startDashboard(mockRunner(MISSING_RUN), { NO_COLOR: '1' });
     const kill = vi.spyOn(ChildProcess.prototype, 'kill');
     try {
       await realIo.runner.run(process.execPath, ['-e', ''], 5000);
       await realIo.spawner.spawn(process.execPath, ['-e', '']).stop();
+      expect(await realIo.launcher.launch('thiscommanddoesnotexist', [])).toBeUndefined();
       expect(kill).toHaveBeenCalledTimes(1);
-      await quit();
+      dashboard.press('q');
+      await dashboard.finished;
       expect(kill).toHaveBeenCalledTimes(1);
     } finally {
       kill.mockRestore();
     }
+  });
+
+  it('stops a kimi child when quit arrives in the same tick as its launch', async () => {
+    scratch = mkdtempSync(join(tmpdir(), 'allowance-live-'));
+    const holder: { dashboard?: ReturnType<typeof startDashboard> } = {};
+    const launcher: Launcher = {
+      launch: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const launching = realIo.launcher.launch(process.execPath, ['-e', HOLD, join(scratch, 'kimi')]);
+        expect(runningWith(scratch)).toHaveLength(1);
+        holder.dashboard?.press('q');
+        return launching;
+      }
+    };
+    holder.dashboard = startDashboard(ioOf({ run: async () => MISSING_RUN }, launcher), { NO_COLOR: '1' });
+    await holder.dashboard.finished;
+    expect(runningWith(scratch)).toEqual([]);
+  }, 20000);
+
+  it('stops a child that starts after quit has finished, until the next session opens', async () => {
+    const brief = ['-e', 'setTimeout(() => {}, 300)'];
+    const closed = startDashboard(mockRunner(MISSING_RUN), { NO_COLOR: '1' });
+    closed.press('q');
+    await closed.finished;
+    expect((await realIo.runner.run(process.execPath, brief, 5000)).failure).toBeDefined();
+    const open = startDashboard(mockRunner(MISSING_RUN), { NO_COLOR: '1' });
+    expect((await realIo.runner.run(process.execPath, brief, 5000)).failure).toBeUndefined();
+    open.press('q');
+    await open.finished;
   });
 });
