@@ -26,4 +26,5 @@
 - In every older e2e, set `ALLOWANCE_CLAUDE_WORK_CONFIG_DIR` to an existing empty temp dir. If it is missing, the 75-cell reason breaks the 72-column checks in 001, 002 and 005. The work panel then shows the fixture's personal transcript, which those e2es ignore.
 
 ## Notes
+- Outside my role, to get the gate hook to pass: `quitting the live dashboard > does not signal a child again…` was flaky under the coverage run (about 1 run in 4). Cause: after quit, `readRateLimits` (`src/probes/codex.ts:127`) calls `stop()` again in its `finally`, once the dashboard has finished, and sends a second SIGTERM. That call leaked into the next test's `kill` spy. Fix: in `src/app/index.ts`, rpcChild's `stop` skips the signal once the child has exited. A test pins it: "does not signal an app-server child again once it has exited".
 - I did not change gate configuration or the older features. The 002 to 006 feature files still say `claude code · claude`, and 008 supersedes them for that caption.

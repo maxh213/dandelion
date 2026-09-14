@@ -683,6 +683,19 @@ describe('real codex app-server spawner', () => {
     expect(await lines.next()).toMatchObject({ done: true });
   });
 
+  it('does not signal an app-server child again once it has exited', async () => {
+    const child = spawnNode('console.log("ready"); setInterval(() => {}, 1000)');
+    await child.lines[Symbol.asyncIterator]().next();
+    const kill = vi.spyOn(ChildProcess.prototype, 'kill');
+    try {
+      await child.stop();
+      await child.stop();
+      expect(kill).toHaveBeenCalledTimes(1);
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
   it('kills an app-server child that ignores SIGTERM after 5 seconds', async () => {
     const child = spawnNode('process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000)');
     const lines = child.lines[Symbol.asyncIterator]();

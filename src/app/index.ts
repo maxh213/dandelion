@@ -146,7 +146,9 @@ function rpcChild(child: ChildProcessByStdio<Writable, Readable, null>): RpcChil
   return {
     lines: { [Symbol.asyncIterator]: () => lines },
     send: (message) => input.write(`${message}\n`),
-    stop: tracked(() => signalUntil(child, exited))
+    stop: tracked(async () => {
+      if (!hasExited(child)) await signalUntil(child, exited);
+    })
   };
 }
 
