@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NODE_DIR = dirname(process.execPath);
 const OUTER_TIMEOUT_MS = 60000;
-const PREFIX = 'allowance-qa-005-';
+const PREFIX = 'dandelion-qa-005-';
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const KIMI_FIXTURE = '#!/bin/sh\nexit 0\n';
@@ -68,7 +68,7 @@ async function fixtureDir() {
 }
 
 async function nodeBin() {
-  const dir = await tempDir('allowance-nodebin-');
+  const dir = await tempDir('dandelion-nodebin-');
   await symlink(process.execPath, join(dir, 'node'));
   await symlink('/bin/sh', join(dir, 'sh'));
   return dir;
@@ -77,8 +77,8 @@ async function nodeBin() {
 let workConfigDir = '';
 
 function startApp(pathDir, bin, grokHome, extraEnv) {
-  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, CODEX_FIXTURE_MODE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${pathDir}:${bin}`, ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
+  const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CODEX_FIXTURE_MODE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
+  const env = { ...inherited, PATH: `${pathDir}:${bin}`, DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
   const started = performance.now();
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   const elapsedMs = performance.now() - started;
