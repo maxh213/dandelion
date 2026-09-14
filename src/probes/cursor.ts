@@ -101,9 +101,12 @@ function labelOf(name: unknown, price: unknown): string {
   return isFilled(price) ? `${name} · ${price}` : name;
 }
 
+function planInfoOf(outcome: PostOutcome): unknown {
+  return 'body' in outcome && isSuccess(outcome.status) ? fieldOf(parseJson(outcome.body), 'planInfo') : undefined;
+}
+
 async function planLabelOf(pending: Promise<PostOutcome>): Promise<string> {
-  const outcome = await pending;
-  const info = 'body' in outcome && isSuccess(outcome.status) ? fieldOf(parseJson(outcome.body), 'planInfo') : undefined;
+  const info = planInfoOf(await pending);
   return labelOf(fieldOf(info, 'planName'), fieldOf(info, 'price'));
 }
 
