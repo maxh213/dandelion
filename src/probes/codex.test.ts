@@ -94,8 +94,8 @@ describe('probeCodex login', () => {
     expect(usage).toStrictEqual({
       ...IDENTITY,
       windows: [
-        { label: '5h', usedPct: 42, resetsAt: '2026-09-13T12:30:00.000Z' },
-        { label: 'weekly', usedPct: 86, resetsAt: '2026-09-16T10:00:00.000Z' }
+        { label: '5h', kind: 'other', usedPct: 42, resetsAt: '2026-09-13T12:30:00.000Z' },
+        { label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: '2026-09-16T10:00:00.000Z' }
       ],
       status: 'ok'
     });
@@ -130,17 +130,17 @@ describe('probeCodex login', () => {
 
 describe('probeCodex rate limits', () => {
   it.each<[unknown, unknown[]]>([
-    [{ primary: { usedPercent: 33.5, windowDurationMins: 300 }, secondary: null }, [{ label: '5h', usedPct: 34 }]],
-    [{ primary: null, secondary: { usedPercent: 130, windowDurationMins: 10080, resetsAt: 'soon' } }, [{ label: 'weekly', usedPct: 130 }]],
-    [{ primary: { usedPercent: 0, windowDurationMins: 1440, resetsAt: null } }, [{ label: '1d', usedPct: 0 }]],
-    [{ primary: { usedPercent: 10, windowDurationMins: 90 }, secondary: { usedPercent: 'x' } }, [{ label: '90m', usedPct: 10 }]],
-    [{ primary: { usedPercent: 10 }, secondary: { usedPercent: -1, windowDurationMins: 300 } }, [{ label: 'primary', usedPct: 10 }]],
-    [{ secondary: { usedPercent: 5, windowDurationMins: 0 } }, [{ label: 'secondary', usedPct: 5 }]],
-    [{ primary: { usedPercent: 5, windowDurationMins: 2.5 }, secondary: { usedPercent: 6, windowDurationMins: '300' } }, [{ label: 'primary', usedPct: 5 }, { label: 'secondary', usedPct: 6 }]],
-    [{ primary: { usedPercent: 5, windowDurationMins: 60 }, secondary: { usedPercent: 6, windowDurationMins: 20160 } }, [{ label: '1h', usedPct: 5 }, { label: '14d', usedPct: 6 }]],
-    [{ primary: { usedPercent: 5, windowDurationMins: -60 }, secondary: { usedPercent: Infinity } }, [{ label: 'primary', usedPct: 5 }]],
-    [{ primary: { usedPercent: 5, windowDurationMins: 1, resetsAt: 1e20 } }, [{ label: '1m', usedPct: 5 }]],
-    [{ primary: { usedPercent: 5, resetsAt: 0 } }, [{ label: 'primary', usedPct: 5, resetsAt: '1970-01-01T00:00:00.000Z' }]]
+    [{ primary: { usedPercent: 33.5, windowDurationMins: 300 }, secondary: null }, [{ label: '5h', kind: 'other', usedPct: 34 }]],
+    [{ primary: null, secondary: { usedPercent: 130, windowDurationMins: 10080, resetsAt: 'soon' } }, [{ label: 'weekly', kind: 'weekly', usedPct: 130 }]],
+    [{ primary: { usedPercent: 0, windowDurationMins: 1440, resetsAt: null } }, [{ label: '1d', kind: 'other', usedPct: 0 }]],
+    [{ primary: { usedPercent: 10, windowDurationMins: 90 }, secondary: { usedPercent: 'x' } }, [{ label: '90m', kind: 'other', usedPct: 10 }]],
+    [{ primary: { usedPercent: 10 }, secondary: { usedPercent: -1, windowDurationMins: 300 } }, [{ label: 'primary', kind: 'other', usedPct: 10 }]],
+    [{ secondary: { usedPercent: 5, windowDurationMins: 0 } }, [{ label: 'secondary', kind: 'other', usedPct: 5 }]],
+    [{ primary: { usedPercent: 5, windowDurationMins: 2.5 }, secondary: { usedPercent: 6, windowDurationMins: '300' } }, [{ label: 'primary', kind: 'other', usedPct: 5 }, { label: 'secondary', kind: 'other', usedPct: 6 }]],
+    [{ primary: { usedPercent: 5, windowDurationMins: 60 }, secondary: { usedPercent: 6, windowDurationMins: 20160 } }, [{ label: '1h', kind: 'other', usedPct: 5 }, { label: '14d', kind: 'other', usedPct: 6 }]],
+    [{ primary: { usedPercent: 5, windowDurationMins: -60 }, secondary: { usedPercent: Infinity } }, [{ label: 'primary', kind: 'other', usedPct: 5 }]],
+    [{ primary: { usedPercent: 5, windowDurationMins: 1, resetsAt: 1e20 } }, [{ label: '1m', kind: 'other', usedPct: 5 }]],
+    [{ primary: { usedPercent: 5, resetsAt: 0 } }, [{ label: 'primary', kind: 'other', usedPct: 5, resetsAt: '1970-01-01T00:00:00.000Z' }]]
   ])('maps rate limits %j', async (limits, windows) => {
     const { io } = ioWith(CHATGPT, fakeChild(listOf(answerLines(limits))));
     expect(await probeCodex(io, NOW)).toStrictEqual({ ...IDENTITY, windows, status: 'ok' });

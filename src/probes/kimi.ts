@@ -87,13 +87,14 @@ function weeklyWindow(summary: unknown): UsageWindow {
   const usedPct = percentOf(summary);
   if (usedPct === undefined) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
   const resetsAt = validInstant(fieldOf(summary, 'reset_at'));
-  return resetsAt === undefined ? { label: 'weekly', usedPct } : { label: 'weekly', usedPct, resetsAt };
+  const window: UsageWindow = { label: 'weekly', kind: 'weekly', usedPct };
+  return resetsAt === undefined ? window : { ...window, resetsAt };
 }
 
 function hourWindow(entry: unknown): UsageWindow[] {
   const hourly = fieldOf(fieldOf(entry, 'window'), 'unit') === 'hour';
   const usedPct = hourly ? percentOf(entry) : undefined;
-  return usedPct === undefined ? [] : [{ label: '5h', usedPct }];
+  return usedPct === undefined ? [] : [{ label: '5h', kind: 'rolling', usedPct }];
 }
 
 function hourWindows(limits: unknown): UsageWindow[] {

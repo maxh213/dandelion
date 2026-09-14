@@ -18,9 +18,9 @@ const OLD_ENV = { ALLOWANCE_CURSOR_AUTH_FILE: '/auth.json', ALLOWANCE_CURSOR_API
 const NO_AUTH = 'no cursor auth — run cursor-agent login';
 const PARSE_FAILURE = 'Could not parse usage from response';
 const WINDOWS = [
-  { label: 'total', usedPct: 31, resetsAt: RESET },
-  { label: 'auto', usedPct: 32, resetsAt: RESET },
-  { label: 'api', usedPct: 16, resetsAt: RESET }
+  { label: 'total', kind: 'weekly', usedPct: 31, resetsAt: RESET },
+  { label: 'auto', kind: 'weekly', usedPct: 32, resetsAt: RESET },
+  { label: 'api', kind: 'weekly', usedPct: 16, resetsAt: RESET }
 ];
 
 type Outcome = FetchOutcome;
@@ -108,13 +108,13 @@ describe('probeCursor', () => {
 
   it.each<[string, unknown, unknown[]]>([
     ['no auto window', { billingCycleEnd: '1790786706000', planUsage: { totalPercentUsed: 31.09, apiPercentUsed: 15.81 } }, [WINDOWS[0], WINDOWS[2]]],
-    ['a zero, a string and a negative', { planUsage: { totalPercentUsed: 0, autoPercentUsed: '32', apiPercentUsed: -1 } }, [{ label: 'total', usedPct: 0 }]],
-    ['a numeric cycle end and an uncapped percent', { billingCycleEnd: 1790786706000, planUsage: { totalPercentUsed: 130 } }, [{ label: 'total', usedPct: 130 }]],
-    ['a word cycle end and a half percent', { billingCycleEnd: 'soon', planUsage: { autoPercentUsed: 32.5 } }, [{ label: 'auto', usedPct: 33 }]],
-    ['an out-of-range cycle end', { billingCycleEnd: '99999999999999999999', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', usedPct: 1 }]],
-    ['an exponent cycle end', { billingCycleEnd: '1e12', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', usedPct: 1 }]],
-    ['a space-led cycle end', { billingCycleEnd: ' 1790786706000', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', usedPct: 1 }]],
-    ['a signed cycle end', { billingCycleEnd: '-1790786706000', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', usedPct: 1 }]]
+    ['a zero, a string and a negative', { planUsage: { totalPercentUsed: 0, autoPercentUsed: '32', apiPercentUsed: -1 } }, [{ label: 'total', kind: 'weekly', usedPct: 0 }]],
+    ['a numeric cycle end and an uncapped percent', { billingCycleEnd: 1790786706000, planUsage: { totalPercentUsed: 130 } }, [{ label: 'total', kind: 'weekly', usedPct: 130 }]],
+    ['a word cycle end and a half percent', { billingCycleEnd: 'soon', planUsage: { autoPercentUsed: 32.5 } }, [{ label: 'auto', kind: 'weekly', usedPct: 33 }]],
+    ['an out-of-range cycle end', { billingCycleEnd: '99999999999999999999', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', kind: 'weekly', usedPct: 1 }]],
+    ['an exponent cycle end', { billingCycleEnd: '1e12', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', kind: 'weekly', usedPct: 1 }]],
+    ['a space-led cycle end', { billingCycleEnd: ' 1790786706000', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', kind: 'weekly', usedPct: 1 }]],
+    ['a signed cycle end', { billingCycleEnd: '-1790786706000', planUsage: { apiPercentUsed: 1 } }, [{ label: 'api', kind: 'weekly', usedPct: 1 }]]
   ])('reads a usage body with %s', async (_case, body, windows) => {
     const usage = await probeCursor(withAuth(answer(body)).io, ENV, NOW);
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'Ultra · $200/mo' });

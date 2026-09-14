@@ -9,7 +9,7 @@ const probe: CliProbe = {
   args: ['-p', '/usage'],
   timeoutMs: 60000,
   reads: 'usage',
-  read: (stdout) => ({ windows: stdout === '' ? [] : [{ label: stdout, usedPct: 10, resetsAt: undefined }] })
+  read: (stdout) => ({ windows: stdout === '' ? [] : [{ label: stdout, kind: 'weekly' as const, usedPct: 10, resetsAt: undefined }] })
 };
 
 function ioWith(result: CommandRunnerResult): CliIo {
@@ -69,15 +69,15 @@ describe('probeCli', () => {
       displayName: 'tool',
       planLabel: 'tool plan',
       fetchedAt: 'now',
-      windows: [{ label: 'weekly', usedPct: 10 }],
+      windows: [{ label: 'weekly', kind: 'weekly', usedPct: 10 }],
       status: 'ok'
     });
   });
 
   it('keeps resetsAt when known', async () => {
-    const read = () => ({ windows: [{ label: 'weekly', usedPct: 50, resetsAt: '2026-09-13T22:00:00Z' }] });
+    const read = () => ({ windows: [{ label: 'weekly', kind: 'weekly' as const, usedPct: 50, resetsAt: '2026-09-13T22:00:00Z' }] });
     const res = await probeCli(ioWith({ stdout: '', stderr: '' }), probeWith({ read }), 'now');
-    expect(res.windows).toStrictEqual([{ label: 'weekly', usedPct: 50, resetsAt: '2026-09-13T22:00:00Z' }]);
+    expect(res.windows).toStrictEqual([{ label: 'weekly', kind: 'weekly', usedPct: 50, resetsAt: '2026-09-13T22:00:00Z' }]);
   });
 
   it('is ok with a balance and no windows', async () => {

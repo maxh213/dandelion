@@ -22,10 +22,31 @@ All eight probes run in parallel. Window gauges are coloured by usage: below 50%
 - `npm start` - Run the live dashboard: panels fill in as each probe settles, a fleet summary line shows how many windows are above 80% and the next reset, and everything is re-probed every `DANDELION_REFRESH_SECONDS`. Keys: `r` refresh, `q` quit (or Ctrl-C), `?` help.
 - `npm start -- --once` - Run the dashboard once and exit
 - `dandelion` - Run the live dashboard from anywhere after `npm link`; `dandelion --once` runs it once and exits
+- `dandelion route` (or `npm start -- route`) - Run every probe once and print one line naming the subscription to use right now, such as `claude-opus-5 max`, then exit; it prints `none` and exits 1 when no provider can be routed. It never draws the dashboard, even on a terminal.
 - `npm test` - Run unit tests
 - `npm run qa` - Run E2E tests
 
 The app runs once when stdout or stdin is not a terminal, as if `--once` were given.
+
+## Route
+
+`route` must be the first argument; later arguments are ignored. It routes among `claude`, `claude-work`, `agy`, `kimi`, `grok` and `cursor`, in dashboard order, taking each one that is ok and has at least one usage window. `kilo` is never routed, because it reports a balance rather than windows, and `codex` is never routed, because it has no subscription windows to route on.
+
+Each window is rolling (claude session, kimi 5h, agy Five Hour Limit), weekly (any other label containing "week", grok credits, cursor total, auto and api) or other, which route ignores. A window's left is 100 minus its used percent, compared without rounding.
+
+1. Evaporation: a weekly window evaporates when it resets after now and before the next local midnight with less than 97% left. If any provider has one, route prints the max line of the provider whose evaporating window has the most left.
+2. Most headroom: otherwise each provider's binding is the lowest left over its rolling and weekly windows (100 when it has neither), and route prints the standard line of the provider with the highest binding.
+
+Ties go to the provider earlier in dashboard order.
+
+| provider | standard line | max line |
+|---|---|---|
+| claude | `claude-opus-5 high` | `claude-opus-5 max` |
+| claude-work | `claude-opus-5 high` | `claude-opus-5 max` |
+| agy | `gemini-3.1-pro-high medium` | `gemini-3.1-pro-high high` |
+| kimi | `kimi-code/kimi-for-coding-highspeed` | `kimi-code/kimi-for-coding-highspeed` |
+| grok | `grok-4.6` | `grok-4.6` |
+| cursor | `kimi-k3-max` | `kimi-k3-max` |
 
 ## Env-var Ledger
 

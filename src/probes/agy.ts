@@ -1,4 +1,4 @@
-import { validInstant } from '../domain/index.ts';
+import { validInstant, type WindowKind } from '../domain/index.ts';
 import type { CliProbe, ReadWindow, Reading } from './cli.ts';
 
 const REMAINING_PERCENT = /^(\d+)%$/;
@@ -22,7 +22,12 @@ function parseRow(line: string): ReadWindow | [] {
   if (remaining === undefined) return [];
   const [group, label, , reset] = columns;
   const windowName = withoutWord(label, 'Remaining');
-  return { label: `${group} · ${windowName}`, usedPct: 100 - remaining, resetsAt: validInstant(reset) };
+  return { label: `${group} · ${windowName}`, kind: kindOf(windowName), usedPct: 100 - remaining, resetsAt: validInstant(reset) };
+}
+
+function kindOf(windowName: string): WindowKind {
+  if (windowName.endsWith('Five Hour Limit')) return 'rolling';
+  return /week/i.test(windowName) ? 'weekly' : 'other';
 }
 
 function readAgyUsage(stdout: string): Reading {

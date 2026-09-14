@@ -20,10 +20,19 @@ vi.mock('./app/index.ts', async (importOriginal) => {
     reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
     spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
   };
-  return { ...original, realIo: stubIo };
+  return { ...original, realIo: stubIo, runRoute: vi.fn(original.runRoute) };
 });
 
 const { main, runIfMain } = await import('./main.ts');
+const { runRoute } = await import('./app/index.ts');
+
+const routeIo: ProbeIo = {
+  runner: { run: async (command) => ({ stdout: command === 'claude' ? 'Current week (all models): 86% used' : '', stderr: '' }) },
+  launcher: { launch: async () => undefined },
+  fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
+  reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
+  spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
+};
 
 const profileIo: ProbeIo = {
   runner: { run: async () => ({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' }) },
@@ -171,6 +180,54 @@ describe('main', () => {
     await running;
     expect(output().endsWith('\x1b[?25h\x1b[?1049l')).toBe(true);
     expect(proc.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('runIfMain route prints one line on two terminals without live mode, from the real clock and the process TZ', async () => {
+    vi.mocked(runRoute).mockClear();
+    const { proc, output, keyboard } = procOf(['node', MAIN, 'route', 'extra'], true, true);
+    const before = new Date().toISOString();
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    const after = new Date().toISOString();
+    expect(output()).toBe('claude-opus-5 high\n');
+    expect(keyboard.setRawMode).not.toHaveBeenCalled();
+    expect(proc.exit).not.toHaveBeenCalled();
+    const [io, env, now, zone] = vi.mocked(runRoute).mock.calls[0];
+    expect([io, env, zone]).toEqual([routeIo, proc.env, Intl.DateTimeFormat().resolvedOptions().timeZone]);
+    expect(now >= before && now <= after).toBe(true);
+  });
+
+  it('runIfMain route prints none and exits 1 when nothing routes', async () => {
+    const { proc, output } = procOf(['node', MAIN, 'route'], undefined, undefined);
+    await runIfMain(MAIN_URL, MAIN, profileIo, proc);
+    expect(output()).toBe('none\n');
+    expect(proc.exit).toHaveBeenCalledWith(1);
+  });
+
+  it.each([[['--once', 'route']], [['routes']]])('runIfMain keeps the dashboard for %j', async (args) => {
+    vi.mocked(runRoute).mockClear();
+    const { proc, output } = procOf(['node', MAIN, ...args], true, false);
+    await runIfMain(MAIN_URL, MAIN, profileIo, proc);
+    expect(output()).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z\n/);
+    expect(runRoute).not.toHaveBeenCalled();
+    expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it('prints only the route line, with empty stderr, through node src/main.ts route and exits 1 with none', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dandelion-route-'));
+    try {
+      linkNodeAndShell(dir);
+      writeFixture(dir, 'claude', "[ -z \"$CLAUDE_CONFIG_DIR\" ] || exit 1\nprintf '%s\\n' 'Current week (all models): 86% used'");
+      writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
+      writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing') };
+      const routed = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
+      expect([routed.stdout, routed.stderr, routed.status]).toEqual(['claude-opus-5 high\n', '', 0]);
+      rmSync(join(dir, 'claude'));
+      const none = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
+      expect([none.stdout, none.stderr, none.status]).toEqual(['none\n', '', 1]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('runIfMain does nothing for another entry file', async () => {
@@ -324,6 +381,25 @@ describe('main', () => {
     expect(readme).toContain('All eight probes run in parallel');
     expect(readme).not.toContain('All seven probes run in parallel');
     expect(readme).toMatch(/^- `DANDELION_CLAUDE_WORK_CONFIG_DIR` - .*Defaults to `~\/\.claude-work`/m);
+  });
+
+  it('README documents route', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const commands = readme.split('## Run Commands')[1].split('## ')[0];
+    expect(commands).toMatch(/^- `dandelion route` \(or `npm start -- route`\) - .*print one line.*prints `none` and exits 1/m);
+    const route = readme.split('## Route')[1];
+    expect(route).toContain('`kilo` is never routed, because it reports a balance');
+    expect(route).toContain('`codex` is never routed, because it has no subscription windows to route on');
+    expect(route).toMatch(/Evaporation: a weekly window .* before the next local midnight with less than 97% left/);
+    expect(route).toMatch(/Most headroom: .*lowest left over its rolling and weekly windows \(100 when it has neither\)/);
+    for (const row of [
+      '| claude | `claude-opus-5 high` | `claude-opus-5 max` |',
+      '| claude-work | `claude-opus-5 high` | `claude-opus-5 max` |',
+      '| agy | `gemini-3.1-pro-high medium` | `gemini-3.1-pro-high high` |',
+      '| kimi | `kimi-code/kimi-for-coding-highspeed` | `kimi-code/kimi-for-coding-highspeed` |',
+      '| grok | `grok-4.6` | `grok-4.6` |',
+      '| cursor | `kimi-k3-max` | `kimi-k3-max` |'
+    ]) expect(route).toContain(row);
   });
 
   it('README documents live mode', () => {

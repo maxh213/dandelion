@@ -23,7 +23,8 @@ function tierOf(ctx: unknown): string {
 
 function creditsWindow(usedPct: number, config: unknown): UsageWindow {
   const resetsAt = validInstant(fieldOf(fieldOf(config, 'currentPeriod'), 'end'));
-  return resetsAt === undefined ? { label: 'credits', usedPct } : { label: 'credits', usedPct, resetsAt };
+  const window: UsageWindow = { label: 'credits', kind: 'weekly', usedPct };
+  return resetsAt === undefined ? window : { ...window, resetsAt };
 }
 
 function usableSnapshots(event: unknown): Snapshot[] {

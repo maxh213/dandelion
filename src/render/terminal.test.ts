@@ -108,8 +108,8 @@ describe('terminal renderer', () => {
       displayName: 'claude',
       planLabel: 'claude · personal',
       windows: [
-        { label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00Z' },
-        { label: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00Z' }
+        { label: 'session', kind: 'rolling', usedPct: 3, resetsAt: '2026-09-13T18:40:00Z' },
+        { label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00Z' }
       ],
       fetchedAt: 'now',
       status: 'ok'
@@ -128,7 +128,7 @@ describe('terminal renderer', () => {
       id: 'grok',
       displayName: 'grok',
       planLabel: 'SuperGrok Heavy',
-      windows: [{ label: 'credits', usedPct: 75, resetsAt: '2026-09-13T21:15:36Z' }],
+      windows: [{ label: 'credits', kind: 'weekly', usedPct: 75, resetsAt: '2026-09-13T21:15:36Z' }],
       fetchedAt: 'now',
       status: 'ok',
       snapshotAt: '2026-09-12T16:00:00.000Z'
@@ -147,7 +147,7 @@ describe('terminal renderer', () => {
     ['2026-09-11T10:00:00.000Z', 'snapshot 2d0h old'],
     ['2026-09-11T09:59:59.999Z', 'stale snapshot 2d0h old']
   ])('marks a snapshot at %s as "%s"', (snapshotAt, line) => {
-    const usage: ProviderUsage = { id: 'g', displayName: 'g', windows: [{ label: 'credits', usedPct: 10 }], fetchedAt: 'now', status: 'ok', snapshotAt };
+    const usage: ProviderUsage = { id: 'g', displayName: 'g', windows: [{ label: 'credits', kind: 'weekly', usedPct: 10 }], fetchedAt: 'now', status: 'ok', snapshotAt };
     expect(renderPanelOk(usage, true, NOW).split('\n')[3]).toBe(line);
   });
 
@@ -156,7 +156,7 @@ describe('terminal renderer', () => {
       id: 'grok',
       displayName: 'grok',
       planLabel: 'grok',
-      windows: [{ label: 'credits', usedPct: 96 }],
+      windows: [{ label: 'credits', kind: 'weekly', usedPct: 96 }],
       fetchedAt: 'now',
       status: 'ok',
       snapshotAt: '2026-09-10T17:14:22.812Z'
@@ -220,37 +220,37 @@ describe('terminal renderer', () => {
 
 describe('window rows', () => {
   it('pads the label, gauge and right-aligned percent then the countdown', () => {
-    expect(renderWindowRow({ label: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00Z' }, true, NOW))
+    expect(renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00Z' }, true, NOW))
       .toBe('weekly                              #################---  86% ↻ 12h0m');
   });
 
   it('truncates labels longer than 35 cells with an ellipsis', () => {
-    const weekly = { label: 'Claude and GPT models · Weekly Limit', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' };
-    const fiveHour = { label: 'Claude and GPT models · Five Hour Limit', usedPct: 75, resetsAt: '2026-09-13T22:13:45Z' };
+    const weekly: UsageWindow = { label: 'Claude and GPT models · Weekly Limit', kind: 'weekly', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' };
+    const fiveHour: UsageWindow = { label: 'Claude and GPT models · Five Hour Limit', kind: 'rolling', usedPct: 75, resetsAt: '2026-09-13T22:13:45Z' };
     expect(renderWindowRow(weekly, true, NOW)).toBe('Claude and GPT models · Weekly Lim… --------------------   0% ↻ 7d7h');
     expect(renderWindowRow(fiveHour, true, NOW)).toBe('Claude and GPT models · Five Hour…  ###############-----  75% ↻ 12h13m');
   });
 
   it('keeps a label of exactly 35 cells whole', () => {
-    expect(renderWindowRow({ label: 'y'.repeat(35), usedPct: 50 }, true, NOW))
+    expect(renderWindowRow({ label: 'y'.repeat(35), kind: 'other', usedPct: 50 }, true, NOW))
       .toBe(`${'y'.repeat(35)} ##########----------  50%`);
   });
 
   it('omits the countdown when the window has no reset', () => {
-    expect(renderWindowRow({ label: 'weekly', usedPct: 50 }, true, NOW))
+    expect(renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct: 50 }, true, NOW))
       .toBe('weekly                              ##########----------  50%');
   });
 
   it('fits the longest countdown in 72 cells', () => {
     const resetsAt = new Date(Date.parse(NOW) + (9999 * 24 + 23) * 3600 * 1000).toISOString();
-    const row = renderWindowRow({ label: 'x'.repeat(40), usedPct: 100, resetsAt }, true, NOW);
+    const row = renderWindowRow({ label: 'x'.repeat(40), kind: 'other', usedPct: 100, resetsAt }, true, NOW);
     expect(row.endsWith('100% ↻ 9999d23h')).toBe(true);
     expect([...row]).toHaveLength(72);
   });
 
   it('wraps only the gauge and the percent in the style escape', () => {
     const calm = STYLE_TOKENS.calm;
-    expect(renderWindowRow({ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00Z' }, false, NOW))
+    expect(renderWindowRow({ label: 'session', kind: 'rolling', usedPct: 3, resetsAt: '2026-09-13T18:40:00Z' }, false, NOW))
       .toBe(`${'session'.padEnd(35)} ${calm}█${'░'.repeat(19)}${RESET} ${calm}  3%${RESET} ↻ 8h40m`);
   });
 
@@ -265,7 +265,7 @@ describe('window rows', () => {
     [100, 'critical']
   ])('styles a %i%% row as %s', (usedPct, token) => {
     expect(styleToken(usedPct)).toBe(token);
-    const row = renderWindowRow({ label: 'weekly', usedPct }, false, NOW);
+    const row = renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct }, false, NOW);
     expect(row.startsWith(`${'weekly'.padEnd(35)} ${STYLE_TOKENS[token]}`)).toBe(true);
   });
 
@@ -289,23 +289,23 @@ describe('live frame', () => {
   const AGY_FIVE_HOUR = 'Claude and GPT models · Five Hour Limit';
   const background = (agyFiveHourReset = '2026-09-13T22:13:45Z'): ProviderUsage[] => [
     okUsage('claude', [
-      { label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' },
-      { label: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00.000Z' },
-      { label: 'weekly Fable', usedPct: 100, resetsAt: '2026-09-13T22:00:00.000Z' }
+      { label: 'session', kind: 'rolling', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' },
+      { label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00.000Z' },
+      { label: 'weekly Fable', kind: 'weekly', usedPct: 100, resetsAt: '2026-09-13T22:00:00.000Z' }
     ]),
     okUsage('agy', [
-      { label: 'Gemini Models · Weekly Limit', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' },
-      { label: 'Gemini Models · Five Hour Limit', usedPct: 0, resetsAt: '2026-09-13T22:13:45Z' },
-      { label: 'Claude and GPT models · Weekly Limit', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' },
-      { label: AGY_FIVE_HOUR, usedPct: 75, resetsAt: agyFiveHourReset }
+      { label: 'Gemini Models · Weekly Limit', kind: 'weekly', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' },
+      { label: 'Gemini Models · Five Hour Limit', kind: 'rolling', usedPct: 0, resetsAt: '2026-09-13T22:13:45Z' },
+      { label: 'Claude and GPT models · Weekly Limit', kind: 'weekly', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' },
+      { label: AGY_FIVE_HOUR, kind: 'rolling', usedPct: 75, resetsAt: agyFiveHourReset }
     ]),
-    okUsage('kimi', [{ label: 'weekly', usedPct: 59, resetsAt: '2026-09-18T10:00:00Z' }, { label: '5h', usedPct: 42 }]),
-    okUsage('grok', [{ label: 'credits', usedPct: 75, resetsAt: '2026-09-13T21:15:36.133Z' }], { snapshotAt: '2026-09-12T16:00:00.000Z' }),
+    okUsage('kimi', [{ label: 'weekly', kind: 'weekly', usedPct: 59, resetsAt: '2026-09-18T10:00:00Z' }, { label: '5h', kind: 'rolling', usedPct: 42 }]),
+    okUsage('grok', [{ label: 'credits', kind: 'weekly', usedPct: 75, resetsAt: '2026-09-13T21:15:36.133Z' }], { snapshotAt: '2026-09-12T16:00:00.000Z' }),
     okUsage('codex', [], { note: 'api-key billing · no usage windows' }),
     okUsage('cursor', [
-      { label: 'total', usedPct: 31, resetsAt: '2026-09-30T16:45:06.000Z' },
-      { label: 'auto', usedPct: 32, resetsAt: '2026-09-30T16:45:06.000Z' },
-      { label: 'api', usedPct: 16, resetsAt: '2026-09-30T16:45:06.000Z' }
+      { label: 'total', kind: 'weekly', usedPct: 31, resetsAt: '2026-09-30T16:45:06.000Z' },
+      { label: 'auto', kind: 'weekly', usedPct: 32, resetsAt: '2026-09-30T16:45:06.000Z' },
+      { label: 'api', kind: 'weekly', usedPct: 16, resetsAt: '2026-09-30T16:45:06.000Z' }
     ]),
     okUsage('kilo', [], { balance: { amount: 14.15, currency: '$', reference: 20 } })
   ];
@@ -315,30 +315,30 @@ describe('live frame', () => {
     ['the Background results', background(), '2/13 windows above 80% · next reset: claude session in 8h40m'],
     [
       'kimi weekly and cursor total without a reset',
-      [okUsage('kimi', [{ label: 'weekly', usedPct: 59, resetsAt: '2026-09-18T10:00:00Z' }]), okUsage('cursor', [{ label: 'total', usedPct: 31 }])],
+      [okUsage('kimi', [{ label: 'weekly', kind: 'weekly', usedPct: 59, resetsAt: '2026-09-18T10:00:00Z' }]), okUsage('cursor', [{ label: 'total', kind: 'weekly', usedPct: 31 }])],
       'all windows below 80% · next reset: kimi weekly in 5d0h'
     ],
     [
       'a claude and codex tie',
-      [okUsage('claude', [{ label: 'weekly', usedPct: 86, resetsAt: '2026-09-13T12:30:00Z' }]), okUsage('codex', [{ label: '5h', usedPct: 80, resetsAt: '2026-09-13T12:30:00Z' }])],
+      [okUsage('claude', [{ label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: '2026-09-13T12:30:00Z' }]), okUsage('codex', [{ label: '5h', kind: 'rolling', usedPct: 80, resetsAt: '2026-09-13T12:30:00Z' }])],
       '2/2 windows above 80% · next reset: claude weekly in 2h30m'
     ],
     [
       'a past reset and a balance',
-      [okUsage('grok', [{ label: 'credits', usedPct: 79, resetsAt: '2026-09-13T09:00:00Z' }]), okUsage('kilo', [], { balance: { amount: 14.15, currency: '$' } })],
+      [okUsage('grok', [{ label: 'credits', kind: 'weekly', usedPct: 79, resetsAt: '2026-09-13T09:00:00Z' }]), okUsage('kilo', [], { balance: { amount: 14.15, currency: '$' } })],
       'all windows below 80% · next reset: none'
     ],
     [
       'a hot claude window next to an unavailable kimi',
-      [okUsage('claude', [{ label: 'weekly', usedPct: 86, resetsAt: '2026-09-13T12:30:00Z' }]), unavailable('kimi')],
+      [okUsage('claude', [{ label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: '2026-09-13T12:30:00Z' }]), unavailable('kimi')],
       '1/1 windows above 80% · next reset: claude weekly in 2h30m'
     ],
-    ['a reset exactly at the frame time', [okUsage('grok', [{ label: 'credits', usedPct: 79, resetsAt: NOW }])], 'all windows below 80% · next reset: none'],
+    ['a reset exactly at the frame time', [okUsage('grok', [{ label: 'credits', kind: 'weekly', usedPct: 79, resetsAt: NOW }])], 'all windows below 80% · next reset: none'],
     ['seven unavailable panels',['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map(unavailable), 'all windows below 80% · next reset: none'],
     ['the Background with agy five hour soonest', background('2026-09-13T11:59:00Z'), '2/13 windows above 80% · next reset: agy Claude and GPT models… in 1h59m'],
     [
       'only the agy five hour window',
-      [okUsage('agy', [{ label: AGY_FIVE_HOUR, usedPct: 75, resetsAt: '2026-09-13T11:59:00Z' }])],
+      [okUsage('agy', [{ label: AGY_FIVE_HOUR, kind: 'rolling', usedPct: 75, resetsAt: '2026-09-13T11:59:00Z' }])],
       'all windows below 80% · next reset: agy Claude and GPT models… in 1h59m'
     ]
   ])('summarises %s', (_case, usages, summary) => {
@@ -347,7 +347,7 @@ describe('live frame', () => {
   });
 
   it('ignores the windows of unavailable results in the summary', () => {
-    const failed = { ...unavailable('claude'), windows: [{ label: 'weekly', usedPct: 99, resetsAt: '2026-09-13T11:00:00Z' }] };
+    const failed = { ...unavailable('claude'), windows: [{ label: 'weekly', kind: 'weekly' as const, usedPct: 99, resetsAt: '2026-09-13T11:00:00Z' }] };
     expect(summaryOf([failed])).toBe('all windows below 80% · next reset: none');
   });
 

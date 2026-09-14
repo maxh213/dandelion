@@ -63,7 +63,7 @@ describe('probeGrok', () => {
       displayName: 'grok',
       planLabel: 'SuperGrok Heavy',
       fetchedAt: NOW,
-      windows: [{ label: 'credits', usedPct: 75, resetsAt: '2026-09-13T21:15:36.133376+00:00' }],
+      windows: [{ label: 'credits', kind: 'weekly', usedPct: 75, resetsAt: '2026-09-13T21:15:36.133376+00:00' }],
       status: 'ok',
       snapshotAt: '2026-09-12T16:00:00.000Z'
     });
@@ -99,11 +99,11 @@ describe('probeGrok', () => {
   });
 
   it.each<[string, unknown, { planLabel: string; windows: UsageWindow[] }]>([
-    ['no tier or period', { creditUsagePercent: 75 }, { planLabel: 'grok', windows: [{ label: 'credits', usedPct: 75 }] }],
-    ['an empty tier and a half percent', { creditUsagePercent: 33.5 }, { planLabel: 'grok', windows: [{ label: 'credits', usedPct: 34 }] }],
-    ['a zero percent', { creditUsagePercent: 0 }, { planLabel: 'grok', windows: [{ label: 'credits', usedPct: 0 }] }],
-    ['a bad period end', { creditUsagePercent: 130, currentPeriod: { end: 'soon' } }, { planLabel: 'SuperGrok', windows: [{ label: 'credits', usedPct: 130 }] }],
-    ['a null period', { creditUsagePercent: 75, currentPeriod: null }, { planLabel: 'grok', windows: [{ label: 'credits', usedPct: 75 }] }]
+    ['no tier or period', { creditUsagePercent: 75 }, { planLabel: 'grok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 75 }] }],
+    ['an empty tier and a half percent', { creditUsagePercent: 33.5 }, { planLabel: 'grok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 34 }] }],
+    ['a zero percent', { creditUsagePercent: 0 }, { planLabel: 'grok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 0 }] }],
+    ['a bad period end', { creditUsagePercent: 130, currentPeriod: { end: 'soon' } }, { planLabel: 'SuperGrok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 130 }] }],
+    ['a null period', { creditUsagePercent: 75, currentPeriod: null }, { planLabel: 'grok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 75 }] }]
   ])('reads an event with %s', async (name, config, expected) => {
     const tiers: Record<string, unknown> = { 'an empty tier and a half percent': '', 'a zero percent': 7, 'a bad period end': 'SuperGrok' };
     const event = { ts: '2026-09-13T09:00:00Z', msg: 'billing: fetched credits config', ctx: { config, subscriptionTier: tiers[name] } };

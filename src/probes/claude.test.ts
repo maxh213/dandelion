@@ -54,9 +54,9 @@ describe('claudeProbe', () => {
 
   it('parses session, weekly and per-model windows in order and ignores other lines', async () => {
     expect(await windowsOf(TRANSCRIPT)).toEqual([
-      { label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' },
-      { label: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00.000Z' },
-      { label: 'weekly Fable', usedPct: 100, resetsAt: '2026-09-13T22:00:00.000Z' }
+      { label: 'session', kind: 'rolling', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' },
+      { label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00.000Z' },
+      { label: 'weekly Fable', kind: 'weekly', usedPct: 100, resetsAt: '2026-09-13T22:00:00.000Z' }
     ]);
   });
 
@@ -118,8 +118,8 @@ describe('claudeProbe', () => {
   it('keeps windows without a reset and allows a missing session', async () => {
     const stdout = 'Current week (all models): 50% used\r\nCurrent week (Fable): 60% used · resets someday\n';
     expect(await windowsOf(stdout)).toStrictEqual([
-      { label: 'weekly', usedPct: 50 },
-      { label: 'weekly Fable', usedPct: 60 }
+      { label: 'weekly', kind: 'weekly', usedPct: 50 },
+      { label: 'weekly Fable', kind: 'weekly', usedPct: 60 }
     ]);
   });
 
@@ -148,9 +148,9 @@ describe('claudeWorkProbe', () => {
       fetchedAt: NOW,
       status: 'ok',
       windows: [
-        { label: 'session', usedPct: 0, resetsAt: '2026-09-13T22:10:00.000Z' },
-        { label: 'weekly', usedPct: 12, resetsAt: '2026-09-15T17:00:00.000Z' },
-        { label: 'weekly Fable', usedPct: 23, resetsAt: '2026-09-15T17:00:00.000Z' }
+        { label: 'session', kind: 'rolling', usedPct: 0, resetsAt: '2026-09-13T22:10:00.000Z' },
+        { label: 'weekly', kind: 'weekly', usedPct: 12, resetsAt: '2026-09-15T17:00:00.000Z' },
+        { label: 'weekly Fable', kind: 'weekly', usedPct: 23, resetsAt: '2026-09-15T17:00:00.000Z' }
       ]
     });
   });

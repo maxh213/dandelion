@@ -1,4 +1,4 @@
-import type { Balance, FileReader, ProviderUsage, UsageWindow } from '../domain/index.ts';
+import type { Balance, FileReader, ProviderUsage, UsageWindow, WindowKind } from '../domain/index.ts';
 
 export type RunFailure = 'missing' | 'timeout' | 'exit';
 
@@ -14,7 +14,7 @@ export interface CommandRunner {
 
 export type CliIo = { runner: CommandRunner; reader: FileReader };
 
-export type ReadWindow = { label: string; usedPct: number; resetsAt: string | undefined };
+export type ReadWindow = { label: string; kind: WindowKind; usedPct: number; resetsAt: string | undefined };
 
 export type Reading = { windows: ReadWindow[]; balance?: Balance };
 
@@ -49,9 +49,9 @@ function runFailureReason(command: string, timeoutMs: number, failure: RunFailur
   }
 }
 
-function usageWindow({ label, usedPct, resetsAt }: ReadWindow): UsageWindow {
-  if (resetsAt === undefined) return { label, usedPct };
-  return { label, usedPct, resetsAt };
+function usageWindow({ resetsAt, ...window }: ReadWindow): UsageWindow {
+  if (resetsAt === undefined) return window;
+  return { ...window, resetsAt };
 }
 
 function isEmpty(reading: Reading): boolean {

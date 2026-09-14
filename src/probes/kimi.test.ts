@@ -72,8 +72,8 @@ describe('probeKimi', () => {
       fetchedAt: NOW,
       status: 'ok',
       windows: [
-        { label: 'weekly', usedPct: 59, resetsAt: '2026-09-18T10:00:00Z' },
-        { label: '5h', usedPct: 42 }
+        { label: 'weekly', kind: 'weekly', usedPct: 59, resetsAt: '2026-09-18T10:00:00Z' },
+        { label: '5h', kind: 'rolling', usedPct: 42 }
       ]
     });
     expect(child.stops).toBe(1);
@@ -98,21 +98,21 @@ describe('probeKimi', () => {
   });
 
   it.each<[unknown, unknown[]]>([
-    [{ data: { summary: { used: 500, limit: 1000 } } }, [{ label: 'weekly', usedPct: 50 }]],
-    [{ data: { summary: { used: 1, limit: 3 }, limits: [] } }, [{ label: 'weekly', usedPct: 33 }]],
-    [{ data: { summary: { used: 2, limit: 3 }, limits: [{ used: 9, limit: 10, window: { unit: 'day', value: 1 } }] } }, [{ label: 'weekly', usedPct: 67 }]],
-    [{ data: { summary: { used: 125, limit: 1000 } } }, [{ label: 'weekly', usedPct: 13 }]],
-    [{ data: { summary: { used: 0, limit: 1000 } } }, [{ label: 'weekly', usedPct: 0 }]],
-    [{ data: { summary: { used: 1200, limit: 1000 } } }, [{ label: 'weekly', usedPct: 120 }]],
-    [{ data: { summary: { used: 590, limit: 1000, reset_at: 'soon' } } }, [{ label: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000, reset_at: 42 } } }, [{ label: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000, reset_at: ['2026-09-18T10:00:00Z'] } } }, [{ label: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000, reset_at: '2026-02-30T99:00:00Z' } } }, [{ label: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: 'x' } }, [{ label: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: {} } }, [{ label: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: [null] } }, [{ label: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: [{ used: 42, limit: 100 }] } }, [{ label: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: [{ used: 42, limit: 100, window: null }] } }, [{ label: 'weekly', usedPct: 59 }]]
+    [{ data: { summary: { used: 500, limit: 1000 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 50 }]],
+    [{ data: { summary: { used: 1, limit: 3 }, limits: [] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 33 }]],
+    [{ data: { summary: { used: 2, limit: 3 }, limits: [{ used: 9, limit: 10, window: { unit: 'day', value: 1 } }] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 67 }]],
+    [{ data: { summary: { used: 125, limit: 1000 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 13 }]],
+    [{ data: { summary: { used: 0, limit: 1000 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 0 }]],
+    [{ data: { summary: { used: 1200, limit: 1000 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 120 }]],
+    [{ data: { summary: { used: 590, limit: 1000, reset_at: 'soon' } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [{ data: { summary: { used: 590, limit: 1000, reset_at: 42 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [{ data: { summary: { used: 590, limit: 1000, reset_at: ['2026-09-18T10:00:00Z'] } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [{ data: { summary: { used: 590, limit: 1000, reset_at: '2026-02-30T99:00:00Z' } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [{ data: { summary: { used: 590, limit: 1000 }, limits: 'x' } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [{ data: { summary: { used: 590, limit: 1000 }, limits: {} } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [{ data: { summary: { used: 590, limit: 1000 }, limits: [null] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [{ data: { summary: { used: 590, limit: 1000 }, limits: [{ used: 42, limit: 100 }] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [{ data: { summary: { used: 590, limit: 1000 }, limits: [{ used: 42, limit: 100, window: null }] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]]
   ])('reads summary variation %j', async (body, windows) => {
     const usage = await probeKimi(ioWith(fakeChild(), bodyOf(body)).io, PORT, NOW);
     expect(usage).toMatchObject({ status: 'ok' });
@@ -137,9 +137,9 @@ describe('probeKimi', () => {
     };
     const usage = await probeKimi(ioWith(fakeChild(), bodyOf(body)).io, PORT, NOW);
     expect(usage.windows).toStrictEqual([
-      { label: 'weekly', usedPct: 59 },
-      { label: '5h', usedPct: 42 },
-      { label: '5h', usedPct: 70 }
+      { label: 'weekly', kind: 'weekly', usedPct: 59 },
+      { label: '5h', kind: 'rolling', usedPct: 42 },
+      { label: '5h', kind: 'rolling', usedPct: 70 }
     ]);
   });
 

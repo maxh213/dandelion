@@ -20,7 +20,7 @@ import {
   type RpcSpawner,
   type RunFailure
 } from '../probes/index.ts';
-import { renderDashboard } from '../render/index.ts';
+import { renderDashboard, renderRoute } from '../render/index.ts';
 import { startLive, type Keyboard, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
@@ -191,10 +191,18 @@ export function isEntryFile(moduleUrl: string, argv1: string): boolean {
   return realPath(argv1) === realPath(fileURLToPath(moduleUrl));
 }
 
+function probeOnce(io: ProbeIo, env: Record<string, string | undefined>, now: string) {
+  return Promise.all(providerProbes(io, env).map(({ probe }) => probe(now)));
+}
+
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
-  const usages = await Promise.all(providerProbes(io, env).map(({ probe }) => probe(now)));
+  const usages = await probeOnce(io, env, now);
   const noColor = env['NO_COLOR'] !== undefined;
   return renderDashboard(usages, noColor, now);
+}
+
+export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, now: string, zone: string): Promise<string> {
+  return renderRoute(await probeOnce(io, env, now), now, zone);
 }
 
 export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {

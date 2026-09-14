@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { pathToFileURL } from 'node:url';
-import { isEntryFile, runApp, runLive, realIo } from './index.ts';
+import { isEntryFile, runApp, runLive, runRoute, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
@@ -1527,5 +1527,16 @@ describe('isEntryFile', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('runRoute', () => {
+  it('probes every provider once and routes by the next local midnight of the given zone', async () => {
+    expect(await runRoute(routedRunner(), {}, NOW, 'UTC')).toBe('claude-opus-5 max');
+    expect(await runRoute(routedRunner(), {}, NOW, 'Etc/GMT-2')).toBe('claude-opus-5 high');
+  });
+
+  it('is none when every provider is unavailable', async () => {
+    expect(await runRoute(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW, 'UTC')).toBe('none');
   });
 });

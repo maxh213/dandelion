@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isEntryFile, runApp, runLive, realIo, type Keyboard, type ProbeIo, type Screen } from './app/index.ts';
+import { isEntryFile, runApp, runLive, runRoute, realIo, type Keyboard, type ProbeIo, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -21,6 +21,13 @@ export async function main(
   stream.write(output + '\n');
 }
 
+async function route(io: ProbeIo, proc: Proc): Promise<void> {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const line = await runRoute(io, proc.env, new Date().toISOString(), zone);
+  proc.stdout.write(`${line}\n`);
+  if (line === 'none') proc.exit(1);
+}
+
 function isLive(proc: Proc): boolean {
   return !proc.argv.includes('--once') && proc.stdin.isTTY === true && proc.stdout.isTTY === true;
 }
@@ -32,6 +39,7 @@ async function live(io: ProbeIo, proc: Proc): Promise<void> {
 
 export function runIfMain(metaUrl: string, argv1: string, io: ProbeIo, proc: Proc): Promise<void> {
   if (!isEntryFile(metaUrl, argv1)) return Promise.resolve();
+  if (proc.argv[2] === 'route') return route(io, proc);
   if (isLive(proc)) return live(io, proc);
   return main(io, proc.env, proc.stdout, new Date().toISOString());
 }

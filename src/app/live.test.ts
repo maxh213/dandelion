@@ -13,7 +13,7 @@ const LEAVE_ALTERNATE = '\x1b[?25h\x1b[?1049l';
 const IDS = ['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
 
 function usageOf(id: string, fetchedAt: string): Usage {
-  return { id, displayName: id, planLabel: 'plan', windows: [{ label: 'weekly', usedPct: 10 }], fetchedAt, status: 'ok' };
+  return { id, displayName: id, planLabel: 'plan', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 10 }], fetchedAt, status: 'ok' };
 }
 
 function deferredProbe(id: string, writes: string[]) {
