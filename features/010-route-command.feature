@@ -59,7 +59,7 @@ Feature: 010 - dandelion route picks the subscription to burn
   Scenario: Nothing to route
     Given every candidate is unavailable, while codex and kilo are "ok"
     When the user runs `node src/main.ts route`
-    Then stdout is exactly "none" followed by one newline and the exit code is 1
+    Then stdout is exactly "none" followed by one newline, stderr is empty and the exit code is 1
 
   Scenario Outline: route anywhere but first keeps the dashboard
     Given the usages claude 0/86@2
@@ -96,6 +96,9 @@ Feature: 010 - dandelion route picks the subscription to burn
       | only ok with zero windows               | claude: no windows                                                                                                          | none                                |
       | only other windows bind at 100          | claude-work: other 99 @-; agy: rolling 1 @-                                                                                 | claude-opus-5 high                  |
       | unavailable and error are excluded      | claude: unavailable; claude-work: error; kimi: weekly 90 @2026-09-20T00:00:00.000Z                                          | kimi-code/kimi-for-coding-highspeed |
+      | codex never routes, even evaporating    | codex: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-                                                              | gemini-3.1-pro-high medium          |
+      | codex as the only ok provider           | codex: weekly 10 @2026-09-20T00:00:00.000Z                                                                                  | none                                |
+      | kilo as the only ok provider            | kilo: no windows                                                                                                            | none                                |
     And every line of the routing table, standard and max, is pinned by a test
 
   Scenario Outline: Probes set the window kind

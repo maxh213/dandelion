@@ -56,8 +56,8 @@ rt() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ D
 4. Run `rt Q_KIMI=90,10,72 Q_AGY=50,50,72`, then `rt Q_KIMI=90,10,72 Q_GROK=50,72`, then `rt Q_KIMI=10,10,72 Q_GROK=50,72`, then `rt Q_AGY=20,20,72 Q_KIMI=20,20,72`.
    - **Expected:** `gemini-3.1-pro-high medium` (kimi is bound by its 5h window), then `grok-4.6` (grok has no rolling window, so 100 counts), then `kimi-code/kimi-for-coding-highspeed`, then `gemini-3.1-pro-high medium`, each followed by `exit=0`.
 
-5. Run `rt Q_CURSOR=40,72`, then `rt`.
-   - **Expected:** `kimi-k3-max` and `exit=0`. Then `none` and `exit=1`: codex and kilo are "ok" but never routed.
+5. Run `rt Q_CURSOR=40,72`, then `rt 2>/tmp/010.err; wc -c < /tmp/010.err`.
+   - **Expected:** `kimi-k3-max` and `exit=0`. Then `none`, `exit=1` and `0` (stderr is empty): codex and kilo are "ok" but never routed.
 
 6. Run `rt Q_CLAUDE=0,86,2 2>/tmp/010.err | od -c | head -3; wc -c < /tmp/010.err`.
    - **Expected:** `od` shows exactly `c l a u d e - o p u s - 5   m a x \n` and then `e x i t = 0 \n`, with no `033`. `wc` prints `0`.
