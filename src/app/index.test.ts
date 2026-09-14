@@ -1,3 +1,4 @@
+import { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -85,7 +86,7 @@ function startDashboard(io: ProbeIo, env: Record<string, string>) {
   const finished = runLive(io, env, keyboard, { write: (text: string) => writes.push(text) });
   const frames = () => writes.filter((text) => text.startsWith(LIVE_CLEAR)).map((text) => text.slice(LIVE_CLEAR.length));
   const press = (key: string) => keyboard.emit('data', key);
-  return { finished, frames, press, lastFrame: () => frames().at(-1) ?? '' };
+  return { writes, finished, frames, press, lastFrame: () => frames().at(-1) ?? '' };
 }
 
 function ioOf(runner: CommandRunner, launcher: Launcher = MISSING_KIMI, reader: FileReader = NO_GROK, spawner = codexSpawner()): ProbeIo {
@@ -1184,14 +1185,42 @@ describe('quitting the live dashboard', () => {
     const runner: CommandRunner = {
       run: (command, _args, timeoutMs) => (command === 'codex' ? Promise.resolve(CODEX_CHATGPT) : realIo.runner.run(process.execPath, hold(command), timeoutMs))
     };
-    const launcher: Launcher = { launch: () => realIo.launcher.launch(process.execPath, hold('kimi')) };
+    const pidOf = (name: string) => Number(readFileSync(join(scratch, name), 'utf8'));
+    const launcher: Launcher = {
+      launch: async () => {
+        const child = await realIo.launcher.launch(process.execPath, hold('kimi'));
+        await vi.waitFor(() => expect(pidOf('kimi')).toBeGreaterThan(0), { timeout: 10000 });
+        return child;
+      }
+    };
     const spawner: RpcSpawner = { spawn: () => realIo.spawner.spawn(process.execPath, hold('app-server')) };
     const dashboard = startDashboard(ioOf(runner, launcher, NO_GROK, spawner), { NO_COLOR: '1' });
-    const pids = () => CHILDREN.map((name) => Number(readFileSync(join(scratch, name), 'utf8')));
+    const pids = () => CHILDREN.map(pidOf);
     await vi.waitFor(() => expect(pids().every((pid) => pid > 0)).toBe(true), { timeout: 10000 });
     expect(pids().every(isRunning)).toBe(true);
+    expect(dashboard.lastFrame()).toMatch(/\nkimi\n\S probing…\n/);
     dashboard.press(key);
+    expect(dashboard.writes.at(-1)).toBe('\x1b[?25h\x1b[?1049l');
     await dashboard.finished;
     expect(pids().filter(isRunning)).toEqual([]);
   }, 20000);
+
+  it('does not signal a child again on quit once it has settled or been stopped', async () => {
+    const quit = async () => {
+      const dashboard = startDashboard(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), { NO_COLOR: '1' });
+      dashboard.press('q');
+      await dashboard.finished;
+    };
+    await quit();
+    const kill = vi.spyOn(ChildProcess.prototype, 'kill');
+    try {
+      await realIo.runner.run(process.execPath, ['-e', ''], 5000);
+      await realIo.spawner.spawn(process.execPath, ['-e', '']).stop();
+      expect(kill).toHaveBeenCalledTimes(1);
+      await quit();
+      expect(kill).toHaveBeenCalledTimes(1);
+    } finally {
+      kill.mockRestore();
+    }
+  });
 });

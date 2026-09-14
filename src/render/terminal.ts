@@ -210,8 +210,9 @@ function settledUsages(slots: LiveSlot[]): ProviderUsage[] {
 }
 
 function dataAge(usages: ProviderUsage[], now: string): string {
-  const oldest = usages.map((usage) => usage.fetchedAt).sort((a, b) => a.localeCompare(b))[0];
-  return oldest === undefined ? '' : `data ${formatCountdown(now, oldest)} old · `;
+  if (usages.length === 0) return '';
+  const oldest = new Date(Math.min(...usages.map((usage) => Date.parse(usage.fetchedAt)))).toISOString();
+  return `data ${formatCountdown(now, oldest)} old · `;
 }
 
 function refreshingBanner(tail: string, noColor: boolean): string {

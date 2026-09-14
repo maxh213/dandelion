@@ -204,19 +204,33 @@ describe('live session', () => {
     session.probes[0].calls[0].resolve(usageOf('claude', START));
     await vi.advanceTimersByTimeAsync(0);
     session.press(key);
-    await session.finished;
     expect(session.writes.at(-1)).toBe(LEAVE_ALTERNATE);
+    await session.finished;
     expect(session.keyboard.setRawMode).toHaveBeenLastCalledWith(false);
     expect(session.keyboard.pause).toHaveBeenCalled();
     expect(session.stopChildren).toHaveBeenCalledTimes(1);
     const count = session.writes.length;
     await session.settleRound(0);
+    expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(600000);
     session.press('q');
     session.press('r');
     expect(session.writes).toHaveLength(count);
     expect(session.stopChildren).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
+  });
+
+  it('cancels the scheduled refresh when quitting after a round has settled', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press('q');
+    await session.finished;
+    expect(vi.getTimerCount()).toBe(0);
+    const count = session.writes.length;
+    await vi.advanceTimersByTimeAsync(600000);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
+    expect(session.writes).toHaveLength(count);
   });
 
   it('finishes only after every child has been stopped', async () => {

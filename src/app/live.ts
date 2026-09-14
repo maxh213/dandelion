@@ -26,7 +26,7 @@ type Session = LiveOptions & {
   refreshMs: number;
   spinner: number;
   footer: boolean;
-  running: boolean;
+  running?: boolean;
   rounds: number;
   quitting: boolean;
   frameTimer?: Timer;
@@ -55,7 +55,7 @@ function viewOf(session: Session): LiveView {
   return {
     slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index] })),
     spinner: session.spinner,
-    refreshing: session.running && session.rounds > 1,
+    refreshing: session.running === true && session.rounds > 1,
     footer: session.footer
   };
 }
@@ -101,7 +101,7 @@ function startRound(session: Session): void {
 }
 
 function refresh(session: Session): void {
-  if (session.running) return;
+  if (session.running || session.quitting) return;
   clearTimeout(session.refreshTimer);
   startRound(session);
   draw(session);
@@ -144,7 +144,6 @@ export function startLive(options: LiveOptions): Promise<void> {
       refreshMs: refreshMsOf(options.env),
       spinner: 0,
       footer: false,
-      running: false,
       rounds: 0,
       quitting: false,
       done

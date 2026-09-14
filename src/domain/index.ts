@@ -57,22 +57,26 @@ export type FleetReset = { id: string; label: string; resetsAt: string };
 
 export type FleetSummary = { hot: number; windows: number; next: FleetReset | undefined };
 
-function fleetResets(usages: ProviderUsage[]): FleetReset[] {
-  return usages.flatMap((usage) =>
-    usage.status === 'ok' ? usage.windows.map((window) => ({ id: usage.id, label: window.label, resetsAt: window.resetsAt ?? '' })) : []
-  );
+type FleetWindow = UsageWindow & { id: string };
+
+function fleetWindows(usages: ProviderUsage[]): FleetWindow[] {
+  return usages.flatMap((usage) => (usage.status === 'ok' ? usage.windows.map((window) => ({ ...window, id: usage.id })) : []));
 }
 
-function soonestReset(resets: FleetReset[], now: string): FleetReset | undefined {
-  const future = resets.filter((reset) => Date.parse(reset.resetsAt) > Date.parse(now));
+function isFuture(window: FleetWindow, now: string): window is FleetWindow & FleetReset {
+  return Date.parse(String(window.resetsAt)) > Date.parse(now);
+}
+
+function soonestReset(windows: FleetWindow[], now: string): FleetReset | undefined {
+  const future = windows.filter((window) => isFuture(window, now));
   future.sort((a, b) => Date.parse(a.resetsAt) - Date.parse(b.resetsAt));
   return future[0];
 }
 
 export function summariseFleet(usages: ProviderUsage[], now: string): FleetSummary {
-  const hot = usages.flatMap((usage) => (usage.status === 'ok' ? usage.windows : [])).filter((window) => window.usedPct >= HOT_PCT).length;
-  const resets = fleetResets(usages);
-  return { hot, windows: resets.length, next: soonestReset(resets, now) };
+  const windows = fleetWindows(usages);
+  const hot = windows.filter((window) => window.usedPct >= HOT_PCT).length;
+  return { hot, windows: windows.length, next: soonestReset(windows, now) };
 }
 
 const MS_PER_MINUTE = 60 * 1000;

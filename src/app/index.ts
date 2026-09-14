@@ -65,7 +65,8 @@ const realCommandRunner: CommandRunner = {
         liveStops.delete(stop);
         resolve(toRunnerResult(error, stdout, stderr));
       });
-      const stop = tracked(() => terminate(child));
+      const exited = exitOf(child);
+      const stop = tracked(() => signalUntil(child, exited));
     });
   }
 };

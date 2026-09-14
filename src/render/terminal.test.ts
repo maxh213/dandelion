@@ -328,7 +328,13 @@ describe('live frame', () => {
       [okUsage('grok', [{ label: 'credits', usedPct: 79, resetsAt: '2026-09-13T09:00:00Z' }]), okUsage('kilo', [], { balance: { amount: 14.15, currency: '$' } })],
       'all windows below 80% · next reset: none'
     ],
-    ['seven unavailable panels', ['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map(unavailable), 'all windows below 80% · next reset: none'],
+    [
+      'a hot claude window next to an unavailable kimi',
+      [okUsage('claude', [{ label: 'weekly', usedPct: 86, resetsAt: '2026-09-13T12:30:00Z' }]), unavailable('kimi')],
+      '1/1 windows above 80% · next reset: claude weekly in 2h30m'
+    ],
+    ['a reset exactly at the frame time', [okUsage('grok', [{ label: 'credits', usedPct: 79, resetsAt: NOW }])], 'all windows below 80% · next reset: none'],
+    ['seven unavailable panels',['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map(unavailable), 'all windows below 80% · next reset: none'],
     ['the Background with agy five hour soonest', background('2026-09-13T11:59:00Z'), '2/13 windows above 80% · next reset: agy Claude and GPT models… in 1h59m'],
     [
       'only the agy five hour window',
@@ -351,7 +357,7 @@ describe('live frame', () => {
   });
 
   it('shows the age of the oldest on-screen result in the banner', () => {
-    const usages = [okUsage('claude', [], { fetchedAt: '2026-09-13T09:58:00.000Z' }), okUsage('kilo', [], { fetchedAt: NOW })];
+    const usages = [okUsage('claude', [], { fetchedAt: NOW }), okUsage('agy', [], { fetchedAt: '2026-09-13T09:58:00.000Z' }), okUsage('kilo', [], { fetchedAt: '2026-09-13T09:59:00.000Z' })];
     const frame = renderLiveFrame(viewOf([...usages, undefined]), true, '2026-09-13T10:00:30.000Z').split('\n');
     expect(frame[0]).toBe('ALLOWANCE'.padEnd(47) + 'data 0h2m old · 10:00:30Z');
   });
