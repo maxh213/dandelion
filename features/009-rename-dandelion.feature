@@ -69,15 +69,25 @@ Feature: 009 - Rename the project to dandelion
     Then the probes run again about 1 second after the first round settles, as in the 007 scenario with the old name
 
   Scenario Outline: Old ALLOWANCE_* names are ignored
-    Given the DANDELION_* names are unset, HOME is "<tmp>/home" with no ".claude-work", and <old> is set to <value>
+    Given every DANDELION_* name is unset except <kept>
+    And HOME is an empty directory "<tmp>/home", and <old> is set to <value>
     When the user runs `npm start -- --once` with NO_COLOR set
-    Then <effect>
+    Then the process exits with code 0 and <effect>
 
     Examples:
-      | old                              | value                   | effect                                                                    |
-      | ALLOWANCE_KILO_REFERENCE         | "10" with balance $5.00 | the kilo gauge has 5 filled cells and 15 empty cells (default reference 20) |
-      | ALLOWANCE_KIMI_PORT              | "abc"                   | the kimi panel does not show the reason "ALLOWANCE_KIMI_PORT must be an integer from 1 to 65535" |
-      | ALLOWANCE_CLAUDE_WORK_CONFIG_DIR | an existing directory   | the claude-work panel is dim with the "no work claude config — …" reason  |
+      | old                              | value                              | kept                                             | effect                                                                                                   |
+      | ALLOWANCE_KILO_REFERENCE         | "10" with balance $5.00            | none                                             | the kilo gauge has 5 filled cells and 15 empty cells (default reference 20)                              |
+      | ALLOWANCE_KIMI_PORT              | "abc", kimi fixture of 003 "ok"    | none                                             | `kimi` is started with "--port 59177" and the kimi panel shows the 003 rows "weekly … 59%" and "5h … 42%" |
+      | ALLOWANCE_GROK_HOME              | the 004 grok home with a snapshot  | none                                             | the grok reason is "no grok billing snapshot — run grok once"                                           |
+      | ALLOWANCE_CURSOR_AUTH_FILE       | the 006 dummy auth file            | DANDELION_CURSOR_API_BASE = the cursor fixture   | the cursor reason is "no cursor auth — run cursor-agent login" and the fixture receives no request       |
+      | ALLOWANCE_CURSOR_API_BASE        | the cursor fixture's URL           | DANDELION_CURSOR_AUTH_FILE = the dummy auth file | the cursor fixture receives no request and the cursor panel is dim with a request-failure reason         |
+      | ALLOWANCE_CLAUDE_WORK_CONFIG_DIR | an existing directory              | none                                             | `claude` is run only once, without CLAUDE_CONFIG_DIR, and the claude-work reason is "no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude" |
+
+  Scenario: Live refresh ignores ALLOWANCE_REFRESH_SECONDS
+    Given DANDELION_REFRESH_SECONDS is unset and ALLOWANCE_REFRESH_SECONDS is "1"
+    When the user runs `npm start` on a terminal, waits 5 seconds after every probe settles, then presses "q"
+    Then `claude` was run exactly twice (one round: personal and work), because the refresh interval is the default 300 seconds
+    And "refreshing…" never appears
 
   Scenario: README uses the new name
     When I read "README.md"
@@ -93,5 +103,11 @@ Feature: 009 - Rename the project to dandelion
     And "qa/009-rename-dandelion.e2e.mjs" runs `npm start --silent -- --once` and `node src/main.ts --once` and a "<tmp>/bin/dandelion" symlink with `--once`,
       each exiting 0 with a first line starting "DANDELION", eight panels in order, and zero matches for "ALLOWANCE" in the output
     And it asserts package.json "name" is "dandelion", "bin" is { "dandelion": "src/main.ts" }, and the first line of src/main.ts is "#!/usr/bin/env node"
-    And `git grep -n ALLOWANCE -- src qa perf README.md package.json package-lock.json` prints nothing
+    And it covers every row of "Old ALLOWANCE_* names are ignored" and "Live refresh ignores ALLOWANCE_REFRESH_SECONDS", removing every DANDELION_* name from the inherited env first
+    And this command prints nothing:
+      """
+      git grep -nI -e ALLOWANCE -e Allowance -e allowance- -e '"allowance"' -- src perf README.md package.json package-lock.json 'qa/*.mjs' ':!qa/009-rename-dandelion.e2e.mjs'
+      """
+    And so "qa/009-rename-dandelion.e2e.mjs" is the only code file that may spell an old name, as plain string literals; unit tests in src do not set ALLOWANCE_*
+    And the frozen qa/*.md and features/*.feature of 001 to 009 are outside that check
     And no e2e runs a real provider binary and every temp dir is removed
