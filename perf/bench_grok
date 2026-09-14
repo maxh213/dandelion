@@ -86,8 +86,9 @@ for (const [name, out] of Object.entries(OUTPUTS)) {
 }
 
 function timeCli(grokHome) {
-  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: grokHome };
+  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(tmpdir(), 'bench-grok-missing-cursor-auth.json') };
   delete env.NO_COLOR;
+  delete env.ALLOWANCE_CURSOR_API_BASE;
   const start = process.hrtime.bigint();
   execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
   return Number(process.hrtime.bigint() - start) / 1e6;

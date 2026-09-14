@@ -1,0 +1,164 @@
+#!/usr/bin/env node
+import { execFile } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
+
+const run = promisify(execFile);
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const cursorEntry = join(tree, 'src', 'probes', 'cursor.ts');
+const NOW = '2026-09-13T10:00:00.000Z';
+const ITERATIONS = 2000;
+const HTTP_ITERATIONS = 200;
+
+const TARGETS = {
+  cliOk: 'cli one-shot all providers cursor ok via local api',
+  cliMissing: 'cli one-shot all providers cursor auth missing',
+  probeStub: 'probeCursor ok stub fetcher (in-process, per call)',
+  probeHttp: 'probeCursor ok real fetcher local http (in-process, per call)',
+  probeMissing: 'probeCursor auth missing (in-process, per call)',
+  fetchGet: 'realIo fetcher get local http (in-process, per call)',
+  runApp: 'runApp all providers cursor ok stub (in-process, per call)',
+  render: 'renderDashboard seven providers cursor windows (in-process, per call)'
+};
+
+function emit(target, value, unit) {
+  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
+}
+
+function absent(...targets) {
+  for (const target of targets) console.log(JSON.stringify({ target, absent: true }));
+}
+
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const TOKEN = 'bench-dummy-cursor-token';
+const USAGE_BODY = JSON.stringify({
+  billingCycleStart: '1788108306000',
+  billingCycleEnd: '1790786706000',
+  planUsage: { totalSpend: 101050, includedSpend: 40000, limit: 40000, autoPercentUsed: 32.36, apiPercentUsed: 15.81, totalPercentUsed: 31.09 }
+});
+const PLAN_BODY = JSON.stringify({ planInfo: { planName: 'Ultra', includedAmountCents: 40000, price: '$200/mo', billingCycleEnd: '1790786706000' } });
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+const CLAUDE_OUT = 'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)\nCurrent week (all models): 86% used · resets Sep 13, 11pm (Europe/London)\n';
+const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z\n';
+const OUTPUTS = { claude: CLAUDE_OUT, agy: AGY_OUT, kilo: KILO_OUT };
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-cursor-'));
+const bin = join(fixture, 'bin');
+mkdirSync(bin);
+for (const [name, out] of Object.entries(OUTPUTS)) {
+  const file = join(bin, name);
+  writeFileSync(file, `#!/bin/sh\ncat <<'OUT'\n${out}OUT\n`);
+  chmodSync(file, 0o755);
+}
+const authFile = join(fixture, 'auth.json');
+writeFileSync(authFile, JSON.stringify({ accessToken: TOKEN, refreshToken: 'r' }));
+const missingAuth = join(fixture, 'missing-auth.json');
+
+const server = createServer((req, res) => {
+  req.resume();
+  req.on('end', () => {
+    const body = req.url.endsWith('/GetPlanInfo') ? PLAN_BODY : USAGE_BODY;
+    res.writeHead(req.headers.authorization === `Bearer ${TOKEN}` ? 200 : 401, { 'content-type': 'application/json' });
+    res.end(body);
+  });
+});
+server.keepAliveTimeout = 60000;
+await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+const base = `http://127.0.0.1:${server.address().port}`;
+
+async function timeCli(auth) {
+  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: auth, ALLOWANCE_CURSOR_API_BASE: base };
+  delete env.NO_COLOR;
+  const start = process.hrtime.bigint();
+  await run(process.execPath, [main], { cwd: tree, env });
+  return Number(process.hrtime.bigint() - start) / 1e6;
+}
+
+async function perCall(iterations, fn) {
+  const start = process.hrtime.bigint();
+  for (let i = 0; i < iterations; i++) await fn();
+  return Number(process.hrtime.bigint() - start) / 1e3 / iterations;
+}
+
+const env = { ALLOWANCE_CURSOR_AUTH_FILE: authFile, ALLOWANCE_CURSOR_API_BASE: base };
+const missingEnv = { ALLOWANCE_CURSOR_AUTH_FILE: missingAuth, ALLOWANCE_CURSOR_API_BASE: base };
+const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
+const authText = JSON.stringify({ accessToken: TOKEN });
+const stubIo = {
+  ...runner,
+  runner,
+  launcher: { launch: async () => undefined },
+  spawner: { spawn: () => undefined },
+  fetcher: {
+    get: async () => ({ failure: 'network' }),
+    post: async (url) => ({ status: 200, body: url.endsWith('/GetPlanInfo') ? PLAN_BODY : USAGE_BODY })
+  },
+  reader: { homeDir: () => fixture, read: async (path) => (path === authFile ? authText : undefined) }
+};
+
+const cursorUsage = {
+  id: 'cursor', displayName: 'cursor', planLabel: 'Ultra · $200/mo', fetchedAt: NOW, status: 'ok',
+  windows: [
+    { label: 'total', usedPct: 31, resetsAt: '2026-09-30T16:45:06.000Z' },
+    { label: 'auto', usedPct: 32, resetsAt: '2026-09-30T16:45:06.000Z' },
+    { label: 'api', usedPct: 16, resetsAt: '2026-09-30T16:45:06.000Z' }
+  ]
+};
+const usages = [
+  { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' }] },
+  { id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok', windows: [{ label: 'Gemini Models · Weekly Limit', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' }] },
+  { id: 'kimi', displayName: 'kimi', planLabel: 'kimi', fetchedAt: NOW, status: 'unavailable', windows: [], reason: 'kimi CLI not found' },
+  { id: 'grok', displayName: 'grok', planLabel: 'grok', fetchedAt: NOW, status: 'unavailable', windows: [], reason: 'grok log not found' },
+  { id: 'codex', displayName: 'codex', planLabel: 'codex', fetchedAt: NOW, status: 'unavailable', windows: [], reason: 'codex CLI not found' },
+  cursorUsage,
+  { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
+];
+
+try {
+  const { runApp, realIo } = await import(pathToFileURL(appEntry).href);
+  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+
+  await timeCli(authFile);
+  await timeCli(missingAuth);
+  emit(TARGETS.cliOk, await timeCli(authFile), 'ms');
+  emit(TARGETS.cliMissing, await timeCli(missingAuth), 'ms');
+
+  const getUrl = `${base}/aiserver.v1.DashboardService/GetCurrentPeriodUsage`;
+  await realIo.fetcher.get(getUrl, { Authorization: `Bearer ${TOKEN}` }, 15000);
+  emit(TARGETS.fetchGet, await perCall(HTTP_ITERATIONS, () => realIo.fetcher.get(getUrl, { Authorization: `Bearer ${TOKEN}` }, 15000)), 'us');
+
+  if (existsSync(cursorEntry)) {
+    const { probeCursor } = await import(pathToFileURL(cursorEntry).href);
+    const httpIo = { reader: realIo.reader, fetcher: realIo.fetcher };
+    const warm = await probeCursor(httpIo, env, NOW);
+    if (warm.status !== 'ok' || warm.windows.length !== 3 || warm.planLabel !== 'Ultra · $200/mo') throw new Error(`cursor probe failed: ${JSON.stringify(warm)}`);
+    await probeCursor(stubIo, env, NOW);
+    await probeCursor(httpIo, missingEnv, NOW);
+    emit(TARGETS.probeStub, await perCall(ITERATIONS, () => probeCursor(stubIo, env, NOW)), 'us');
+    emit(TARGETS.probeHttp, await perCall(HTTP_ITERATIONS, () => probeCursor(httpIo, env, NOW)), 'us');
+    emit(TARGETS.probeMissing, await perCall(ITERATIONS, () => probeCursor(httpIo, missingEnv, NOW)), 'us');
+  } else {
+    absent(TARGETS.probeStub, TARGETS.probeHttp, TARGETS.probeMissing);
+  }
+
+  await runApp(stubIo, env, NOW);
+  emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(stubIo, env, NOW)), 'us');
+
+  renderDashboard(usages, false, NOW);
+  emit(TARGETS.render, await perCall(ITERATIONS, () => renderDashboard(usages, false, NOW)), 'us');
+} finally {
+  server.close();
+  server.closeAllConnections();
+  rmSync(fixture, { recursive: true, force: true });
+}
