@@ -8,6 +8,7 @@ export interface Fetcher {
 export interface FileReader {
   homeDir(): string;
   read(path: string): Promise<string | undefined>;
+  isDirectory(path: string): Promise<boolean>;
 }
 
 export const USAGE_PARSE_FAILURE = 'Could not parse usage from response';

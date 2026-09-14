@@ -11,7 +11,7 @@ const PREFIX = 'allowance-qa-007-';
 const ENTER = '\x1b[?1049h';
 const CLEAR = '\x1b[H\x1b[2J';
 const RESTORE = '\x1b[?25h\x1b[?1049l';
-const IDS = ['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const CODEX_FIXTURE = "#!/bin/sh\necho 'Logged in using an API key - sk-proj-***n5zQA' >&2\n";
@@ -23,7 +23,8 @@ require('node:fs').writeFileSync(require('node:path').join(__dirname, 'kimi.pid'
 setInterval(() => {}, 1000);
 `;
 const OTHER_PANELS = [
-  /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude code · claude\n/,
+  /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude · personal · claude\n/,
+  /\nclaude-work\nweekly +#+-* +86%( ↻ \S+)?\nclaude · work · claude-work\n/,
   /\nagy\nGemini Models · Weekly Limit +-+ +0%( ↻ \S+)?\nagy · agy\n/,
   /\nkimi\nkimi web exited without printing a token\nkimi code · kimi\n/,
   /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\n/,
@@ -68,6 +69,7 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
   delete inherited.ALLOWANCE_KILO_REFERENCE;
   delete inherited.ALLOWANCE_KIMI_PORT;
   delete inherited.ALLOWANCE_CURSOR_API_BASE;
+  delete inherited.CLAUDE_CONFIG_DIR;
   return {
     ...inherited,
     PATH: `${pathDir}:${bin}`,
@@ -75,6 +77,7 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
     NO_COLOR: '1',
     ALLOWANCE_REFRESH_SECONDS: '1',
     ALLOWANCE_GROK_HOME: grokHome,
+    ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: grokHome,
     ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json')
   };
 }

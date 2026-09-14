@@ -1,7 +1,7 @@
 import { execFile, spawn, type ChildProcess, type ChildProcessByStdio, type ExecException } from 'node:child_process';
 import { once } from 'node:events';
 import { closeSync, mkdtempSync, openSync, rmSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -62,9 +62,9 @@ function toRunnerResult(error: ExecException | null, stdout: string, stderr: str
 }
 
 const realCommandRunner: CommandRunner = {
-  run(command, args, timeoutMs) {
+  run(command, args, timeoutMs, env) {
     return new Promise((resolve) => {
-      const child = execFile(command, args, { timeout: timeoutMs }, (error, stdout, stderr) => {
+      const child = execFile(command, args, { timeout: timeoutMs, env: { ...process.env, ...env } }, (error, stdout, stderr) => {
         liveStops.delete(stop);
         resolve(toRunnerResult(error, stdout, stderr));
       });
@@ -176,7 +176,8 @@ const realFetcher: Fetcher = {
 
 const realReader: FileReader = {
   homeDir: homedir,
-  read: (path) => readFile(path, 'utf8').catch(() => undefined)
+  read: (path) => readFile(path, 'utf8').catch(() => undefined),
+  isDirectory: (path) => stat(path).then((info) => info.isDirectory(), () => false)
 };
 
 export const realIo: ProbeIo = { runner: realCommandRunner, launcher: realLauncher, fetcher: realFetcher, reader: realReader, spawner: realSpawner };

@@ -9,7 +9,7 @@ export type CommandRunnerResult = {
 };
 
 export interface CommandRunner {
-  run(command: string, args: string[], timeoutMs: number): Promise<CommandRunnerResult>;
+  run(command: string, args: string[], timeoutMs: number, env?: Record<string, string>): Promise<CommandRunnerResult>;
 }
 
 export type ReadWindow = { label: string; usedPct: number; resetsAt: string | undefined };
@@ -18,6 +18,8 @@ export type Reading = { windows: ReadWindow[]; balance?: Balance };
 
 export type CliProbe = {
   id: string;
+  command?: string;
+  env?: Record<string, string>;
   planLabel: string;
   args: string[];
   timeoutMs: number;
@@ -52,11 +54,12 @@ function isEmpty(reading: Reading): boolean {
 }
 
 export async function probeCli(runner: CommandRunner, probe: CliProbe, now: string): Promise<ProviderUsage> {
-  const result = await runner.run(probe.id, probe.args, probe.timeoutMs);
+  const command = probe.command ?? probe.id;
+  const result = await runner.run(command, probe.args, probe.timeoutMs, probe.env);
   const usage = { id: probe.id, displayName: probe.id, planLabel: probe.planLabel, windows: [], fetchedAt: now };
 
   if (result.failure) {
-    return { ...usage, status: 'unavailable', reason: runFailureReason(probe.id, probe.timeoutMs, result.failure) };
+    return { ...usage, status: 'unavailable', reason: runFailureReason(command, probe.timeoutMs, result.failure) };
   }
 
   const reading = probe.read(result.stdout, now);

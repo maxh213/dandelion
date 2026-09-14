@@ -13,7 +13,7 @@ vi.mock('./app/index.ts', async (importOriginal) => {
     runner: { run: async () => ({ stdout: 'Balance: $14.15', stderr: '' }) },
     launcher: { launch: async () => undefined },
     fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
-    reader: { homeDir: () => '/nowhere', read: async () => undefined },
+    reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
     spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
   };
   return { ...original, realIo: stubIo };
@@ -25,7 +25,7 @@ const profileIo: ProbeIo = {
   runner: { run: async () => ({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' }) },
   launcher: { launch: async () => undefined },
   fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
-  reader: { homeDir: () => '/nowhere', read: async () => undefined },
+  reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
   spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
 };
 
@@ -60,7 +60,8 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
     delete env.ALLOWANCE_KILO_REFERENCE;
     delete env.ALLOWANCE_KIMI_PORT;
     delete env.ALLOWANCE_CURSOR_API_BASE;
-    Object.assign(env, { ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json') }, extraEnv);
+    delete env.CLAUDE_CONFIG_DIR;
+    Object.assign(env, { ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: dir }, extraEnv);
     return spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -84,18 +85,20 @@ describe('main', () => {
     expect(result.stdout).toContain('='.repeat(72) + '\nkilo\n$14.15 ' + '#'.repeat(20) + ' '.repeat(45) + '\n');
   });
 
-  it('prints claude, agy, kimi, grok, codex and kilo panels in order from fixture CLIs on PATH', () => {
+  it('prints claude, claude-work, agy, kimi, grok, codex and kilo panels in order from fixture CLIs on PATH', () => {
     const result = runWithFixtureKilo({ NO_COLOR: '1' });
     expect(result.status).toBe(0);
     const lines = result.stdout.split('\n');
-    expect(lines.indexOf('claude')).toBeLessThan(lines.indexOf('agy'));
+    expect(lines.indexOf('claude')).toBeLessThan(lines.indexOf('claude-work'));
+    expect(lines.indexOf('claude-work')).toBeLessThan(lines.indexOf('agy'));
+    expect(lines).toContain('claude · work · claude-work');
     expect(lines.indexOf('agy')).toBeLessThan(lines.indexOf('kimi'));
     expect(lines.indexOf('kimi')).toBeLessThan(lines.indexOf('grok'));
     expect(lines.indexOf('grok')).toBeLessThan(lines.indexOf('codex'));
     expect(lines.indexOf('codex')).toBeLessThan(lines.indexOf('kilo'));
     expect(lines).toContain('weekly                              #################---  86%');
     expect(lines).toContain('Claude and GPT models · Five Hour…  ###############-----  75%');
-    expect(lines).toContain('claude code · claude');
+    expect(lines).toContain('claude · personal · claude');
     expect(lines).toContain('agy · agy');
     expect(result.stdout).toContain('\nkimi\nkimi web exited without printing a token\nkimi code · kimi\n');
     expect(result.stdout).toContain('\ncodex\ncodex is not logged in\ncodex · codex\n');
@@ -146,7 +149,7 @@ describe('main', () => {
   });
 
   it('runIfMain does nothing for another entry file', async () => {
-    const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn(), post: vi.fn() }, reader: { homeDir: vi.fn(), read: vi.fn() }, spawner: { spawn: vi.fn() } };
+    const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn(), post: vi.fn() }, reader: { homeDir: vi.fn(), read: vi.fn(), isDirectory: vi.fn() }, spawner: { spawn: vi.fn() } };
     await runIfMain('file:///path/to/main.ts', 'other.ts', io, procOf(['node', 'other.ts'], true, true).proc);
     await runIfMain('file:///path/to/main.ts', undefined, io, procOf(['node'], true, true).proc);
     expect(io.runner.run).not.toHaveBeenCalled();
@@ -160,7 +163,7 @@ describe('main', () => {
       symlinkSync(process.execPath, join(dir, 'node'));
       symlinkSync('/bin/sh', join(dir, 'sh'));
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json') };
+      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: dir };
       const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8', timeout: 60000 });
       expect(result.status).toBe(0);
       expect(result.stdout).toMatch(/\ngrok\n[^]*\ncodex\napi-key billing · no usage windows\ncodex · codex\n[^]*\ncursor\n[^]*\nkilo\n/);
@@ -170,16 +173,17 @@ describe('main', () => {
     }
   });
 
-  it('prints seven dim unavailable panels in order when no CLI is on PATH, grok home is empty and cursor auth is missing', () => {
+  it('prints eight dim unavailable panels in order when no CLI is on PATH, grok home is empty and cursor auth is missing', () => {
     const grokHome = mkdtempSync(join(tmpdir(), 'allowance-grok-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing.json') };
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: grokHome };
     delete env.NO_COLOR;
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
     rmSync(grokHome, { recursive: true, force: true });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('ALLOWANCE');
     const panels = [
-      ['claude', 'claude CLI not found in PATH', 'claude code · claude'],
+      ['claude', 'claude CLI not found in PATH', 'claude · personal · claude'],
+      ['claude-work', 'claude CLI not found in PATH', 'claude · work · claude-work'],
       ['agy', 'agy CLI not found in PATH', 'agy · agy'],
       ['kimi', 'kimi CLI not found in PATH', 'kimi code · kimi'],
       ['grok', 'no grok billing snapshot — run grok once', 'grok · grok'],
@@ -244,10 +248,22 @@ describe('main', () => {
     expect(cursor).toContain('`GetPlanInfo`');
     expect(cursor).toContain('15s timeout each');
     expect(cursor).toContain('total, auto and api windows with a reset countdown');
-    expect(readme).toContain('All seven probes run in parallel');
     expect(readme).not.toContain('All six probes run in parallel');
     expect(readme).toMatch(/^- `ALLOWANCE_CURSOR_AUTH_FILE` - .*Defaults to `~\/\.config\/cursor\/auth\.json`/m);
     expect(readme).toMatch(/^- `ALLOWANCE_CURSOR_API_BASE` - .*Defaults to `https:\/\/api2\.cursor\.sh`/m);
+  });
+
+  it('README documents the work claude account', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy)` /.test(line));
+    expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'claude-work', 'agy']);
+    expect(providers[0]).toContain('(claude · personal)');
+    expect(providers[1]).toContain('(claude · work)');
+    expect(providers[1]).toContain('same command with `CLAUDE_CONFIG_DIR` set to the work config dir');
+    expect(providers[1]).toContain('Without that dir it is unavailable');
+    expect(readme).toContain('All eight probes run in parallel');
+    expect(readme).not.toContain('All seven probes run in parallel');
+    expect(readme).toMatch(/^- `ALLOWANCE_CLAUDE_WORK_CONFIG_DIR` - .*Defaults to `~\/\.claude-work`/m);
   });
 
   it('README documents live mode', () => {

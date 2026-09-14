@@ -28,7 +28,16 @@ describe('probeCli', () => {
       }
     };
     await probeCli(runner, probe, 'now');
-    expect(calls).toEqual([['tool', ['-p', '/usage'], 60000]]);
+    await probeCli(runner, probeWith({ command: 'claude', env: { CLAUDE_CONFIG_DIR: '/work' } }), 'now');
+    expect(calls).toEqual([
+      ['tool', ['-p', '/usage'], 60000, undefined],
+      ['claude', ['-p', '/usage'], 60000, { CLAUDE_CONFIG_DIR: '/work' }]
+    ]);
+  });
+
+  it('names the command, not the panel id, when the command is missing', async () => {
+    const res = await probeCli(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), probeWith({ id: 'claude-work', command: 'claude' }), 'now');
+    expect(res).toMatchObject({ id: 'claude-work', displayName: 'claude-work', status: 'unavailable', reason: 'claude CLI not found in PATH' });
   });
 
   it('returns read windows with the plan label', async () => {

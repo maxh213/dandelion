@@ -42,7 +42,8 @@ function readerOf(files: Record<string, string>, home = '/home/tester') {
     read: async (path) => {
       reads.push(path);
       return files[path];
-    }
+    },
+    isDirectory: async () => false
   };
   const io: GrokIo = { reader };
   return { io, reads };

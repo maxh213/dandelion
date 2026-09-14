@@ -1,4 +1,9 @@
+import type { FileReader, ProviderUsage } from '../domain/index.ts';
 import type { CliProbe, ReadWindow, Reading } from './cli.ts';
+
+const WORK_ID = 'claude-work';
+const WORK_PLAN = 'claude · work';
+const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
 
 const WINDOW_LINE = /^Current (session|week \(([^)]+)\)): (\d+)% used/;
 const RESET_TEXT = /^ · resets (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}), (\d{1,2})(?::(\d{2}))?(am|pm)(?: \((.+)\))?$/;
@@ -95,9 +100,26 @@ function readClaudeUsage(stdout: string, now: string): Reading {
 
 export const claudeProbe: CliProbe = {
   id: 'claude',
-  planLabel: 'claude code',
+  planLabel: 'claude · personal',
   args: ['-p', '/usage'],
   timeoutMs: 90000,
   reads: 'usage',
   read: readClaudeUsage
 };
+
+function workConfigDir(reader: FileReader, env: Record<string, string | undefined>): string {
+  return env['ALLOWANCE_CLAUDE_WORK_CONFIG_DIR'] || `${reader.homeDir()}/.claude-work`;
+}
+
+function workProbe(configDir: string): CliProbe {
+  return { ...claudeProbe, id: WORK_ID, command: claudeProbe.id, planLabel: WORK_PLAN, env: { CLAUDE_CONFIG_DIR: configDir } };
+}
+
+export async function claudeWorkProbe(reader: FileReader, env: Record<string, string | undefined>): Promise<CliProbe | undefined> {
+  const configDir = workConfigDir(reader, env);
+  return (await reader.isDirectory(configDir)) ? workProbe(configDir) : undefined;
+}
+
+export function noWorkConfig(now: string): ProviderUsage {
+  return { id: WORK_ID, displayName: WORK_ID, planLabel: WORK_PLAN, windows: [], fetchedAt: now, status: 'unavailable', reason: NO_WORK_CONFIG };
+}

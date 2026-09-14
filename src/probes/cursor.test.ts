@@ -38,7 +38,8 @@ function ioOf(files: Record<string, string>, usage: Answer = answer(USAGE), plan
       read: async (path) => {
         reads.push(path);
         return files[path];
-      }
+      },
+      isDirectory: async () => false
     },
     fetcher: {
       post: async (url, headers, body, timeoutMs) => {

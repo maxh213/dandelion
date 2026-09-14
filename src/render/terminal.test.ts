@@ -106,7 +106,7 @@ describe('terminal renderer', () => {
     const usage: ProviderUsage = {
       id: 'claude',
       displayName: 'claude',
-      planLabel: 'claude code',
+      planLabel: 'claude · personal',
       windows: [
         { label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00Z' },
         { label: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00Z' }
@@ -119,7 +119,7 @@ describe('terminal renderer', () => {
       'claude',
       'session                             #-------------------   3% ↻ 8h40m',
       'weekly                              #################---  86% ↻ 12h0m',
-      'claude code · claude'
+      'claude · personal · claude'
     ]);
   });
 

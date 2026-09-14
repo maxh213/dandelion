@@ -1,6 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { claudeProbe } from './claude.ts';
+import type { FileReader } from '../domain/index.ts';
+import { claudeProbe, claudeWorkProbe, noWorkConfig } from './claude.ts';
 import { probeCli } from './cli.ts';
+
+const WORK_TRANSCRIPT = [
+  'Current session: 0% used · resets Sep 13, 11:10pm (Europe/London)',
+  'Current week (all models): 12% used · resets Sep 15, 6pm (Europe/London)',
+  'Current week (Fable): 23% used · resets Sep 15, 6pm (Europe/London)'
+].join('\n');
+
+function readerWith(directories: string[]) {
+  const checked: string[] = [];
+  const reader: FileReader = {
+    homeDir: () => '/home/tester',
+    read: async () => undefined,
+    isDirectory: async (path) => {
+      checked.push(path);
+      return directories.includes(path);
+    }
+  };
+  return { reader, checked };
+}
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const TRANSCRIPT = [
@@ -23,8 +43,11 @@ async function weeklyResetsAt(reset: string): Promise<string | undefined> {
 }
 
 describe('claudeProbe', () => {
-  it('runs claude -p /usage with a 90 second timeout and the claude code plan', () => {
-    expect(claudeProbe).toMatchObject({ id: 'claude', planLabel: 'claude code', args: ['-p', '/usage'], timeoutMs: 90000 });
+  it('runs claude -p /usage with a 90 second timeout, the personal plan and no config dir override', async () => {
+    expect(claudeProbe).toMatchObject({ id: 'claude', planLabel: 'claude · personal', args: ['-p', '/usage'], timeoutMs: 90000 });
+    const calls: unknown[][] = [];
+    await probeCli({ run: async (...call) => (calls.push(call), { stdout: TRANSCRIPT, stderr: '' }) }, claudeProbe, NOW);
+    expect(calls).toEqual([['claude', ['-p', '/usage'], 90000, undefined]]);
   });
 
   it('parses session, weekly and per-model windows in order and ignores other lines', async () => {
@@ -104,5 +127,63 @@ describe('claudeProbe', () => {
     ['no usage at all', '']
   ])('parses nothing when there is %s', async (_case, stdout) => {
     expect(await windowsOf(stdout)).toEqual([]);
+  });
+});
+
+describe('claudeWorkProbe', () => {
+  it('runs claude -p /usage with CLAUDE_CONFIG_DIR set to the configured work dir and reads its windows', async () => {
+    const { reader, checked } = readerWith(['/work']);
+    const probe = await claudeWorkProbe(reader, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/work' });
+    expect(checked).toEqual(['/work']);
+    expect(probe).toMatchObject({ id: 'claude-work', command: 'claude', planLabel: 'claude · work', args: ['-p', '/usage'], timeoutMs: 90000, env: { CLAUDE_CONFIG_DIR: '/work' } });
+    const usage = await probeCli({ run: async () => ({ stdout: WORK_TRANSCRIPT, stderr: '' }) }, probe as NonNullable<typeof probe>, NOW);
+    expect(usage).toStrictEqual({
+      id: 'claude-work',
+      displayName: 'claude-work',
+      planLabel: 'claude · work',
+      fetchedAt: NOW,
+      status: 'ok',
+      windows: [
+        { label: 'session', usedPct: 0, resetsAt: '2026-09-13T22:10:00.000Z' },
+        { label: 'weekly', usedPct: 12, resetsAt: '2026-09-15T17:00:00.000Z' },
+        { label: 'weekly Fable', usedPct: 23, resetsAt: '2026-09-15T17:00:00.000Z' }
+      ]
+    });
+  });
+
+  it.each([
+    ['unset', {}],
+    ['empty', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '' }]
+  ])('defaults the work dir to ~/.claude-work when the env var is %s', async (_case, env) => {
+    const { reader, checked } = readerWith(['/home/tester/.claude-work']);
+    expect(await claudeWorkProbe(reader, env)).toMatchObject({ env: { CLAUDE_CONFIG_DIR: '/home/tester/.claude-work' } });
+    expect(checked).toEqual(['/home/tester/.claude-work']);
+  });
+
+  it.each([
+    ['a configured dir that is not a directory', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' }],
+    ['no default dir', {}]
+  ])('has no probe for %s', async (_case, env) => {
+    expect(await claudeWorkProbe(readerWith([]).reader, env)).toBeUndefined();
+  });
+
+  it('leaves the personal probe without a config dir override', async () => {
+    await claudeWorkProbe(readerWith(['/work']).reader, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/work' });
+    expect(claudeProbe).not.toHaveProperty('env');
+    expect(claudeProbe).not.toHaveProperty('command');
+  });
+});
+
+describe('noWorkConfig', () => {
+  it('is the dim work panel that says how to log in', () => {
+    expect(noWorkConfig(NOW)).toStrictEqual({
+      id: 'claude-work',
+      displayName: 'claude-work',
+      planLabel: 'claude · work',
+      windows: [],
+      fetchedAt: NOW,
+      status: 'unavailable',
+      reason: 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude'
+    });
   });
 });

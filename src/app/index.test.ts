@@ -40,8 +40,14 @@ function grokLog(newestTs = '2026-09-12T16:00:00.000Z'): string {
   ].join('\n');
 }
 
+const WORK_CONFIG_DIR = '/home/tester/.claude-work';
+
+async function hasWorkConfig(path: string): Promise<boolean> {
+  return path === WORK_CONFIG_DIR;
+}
+
 function grokReader(log: string | undefined): FileReader {
-  return { homeDir: () => '/home/tester', read: async (path) => (path === '/grok/logs/unified.jsonl' ? log : undefined) };
+  return { homeDir: () => '/home/tester', read: async (path) => (path === '/grok/logs/unified.jsonl' ? log : undefined), isDirectory: hasWorkConfig };
 }
 
 const LONG_UNUSABLE = Array.from({ length: 50000 }, () => '{"msg":"billing: fetched credits config","ts":"x"}').join('\n');
@@ -121,8 +127,14 @@ const AGY_USAGE = [
   'Claude and GPT models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z',
   'Claude and GPT models\tFive Hour Limit Remaining\t25%\t2026-09-13T22:13:45Z'
 ].join('\n');
+const WORK_USAGE = [
+  'Current session: 0% used · resets Sep 13, 11:10pm (Europe/London)',
+  'Current week (all models): 12% used · resets Sep 15, 6pm (Europe/London)',
+  'Current week (Fable): 23% used · resets Sep 15, 6pm (Europe/London)'
+].join('\n');
 const HAPPY: Record<string, CommandRunnerResult> = {
   claude: { stdout: CLAUDE_USAGE, stderr: '' },
+  'claude-work': { stdout: WORK_USAGE, stderr: '' },
   agy: { stdout: AGY_USAGE, stderr: '' },
   codex: CODEX_CHATGPT,
   kilo: { stdout: PROFILE, stderr: '' }
@@ -132,7 +144,7 @@ const RULE = '━'.repeat(72);
 
 function routedRunner(overrides: Record<string, CommandRunnerResult> = {}, launcher = HAPPY_KIMI, reader = grokReader(grokLog())): ProbeIo {
   const results = { ...HAPPY, ...overrides };
-  return ioOf({ run: async (command) => results[command] }, launcher, reader);
+  return ioOf({ run: async (command, _args, _timeoutMs, env) => results[env?.CLAUDE_CONFIG_DIR === undefined ? command : 'claude-work'] }, launcher, reader);
 }
 
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
@@ -153,12 +165,12 @@ describe('claude and agy windows', () => {
     const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const lines = plain(output).split('\n');
     expect(lines[0]).toMatch(/^ALLOWANCE +10:00:00Z$/);
-    expect(lines.filter((line) => line === RULE)).toHaveLength(7);
-    expect(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25, 30, 34]);
+    expect(lines.filter((line) => line === RULE)).toHaveLength(8);
+    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40]);
     expect(lines[1]).toBe(RULE);
-    expect(panelOf(output, 'claude').at(-1)).toBe('claude code · claude');
+    expect(panelOf(output, 'claude').at(-1)).toBe('claude · personal · claude');
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
-    expect(output).toContain(`${DIM}claude code · claude\x1b[0m`);
+    expect(output).toContain(`${DIM}claude · personal · claude\x1b[0m`);
     expect(output).toContain(`${DIM}agy · agy\x1b[0m`);
     expect(panelOf(output, 'kilo')).toEqual(['kilo', `$14.15 ${'█'.repeat(14)}${'░'.repeat(6)}`.padEnd(72), 'api balance · kilo']);
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
@@ -171,7 +183,7 @@ describe('claude and agy windows', () => {
       `${'session'.padEnd(35)} ${'█'.repeat(1)}${'░'.repeat(19)}   3% ↻ 8h40m`,
       `${'weekly'.padEnd(35)} ${'█'.repeat(17)}${'░'.repeat(3)}  86% ↻ 12h0m`,
       `${'weekly Fable'.padEnd(35)} ${'█'.repeat(20)} 100% ↻ 12h0m`,
-      'claude code · claude'
+      'claude · personal · claude'
     ]);
     const noColor = await runApp(routedRunner(), { NO_COLOR: '1' }, NOW);
     expect(noColor.split('\n')).toContain('weekly                              #################---  86% ↻ 12h0m');
@@ -225,7 +237,7 @@ describe('claude and agy windows', () => {
     ['all-models-less', { stdout: 'Current week (Fable): 100% used', stderr: '' }, 'Could not parse usage from output']
   ])('renders a dim unavailable panel for a %s claude', async (_case, result, reason) => {
     const output = await runApp(routedRunner({ claude: result }), {}, NOW);
-    expect(output).toContain(`${DIM}${RULE}\nclaude\n${reason}\nclaude code · claude\x1b[0m`);
+    expect(output).toContain(`${DIM}${RULE}\nclaude\n${reason}\nclaude · personal · claude\x1b[0m`);
     expect(panelOf(output, 'agy')).toHaveLength(6);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
   });
@@ -260,14 +272,14 @@ describe('claude and agy windows', () => {
 
   it('runs the probes in parallel and keeps panel order', async () => {
     const release: (() => void)[] = [];
-    const resumeAllOnFifth = () => {
-      if (release.length === 5) release.reverse().forEach((resume) => resume());
+    const resumeAllOnSixth = () => {
+      if (release.length === 6) release.reverse().forEach((resume) => resume());
     };
     const runner: CommandRunner = {
       run: () =>
         new Promise((resolve) => {
           release.push(() => resolve({ stdout: '', stderr: '', failure: 'timeout' }));
-          resumeAllOnFifth();
+          resumeAllOnSixth();
         })
     };
     const silentKimi: LaunchedProcess = { output: async () => '', hasExited: () => true, stop: async () => undefined };
@@ -275,13 +287,14 @@ describe('claude and agy windows', () => {
       launch: () =>
         new Promise((resolve) => {
           release.push(() => resolve(silentKimi));
-          resumeAllOnFifth();
+          resumeAllOnSixth();
         })
     };
     const output = plain(await runApp(ioOf(runner, launcher), {}, NOW));
     expect(output).toContain(
       [
-        'claude\nCommand timed out after 90s\nclaude code · claude',
+        'claude\nCommand timed out after 90s\nclaude · personal · claude',
+        'claude-work\nCommand timed out after 90s\nclaude · work · claude-work',
         'agy\nCommand timed out after 60s\nagy · agy',
         'kimi\nkimi web exited without printing a token\nkimi code · kimi',
         'grok\nno grok billing snapshot — run grok once\ngrok · grok',
@@ -292,11 +305,12 @@ describe('claude and agy windows', () => {
     );
   });
 
-  it('renders seven unavailable panels when no CLI is on the PATH, grok home is empty and cursor has no auth', async () => {
+  it('renders eight unavailable panels when no CLI is on the PATH, grok home is empty and cursor has no auth', async () => {
     const output = await runApp(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW);
     expect(output).toContain(
       [
-        `${DIM}${RULE}\nclaude\nclaude CLI not found in PATH\nclaude code · claude\x1b[0m`,
+        `${DIM}${RULE}\nclaude\nclaude CLI not found in PATH\nclaude · personal · claude\x1b[0m`,
+        `${DIM}${RULE}\nclaude-work\nclaude CLI not found in PATH\nclaude · work · claude-work\x1b[0m`,
         `${DIM}${RULE}\nagy\nagy CLI not found in PATH\nagy · agy\x1b[0m`,
         `${DIM}${RULE}\nkimi\nkimi CLI not found in PATH\nkimi code · kimi\x1b[0m`,
         `${DIM}${RULE}\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m`,
@@ -305,6 +319,127 @@ describe('claude and agy windows', () => {
         `${DIM}${RULE}\nkilo\nkilo CLI not found in PATH\napi balance · kilo\x1b[0m`
       ].join('\n')
     );
+  });
+});
+
+describe('claude-work panel', () => {
+  const WORK_ROWS = [
+    'session                             --------------------   0% ↻ 12h10m',
+    'weekly                              ##------------------  12% ↻ 2d7h',
+    'weekly Fable                        #####---------------  23% ↻ 2d7h'
+  ];
+  const WORK_CAPTION = 'claude · work · claude-work';
+  const PERSONAL_CAPTION = 'claude · personal · claude';
+  const PERSONAL_ROW = 'weekly                              #################---  86% ↻ 12h0m';
+  const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
+  const NAMES = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+  const OTHERS = ['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+  const CALM = '\x1b[32m';
+
+  function recordingIo(overrides: Record<string, CommandRunnerResult> = {}, isDirectory: FileReader['isDirectory'] = hasWorkConfig) {
+    const io = routedRunner(overrides);
+    const configDirs: string[] = [];
+    const runner: CommandRunner = {
+      run: (command, args, timeoutMs, env) => {
+        if (command === 'claude') configDirs.push(env?.CLAUDE_CONFIG_DIR ?? '-');
+        return io.runner.run(command, args, timeoutMs, env);
+      }
+    };
+    return { io: { ...io, runner, reader: { ...io.reader, isDirectory } }, configDirs };
+  }
+
+  it('renders both claude accounts as separate panels in order', async () => {
+    const output = await runApp(routedRunner(), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
+    const lines = output.split('\n');
+    const indices = NAMES.map((name) => lines.indexOf(name));
+    expect(indices.every((index, at) => index > (indices[at - 1] ?? 0))).toBe(true);
+    expect(panelOf(output, 'claude')).toContain(PERSONAL_ROW);
+    expect(panelOf(output, 'claude').at(-1)).toBe(PERSONAL_CAPTION);
+    expect(lines.slice(indices[1] - 1, indices[1] + 5)).toEqual(['='.repeat(72), 'claude-work', ...WORK_ROWS, WORK_CAPTION]);
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+  });
+
+  it('runs claude once per account, the work one with its config dir', async () => {
+    const { io, configDirs } = recordingIo();
+    await runApp(io, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/work' }, NOW);
+    expect(configDirs).toEqual(['-']);
+    await runApp({ ...io, reader: { ...io.reader, isDirectory: async (path) => path === '/work' } }, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/work' }, NOW);
+    expect(configDirs.sort()).toEqual(['-', '-', '/work']);
+  });
+
+  it('colours the work gauges calm and its caption dim next to the personal ramp', async () => {
+    const output = await runApp(routedRunner(), GROK_ENV, NOW);
+    const work = output.slice(output.indexOf('\nclaude-work\n'), output.indexOf(`${DIM}${WORK_CAPTION}\x1b[0m\n`));
+    expect(work).toContain(`${CALM}${'░'.repeat(20)}\x1b[0m ${CALM}  0%\x1b[0m ↻ 12h10m`);
+    expect(work).toContain(`${CALM}${'█'.repeat(2)}${'░'.repeat(18)}\x1b[0m ${CALM} 12%\x1b[0m ↻ 2d7h`);
+    expect(work).toContain(`${CALM}${'█'.repeat(5)}${'░'.repeat(15)}\x1b[0m ${CALM} 23%\x1b[0m ↻ 2d7h`);
+    expect(output).toContain(`\x1b[31m${'█'.repeat(17)}${'░'.repeat(3)}\x1b[0m \x1b[31m 86%`);
+    expect(output).toContain(`\x1b[35m${'█'.repeat(20)}\x1b[0m \x1b[35m100%`);
+  });
+
+  it.each<[string, Record<string, string>]>([
+    ['names a dir that is not there', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' }],
+    ['is unset and the home has no .claude-work', {}],
+    ['is empty and the home has no .claude-work', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '' }]
+  ])('never runs claude for the work account when the config dir %s', async (_case, env) => {
+    const happy = await runApp(routedRunner(), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
+    const isDirectory = async (path: string) => path === '/elsewhere';
+    const { io, configDirs } = recordingIo({}, isDirectory);
+    const output = await runApp(io, { ...GROK_ENV, ...env }, NOW);
+    expect(output).toContain(`${DIM}${RULE}\nclaude-work\n${NO_WORK_CONFIG}\n${WORK_CAPTION}\x1b[0m\n`);
+    expect(configDirs).toEqual(['-']);
+    const noColor = await runApp(recordingIo({}, isDirectory).io, { ...GROK_ENV, ...env, NO_COLOR: '1' }, NOW);
+    expect(noColor.split('\n').filter((line) => [...line].length > 72)).toEqual([NO_WORK_CONFIG]);
+    for (const name of OTHERS) expect(panelOf(noColor, name)).toEqual(panelOf(happy, name));
+  });
+
+  it.each<[string, Record<string, string>]>([
+    ['unset', {}],
+    ['empty', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '' }]
+  ])('defaults the work config dir to ~/.claude-work when the env var is %s', async (_case, env) => {
+    const { io, configDirs } = recordingIo();
+    const output = await runApp(io, { ...env, NO_COLOR: '1' }, NOW);
+    expect(panelOf(output, 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
+    expect(configDirs.sort()).toEqual(['-', WORK_CONFIG_DIR]);
+  });
+
+  it.each<[string, CommandRunnerResult, string]>([
+    ['exits with code 1', { stdout: '', stderr: '', failure: 'exit' }, 'Command failed or timed out'],
+    ['hangs', { stdout: '', stderr: '', failure: 'timeout' }, 'Command timed out after 90s'],
+    ['prints only a session line', { stdout: 'Current session: 0% used', stderr: '' }, 'Could not parse usage from output']
+  ])('keeps the personal panel when the work claude %s', async (_case, result, reason) => {
+    const output = await runApp(routedRunner({ 'claude-work': result }), {}, NOW);
+    expect(output).toContain(`${DIM}${RULE}\nclaude-work\n${reason}\n${WORK_CAPTION}\x1b[0m\n`);
+    expect(plain(output)).toContain(`\nclaude\n${'session'.padEnd(35)} █`);
+    expect(panelOf(output, 'claude')).toHaveLength(5);
+    expect(panelOf(output, 'claude').at(-1)).toBe(PERSONAL_CAPTION);
+  });
+
+  it('keeps the work panel when the personal claude exits with code 1', async () => {
+    const output = await runApp(routedRunner({ claude: { stdout: '', stderr: '', failure: 'exit' } }), { NO_COLOR: '1' }, NOW);
+    expect(panelOf(output, 'claude')).toEqual(['claude', 'Command failed or timed out', PERSONAL_CAPTION]);
+    expect(panelOf(output, 'claude-work')).toEqual(['claude-work', ...WORK_ROWS, WORK_CAPTION]);
+  });
+
+  it('reads a real work config dir and treats a regular file or a missing path as no config', async () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'allowance-claude-work-'));
+    try {
+      const file = join(scratch, 'claude-work-file');
+      writeFileSync(file, '');
+      expect(await Promise.all([scratch, file, join(scratch, 'no-such-dir')].map((path) => realIo.reader.isDirectory(path)))).toEqual([true, false, false]);
+      const { io, configDirs } = recordingIo();
+      const real = { ...io, reader: realIo.reader };
+      expect(panelOf(await runApp(real, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: scratch, NO_COLOR: '1' }, NOW), 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
+      expect(panelOf(await runApp(real, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: file, NO_COLOR: '1' }, NOW), 'claude-work')[1]).toBe(NO_WORK_CONFIG);
+      expect(configDirs.sort()).toEqual(['-', '-', scratch]);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it('realCommandRunner passes per-spawn env on top of the inherited environment', async () => {
+    const script = 'console.log(process.env.CLAUDE_CONFIG_DIR + " " + (process.env.PATH === undefined))';
+    expect((await realIo.runner.run('node', ['-e', script], 5000, { CLAUDE_CONFIG_DIR: '/work' })).stdout).toBe('/work false\n');
   });
 });
 
@@ -395,7 +530,7 @@ describe('grok panel', () => {
     expect(output).toContain(
       `${DIM}${RULE}\ngrok\n${'credits'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 11h15m\nstale snapshot 2d16h old\nSuperGrok Heavy · grok\x1b[0m\n`
     );
-    expect(output).toContain(`${DIM}claude code · claude\x1b[0m`);
+    expect(output).toContain(`${DIM}claude · personal · claude\x1b[0m`);
     expect(output).toContain(`\x1b[31m${'█'.repeat(17)}`);
   });
 
@@ -534,8 +669,8 @@ describe('codex panel', () => {
     const spawned: string[][] = [];
     const output = await runApp(codexIo(CODEX_CHATGPT, codexSpawner(codexLines(), spawned)), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
     const lines = output.split('\n');
-    expect(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 15, 20, 25, 30, 34]);
-    expect(lines.slice(24, 30)).toEqual([
+    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40]);
+    expect(lines.slice(30, 36)).toEqual([
       '='.repeat(72),
       'codex',
       '5h                                  ########------------  42% ↻ 2h30m',
@@ -814,7 +949,7 @@ describe('cursor panel', () => {
 
   function cursorIo(usage: Outcome = { status: 200, body: USAGE }, plan: Outcome = { status: 200, body: PLAN }, auth: Record<string, string> = { '/cursor/auth.json': AUTH }) {
     const files: Record<string, string> = { '/grok/logs/unified.jsonl': grokLog(), ...auth };
-    const reader: FileReader = { homeDir: () => '/home/tester', read: async (path) => files[path] };
+    const reader: FileReader = { homeDir: () => '/home/tester', read: async (path) => files[path], isDirectory: hasWorkConfig };
     const fetcher: Fetcher = { get: KIMI_FETCHER.get, post: async (url) => (url.endsWith('/GetPlanInfo') ? plan : usage) };
     return { ...routedRunner({ codex: CODEX_API_KEY }, HAPPY_KIMI, reader), fetcher };
   }
@@ -937,7 +1072,7 @@ describe('cursor panel', () => {
       await settleProbes();
       const frame = dashboard.lastFrame();
       expect(frame).not.toContain('probing…');
-      expect(frame.split('\n').slice(0, 2)).toEqual(['ALLOWANCE'.padEnd(47) + 'data 0h0m old · 10:00:00Z', '2/13 windows above 80% · next reset: claude session in 8h40m']);
+      expect(frame.split('\n').slice(0, 2)).toEqual(['ALLOWANCE'.padEnd(47) + 'data 0h0m old · 10:00:00Z', '2/16 windows above 80% · next reset: claude session in 8h40m']);
       expect(frame.split('\n').every((line) => [...line].length <= 72)).toBe(true);
       dashboard.press('q');
       await dashboard.finished;
@@ -950,7 +1085,7 @@ describe('cursor panel', () => {
       const count = dashboard.frames().length;
       await vi.advanceTimersByTimeAsync(65100);
       const frame = dashboard.lastFrame();
-      expect(frame.split('\n').slice(0, 2)).toEqual(['ALLOWANCE'.padEnd(47) + 'data 0h1m old · 10:01:05Z', '2/13 windows above 80% · next reset: claude session in 8h38m']);
+      expect(frame.split('\n').slice(0, 2)).toEqual(['ALLOWANCE'.padEnd(47) + 'data 0h1m old · 10:01:05Z', '2/16 windows above 80% · next reset: claude session in 8h38m']);
       expect(sessionRow(frame)).toMatch(/ ↻ 8h38m$/);
       expect(dashboard.frames().length - count).toBe(66);
       dashboard.press('q');
@@ -959,7 +1094,7 @@ describe('cursor panel', () => {
 
     it('turns a grok snapshot stale between frames', async () => {
       const files: Record<string, string> = { '/grok/logs/unified.jsonl': grokLog('2026-09-11T10:01:00.000Z'), '/cursor/auth.json': AUTH };
-      const io = { ...cursorIo(), reader: { homeDir: () => '/home/tester', read: async (path: string) => files[path] } };
+      const io = { ...cursorIo(), reader: { homeDir: () => '/home/tester', read: async (path: string) => files[path], isDirectory: hasWorkConfig } };
       const dashboard = startDashboard(io, { ...CURSOR_ENV, ALLOWANCE_REFRESH_SECONDS: '300' });
       await settleProbes();
       const earlier = dashboard.lastFrame();
@@ -981,10 +1116,26 @@ describe('cursor panel', () => {
       dashboard.press('r');
       const lines = dashboard.lastFrame().split('\n');
       expect(lines[0]).toBe(`\x1b[1mALLOWANCE${' '.repeat(24)}\x1b[0m\x1b[90mrefreshing…\x1b[0m\x1b[1m · data 0h1m old · 10:01:05Z\x1b[0m`);
-      expect(lines[1]).toBe('\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
+      expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
       expect(lines.at(-1)).toBe('\x1b[90mkeys: r refresh · q quit · ? help\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
       expect(lines.slice(2, -1).join('\n')).toBe(once.split('\n').slice(1).join('\n'));
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it('draws eight pending panels first and reruns claude once per account on r', async () => {
+      const io = { ...cursorIo(), launcher: kimiOnlyOnce() };
+      const run = vi.spyOn(io.runner, 'run');
+      const claudeRuns = () => run.mock.calls.filter(([command]) => command === 'claude').map(([, , , env]) => env?.CLAUDE_CONFIG_DIR ?? '-');
+      const dashboard = startDashboard(io, LIVE_ENV);
+      const names = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+      expect(dashboard.frames()[0].split('\n').filter((line) => names.includes(line))).toEqual(names);
+      await settleProbes();
+      expect(claudeRuns().sort()).toEqual(['-', WORK_CONFIG_DIR]);
+      dashboard.press('r');
+      await settleProbes();
+      expect(claudeRuns().sort()).toEqual(['-', '-', WORK_CONFIG_DIR, WORK_CONFIG_DIR]);
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -1142,20 +1293,21 @@ describe('wiring', () => {
   });
 
   it('probes claude, agy, codex and kilo with their commands and timeouts', async () => {
-    const calls: [string, string[], number][] = [];
+    const calls: [string, string[], number, Record<string, string> | undefined][] = [];
     const runner: CommandRunner = {
-      run: async (command, args, timeoutMs) => {
-        calls.push([command, args, timeoutMs]);
+      run: async (command, args, timeoutMs, env) => {
+        calls.push([command, args, timeoutMs, env]);
         return { stdout: PROFILE, stderr: '' };
       }
     };
     await runApp(ioOf(runner), {}, NOW);
-    expect(calls).toEqual([
-      ['claude', ['-p', '/usage'], 90000],
-      ['agy', ['-p', '/usage'], 60000],
-      ['codex', ['login', 'status'], 15000],
-      ['kilo', ['profile'], 20000]
+    expect(calls.filter((call) => call[3] === undefined)).toEqual([
+      ['claude', ['-p', '/usage'], 90000, undefined],
+      ['agy', ['-p', '/usage'], 60000, undefined],
+      ['codex', ['login', 'status'], 15000, undefined],
+      ['kilo', ['profile'], 20000, undefined]
     ]);
+    expect(calls.filter((call) => call[3] !== undefined)).toEqual([['claude', ['-p', '/usage'], 90000, { CLAUDE_CONFIG_DIR: WORK_CONFIG_DIR }]]);
   });
 
   it('realCommandRunner executes commands successfully', async () => {
@@ -1187,7 +1339,7 @@ describe('wiring', () => {
 
 describe('quitting the live dashboard', () => {
   const HOLD = 'require("node:fs").writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)';
-  const CHILDREN = ['agy', 'app-server', 'claude', 'kilo', 'kimi'];
+  const CHILDREN = ['agy', 'app-server', 'claude', 'claude-work', 'kilo', 'kimi'];
   const MISSING_RUN: CommandRunnerResult = { stdout: '', stderr: '', failure: 'missing' };
   let scratch = '';
 
@@ -1221,7 +1373,8 @@ describe('quitting the live dashboard', () => {
     scratch = mkdtempSync(join(tmpdir(), 'allowance-live-'));
     const hold = (name: string) => ['-e', HOLD, join(scratch, name)];
     const runner: CommandRunner = {
-      run: (command, _args, timeoutMs) => (command === 'codex' ? Promise.resolve(CODEX_CHATGPT) : realIo.runner.run(process.execPath, hold(command), timeoutMs))
+      run: (command, _args, timeoutMs, env) =>
+        command === 'codex' ? Promise.resolve(CODEX_CHATGPT) : realIo.runner.run(process.execPath, hold(env === undefined ? command : 'claude-work'), timeoutMs)
     };
     const pidOf = (name: string) => Number(readFileSync(join(scratch, name), 'utf8'));
     const launcher: Launcher = {
