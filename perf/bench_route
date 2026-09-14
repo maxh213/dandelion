@@ -1,0 +1,126 @@
+#!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { VALUES, absent, bothNames, emit, perCall, perCallSync, repeat } from './timing.mjs';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const domainEntry = join(tree, 'src', 'domain', 'index.ts');
+const NOW = '2026-09-14T11:00:00.000Z';
+const MIDNIGHT = '2026-09-15T00:00:00.000Z';
+const ITERATIONS = 2000;
+
+const TARGETS = {
+  cliRoute: 'cli route eight providers both claude accounts ok',
+  runRoute: 'runRoute eight providers both claude accounts stub (in-process, per call)',
+  renderRoute: 'renderRoute eight providers Europe/London (in-process, per call)',
+  routeEvaporation: 'routeLine eight providers evaporation (in-process, per call)',
+  routeHeadroom: 'routeLine eight providers headroom (in-process, per call)',
+  routeNone: 'routeLine eight providers nothing to route (in-process, per call)',
+  midnightUtc: 'nextLocalMidnight UTC (in-process, per call)',
+  midnightBerlinDst: 'nextLocalMidnight Europe/Berlin DST end (in-process, per call)'
+};
+
+const domain = existsSync(domainEntry) ? await import(pathToFileURL(domainEntry).href) : {};
+const render = existsSync(renderEntry) ? await import(pathToFileURL(renderEntry).href) : {};
+const app = existsSync(appEntry) ? await import(pathToFileURL(appEntry).href) : {};
+
+if (typeof domain.routeLine !== 'function' || typeof render.renderRoute !== 'function' || typeof app.runRoute !== 'function') {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const PERSONAL_OUT = [
+  'Current session: 3% used · resets Sep 14, 7:40pm (Europe/London)',
+  'Current week (all models): 86% used · resets Sep 14, 11pm (Europe/London)',
+  'Current week (Fable): 100% used · resets Sep 14, 11pm (Europe/London)'
+].join('\n') + '\n';
+const WORK_OUT = [
+  'Current session: 0% used · resets Sep 14, 11:10pm (Europe/London)',
+  'Current week (all models): 12% used · resets Sep 16, 6pm (Europe/London)',
+  'Current week (Fable): 23% used · resets Sep 16, 6pm (Europe/London)'
+].join('\n') + '\n';
+const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z\n';
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-route-'));
+const bin = join(fixture, 'bin');
+const workDir = join(fixture, '.claude-work');
+mkdirSync(bin);
+mkdirSync(workDir);
+writeFileSync(join(bin, 'claude'), `#!/bin/sh\nif [ -n "$CLAUDE_CONFIG_DIR" ]; then\ncat <<'OUT'\n${WORK_OUT}OUT\nelse\ncat <<'OUT'\n${PERSONAL_OUT}OUT\nfi\n`);
+writeFileSync(join(bin, 'agy'), `#!/bin/sh\ncat <<'OUT'\n${AGY_OUT}OUT\n`);
+writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
+for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
+
+function timeCli() {
+  const env = bothNames({ ...process.env, PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
+  delete env.NO_COLOR;
+  delete env.CLAUDE_CONFIG_DIR;
+  delete env.ALLOWANCE_CURSOR_API_BASE;
+  delete env.DANDELION_CURSOR_API_BASE;
+  const start = process.hrtime.bigint();
+  const result = spawnSync(process.execPath, [main, 'route'], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
+  if (result.status !== 0 || result.stdout.split('\n').length !== 2) throw new Error(`route printed no single line (exit ${result.status}):\n${result.stdout}${result.stderr}`);
+  return elapsed;
+}
+
+const runner = { run: async (command, _args, _timeout, env) => ({ stdout: command === 'claude' ? (env?.CLAUDE_CONFIG_DIR ? WORK_OUT : PERSONAL_OUT) : command === 'agy' ? AGY_OUT : command === 'kilo' ? KILO_OUT : '', stderr: '' }) };
+const stubIo = {
+  ...runner,
+  runner,
+  launcher: { launch: async () => undefined },
+  spawner: { spawn: () => undefined },
+  fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
+  reader: { homeDir: () => fixture, read: async () => undefined, isDirectory: async (path) => path === workDir }
+};
+const appEnv = bothNames({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+
+const win = (label, kind, usedPct, resetsAt) => ({ label, kind, usedPct, resetsAt });
+function fleet(claudeWeeklyReset) {
+  return [
+    { id: 'claude', displayName: 'claude', planLabel: 'claude · personal', fetchedAt: NOW, status: 'ok', windows: [win('session', 'rolling', 3, '2026-09-14T18:40:00.000Z'), win('weekly', 'weekly', 86, claudeWeeklyReset), win('weekly Fable', 'weekly', 100, claudeWeeklyReset)] },
+    { id: 'claude-work', displayName: 'claude-work', planLabel: 'claude · work', fetchedAt: NOW, status: 'ok', windows: [win('session', 'rolling', 0, '2026-09-14T22:10:00.000Z'), win('weekly', 'weekly', 12, '2026-09-16T17:00:00.000Z'), win('weekly Fable', 'weekly', 23, '2026-09-16T17:00:00.000Z')] },
+    { id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok', windows: [win('Claude and GPT models · Five Hour Limit', 'rolling', 40, '2026-09-14T15:59:00Z'), win('Gemini Models · Weekly Limit', 'weekly', 0, '2026-09-20T17:13:45Z'), win('Gemini Models · Daily Limit', 'other', 5, '2026-09-15T00:00:00Z')] },
+    { id: 'kimi', displayName: 'kimi', planLabel: 'kimi', fetchedAt: NOW, status: 'ok', windows: [win('weekly', 'weekly', 20, '2026-09-18T00:00:00Z'), win('5h', 'rolling', 10, '2026-09-14T14:00:00Z')] },
+    { id: 'grok', displayName: 'grok', planLabel: 'grok', fetchedAt: '2026-09-12T10:00:00.000Z', status: 'ok', windows: [win('credits', 'weekly', 55, '2026-10-01T00:00:00Z')] },
+    { id: 'codex', displayName: 'codex', planLabel: 'codex', fetchedAt: NOW, status: 'ok', windows: [win('5h', 'other', 30, '2026-09-14T13:00:00Z'), win('weekly', 'weekly', 40, '2026-09-14T20:00:00Z')] },
+    { id: 'cursor', displayName: 'cursor', planLabel: 'Ultra · $200/mo', fetchedAt: NOW, status: 'ok', windows: [win('total', 'weekly', 31, '2026-09-30T16:45:06.000Z'), win('auto', 'weekly', 32, '2026-09-30T16:45:06.000Z'), win('api', 'weekly', 16, '2026-09-30T16:45:06.000Z')] },
+    { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
+  ];
+}
+const evaporating = fleet('2026-09-14T22:00:00.000Z');
+const headroom = fleet('2026-09-19T22:00:00.000Z');
+const nothing = headroom.map((usage) => ({ ...usage, status: 'unavailable', windows: [], reason: 'not found' }));
+
+function expect(actual, wanted, what) {
+  if (actual !== wanted) throw new Error(`${what}: got ${JSON.stringify(actual)}, wanted ${JSON.stringify(wanted)}`);
+}
+
+try {
+  expect(domain.routeLine(evaporating, NOW, MIDNIGHT), 'claude-opus-5 max', 'evaporation');
+  expect(domain.routeLine(headroom, NOW, MIDNIGHT), 'kimi-code/kimi-for-coding-highspeed', 'headroom');
+  expect(domain.routeLine(nothing, NOW, MIDNIGHT), 'none', 'nothing');
+  expect(domain.nextLocalMidnight('UTC', NOW), MIDNIGHT, 'utc midnight');
+  expect(domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z'), '2026-10-25T23:00:00.000Z', 'berlin midnight');
+  expect(render.renderRoute(evaporating, NOW, 'Europe/London').routed, true, 'renderRoute');
+  expect((await app.runRoute(stubIo, appEnv, NOW, 'Europe/London')).routed, true, 'runRoute');
+
+  timeCli();
+  emit(TARGETS.cliRoute, await repeat(VALUES, timeCli), 'ms');
+  emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, NOW, 'Europe/London')), 'us');
+  emit(TARGETS.renderRoute, perCallSync(ITERATIONS, () => render.renderRoute(evaporating, NOW, 'Europe/London')), 'us');
+  emit(TARGETS.routeEvaporation, perCallSync(ITERATIONS, () => domain.routeLine(evaporating, NOW, MIDNIGHT)), 'us');
+  emit(TARGETS.routeHeadroom, perCallSync(ITERATIONS, () => domain.routeLine(headroom, NOW, MIDNIGHT)), 'us');
+  emit(TARGETS.routeNone, perCallSync(ITERATIONS, () => domain.routeLine(nothing, NOW, MIDNIGHT)), 'us');
+  emit(TARGETS.midnightUtc, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('UTC', NOW)), 'us');
+  emit(TARGETS.midnightBerlinDst, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z')), 'us');
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}
