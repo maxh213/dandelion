@@ -80,8 +80,17 @@ Feature: 009 - Rename the project to dandelion
       | ALLOWANCE_KIMI_PORT              | "abc", kimi fixture of 003 "ok"    | none                                             | `kimi` is started with "--port 59177" and the kimi panel shows the 003 rows "weekly … 59%" and "5h … 42%" |
       | ALLOWANCE_GROK_HOME              | the 004 grok home with a snapshot  | none                                             | the grok reason is "no grok billing snapshot — run grok once"                                           |
       | ALLOWANCE_CURSOR_AUTH_FILE       | the 006 dummy auth file            | DANDELION_CURSOR_API_BASE = the cursor fixture   | the cursor reason is "no cursor auth — run cursor-agent login" and the fixture receives no request       |
-      | ALLOWANCE_CURSOR_API_BASE        | the cursor fixture's URL           | DANDELION_CURSOR_AUTH_FILE = the dummy auth file | the cursor fixture receives no request and the cursor panel is dim with a request-failure reason         |
       | ALLOWANCE_CLAUDE_WORK_CONFIG_DIR | an existing directory              | none                                             | `claude` is run only once, without CLAUDE_CONFIG_DIR, and the claude-work reason is "no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude" |
+
+  Scenario: The cursor probe ignores the old cursor names, proven without network
+    Given the unit test "ignores the old ALLOWANCE_CURSOR_* names" in "src/probes/cursor.test.ts"
+    And its env is the single line `const OLD_ENV = { ALLOWANCE_CURSOR_AUTH_FILE: '/auth.json', ALLOWANCE_CURSOR_API_BASE: 'http://127.0.0.1:48006' };`
+    And its fake reader holds a token only at "/home/tester/.config/cursor/auth.json" and its fake fetcher records every POST and answers the 006 usage and plan
+    When probeCursor runs with OLD_ENV
+    Then the reader read only "/home/tester/.config/cursor/auth.json"
+    And the fetcher got exactly two POSTs, to "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage" and "https://api2.cursor.sh/aiserver.v1.DashboardService/GetPlanInfo"
+    And no request URL contains "127.0.0.1:48006"
+    And no e2e sets ALLOWANCE_CURSOR_API_BASE, so no e2e reaches the real api2.cursor.sh
 
   Scenario: Live refresh ignores ALLOWANCE_REFRESH_SECONDS
     Given DANDELION_REFRESH_SECONDS is unset and ALLOWANCE_REFRESH_SECONDS is "1"
@@ -106,8 +115,8 @@ Feature: 009 - Rename the project to dandelion
     And it covers every row of "Old ALLOWANCE_* names are ignored" and "Live refresh ignores ALLOWANCE_REFRESH_SECONDS", removing every DANDELION_* name from the inherited env first
     And this command prints nothing:
       """
-      git grep -nI -e ALLOWANCE -e Allowance -e allowance- -e '"allowance"' -- src perf README.md package.json package-lock.json 'qa/*.mjs' ':!qa/009-rename-dandelion.e2e.mjs'
+      git grep -nI -e ALLOWANCE -e Allowance -e allowance- -e '"allowance"' -- src perf README.md package.json package-lock.json 'qa/*.mjs' ':!qa/009-rename-dandelion.e2e.mjs' | grep -v "^src/probes/cursor.test.ts:[0-9]*:const OLD_ENV = { ALLOWANCE_CURSOR_AUTH_FILE: '/auth.json', ALLOWANCE_CURSOR_API_BASE: 'http://127.0.0.1:48006' };$"
       """
-    And so "qa/009-rename-dandelion.e2e.mjs" is the only code file that may spell an old name, as plain string literals; unit tests in src do not set ALLOWANCE_*
+    And so old names may be spelled, as plain string literals, only in "qa/009-rename-dandelion.e2e.mjs" and on that one OLD_ENV line of "src/probes/cursor.test.ts"; no other unit test sets ALLOWANCE_*
     And the frozen qa/*.md and features/*.feature of 001 to 009 are outside that check
     And no e2e runs a real provider binary and every temp dir is removed
