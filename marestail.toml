@@ -21,8 +21,8 @@ crap_max = 4
 runner = "vitest"
 
 [sonar]
-project_key = "allowance"
-project_name = "allowance"
+project_key = "dandelion"
+project_name = "dandelion"
 exclusions = []
 
 [deadcode]
