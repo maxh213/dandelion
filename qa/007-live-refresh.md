@@ -2,13 +2,16 @@
 
 After 007, every earlier procedure's `npm start` / `"$NPM" start` means `"$NPM" start --silent -- --once`. Their expected output is unchanged.
 
-Set up once in the repo root, in a real terminal (bash, util-linux `script`). First run the set-up blocks of `qa/002-claude-agy.md` to `qa/006-cursor.md`, so `$FX`, `$NODEBIN`, `$NPM`, `$KP`, `$GH` and `$CF` exist. Then start the cursor fixture and add two override dirs. `$SLOW` holds a `kilo` that waits 60s. `$SK` holds a `kimi` that waits 3s and then runs the 003 fixture. Finally define `lv`, which runs the app against all fixtures. Put an override dir in `PRE` to use it, and put extra arguments after `--`.
+Set up once in the repo root, in a real terminal (bash, util-linux `script`). First run the set-up blocks of `qa/002-claude-agy.md` to `qa/006-cursor.md`, so `$FX`, `$NODEBIN`, `$NPM`, `$KP`, `$GH` and `$CF` exist. Then start the cursor fixture and add two override dirs. `$SLOW` holds a `kilo` that waits 60s. `$SK` holds a `kimi` that waits 3s and then runs the 003 fixture. `$SUM` holds a `claude` and a 2-row `agy` whose resets are baked relative to set-up: claude session in 1h30m, the rest 5h or more away. Steps 4 to 6 and 10 must start within 1 hour of set-up. With them the fleet has 11 windows (claude 3, agy 2, kimi 2, grok 1, cursor 3; codex has none in mode `apikey`). Two are at or above 80% (claude weekly 86%, Fable 100%), and the soonest reset is claude session. Finally define `lv`, which runs the app against all fixtures. Put an override dir in `PRE` to use it, and put extra arguments after `--`.
 
 ```bash
 unset NO_COLOR; echo ok > "$FX/mode"; CF="$CF" CURSOR_FIXTURE_MODE=ok node "$CF/server.mjs" & sleep 0.5
 export SLOW="$(mktemp -d)"; printf '#!/usr/bin/env node\nsetTimeout(() => console.log("Balance: $14.15"), 60000);\n' > "$SLOW/kilo"; chmod +x "$SLOW/kilo"
 export SK="$(mktemp -d)"; printf '#!/usr/bin/env node\nsetTimeout(() => require("%s"), 3000);\n' "$FX/kimi" > "$SK/kimi"; chmod +x "$SK/kimi"
-export FX NODEBIN NPM KP GH CF; export CAP="$(mktemp)"
+export SUM="$(mktemp -d)"; S="$(TZ=Europe/London date -d '+1 hour +30 minutes' '+%b %-d, %-I:%M%P')"; L="$(TZ=Europe/London date -d '+3 days' '+%b %-d, %-I:%M%P')"; W="$(date -u -d '+7 days' +%Y-%m-%dT%H:%M:%SZ)"; H="$(date -u -d '+5 hours' +%Y-%m-%dT%H:%M:%SZ)"
+printf '#!/bin/sh\nprintf "%%s\\n" "Current session: 3%% used · resets %s (Europe/London)" "Current week (all models): 86%% used · resets %s (Europe/London)" "Current week (Fable): 100%% used · resets %s (Europe/London)"\n' "$S" "$L" "$L" > "$SUM/claude"
+printf '#!/bin/sh\nprintf "Gemini Models\\tWeekly Limit Remaining\\t100%%%%\\t%s\\n"\nprintf "Claude and GPT models\\tFive Hour Limit Remaining\\t25%%%%\\t%s\\n"\n' "$W" "$H" > "$SUM/agy"; chmod +x "$SUM"/*
+export FX NODEBIN NPM KP GH CF SUM; export CAP="$(mktemp)"
 lv() { rm -f "$FX/codex.calls"; env CODEX_FIXTURE_MODE=apikey PATH="${PRE:+$PRE:}$FX:$NODEBIN" ALLOWANCE_KIMI_PORT=$KP ALLOWANCE_GROK_HOME="$GH" ALLOWANCE_CURSOR_AUTH_FILE="$CF/auth.json" ALLOWANCE_CURSOR_API_BASE=http://127.0.0.1:48006 "$NPM" start --silent -- "$@"; echo "exit=$?"; }; export -f lv
 ```
 
@@ -21,11 +24,11 @@ lv() { rm -f "$FX/codex.calls"; env CODEX_FIXTURE_MODE=apikey PATH="${PRE:+$PRE:
 3. Run `NO_COLOR=1 lv | cat`, then `NO_COLOR=1 lv < /dev/null`.
    - **Expected:** each prints the same output as step 2 and then `exit=0` right away, without waiting for input.
 
-4. Run `PRE="$SK" NO_COLOR=1 ALLOWANCE_REFRESH_SECONDS=300 lv`.
+4. Run `PRE="$SK:$SUM" NO_COLOR=1 ALLOWANCE_REFRESH_SECONDS=300 lv`.
    - **Expected:** a blank alternate screen appears and the cursor hides. The first frame shows seven pending panels in order claude, agy, kimi, grok, codex, cursor, kilo. Each is a `=` rule, the id, and a spinning `⠋⠙⠹…` with `probing…`. Within 1s every panel except kimi shows its data, while kimi keeps spinning. About 3s in, kimi shows `weekly` 59% and `5h` 42%, and nothing else on screen changes.
 
 5. Keep watching the same run for 70 seconds without pressing anything.
-   - **Expected:** line 2 reads `2/13 windows above 80% · next reset: claude session in <countdown>`. That countdown equals the `↻` on claude's `session` row. The banner ends in `data 0h0m old · HH:MM:SSZ`. The clock advances every second. After about 60s the banner shows `data 0h1m old`, and every `↻` in minutes, including the summary's, has dropped by 1m. No `refreshing…` appears.
+   - **Expected:** line 2 reads `2/11 windows above 80% · next reset: claude session in <countdown>`, where `<countdown>` is `0hNm` or `1hNm` and equals the `↻` on claude's `session` row in the same frame. The banner ends in `data 0h0m old · HH:MM:SSZ`. The clock advances every second. After about 60s the banner shows `data 0h1m old`, and every `↻` in minutes, including the summary's, has dropped by 1m. No `refreshing…` appears.
 
 6. In a second terminal, run `grep -c '^login' "$FX/codex.calls"`. Back in the dashboard, press `r` twice quickly, then wait 5s and run the same `grep` again.
    - **Expected:** the first count is `1`. `refreshing… · ` appears in the banner at once, while kimi keeps its rows and nothing shows `probing…`. The marker is gone after about 3s. The second count is `2`.
@@ -39,8 +42,8 @@ lv() { rm -f "$FX/codex.calls"; env CODEX_FIXTURE_MODE=apikey PATH="${PRE:+$PRE:
 9. Run `ALLOWANCE_REFRESH_SECONDS=10 lv` and watch for 15s after the last panel settles.
    - **Expected:** about 10s after the last panel settled, the banner shows `refreshing… · `. No panel goes back to `probing…` or blanks. The marker disappears when the round ends. Then press Ctrl-C. The result is the same as step 8, with `exit=0`.
 
-10. Run `PRE="$SK" ALLOWANCE_REFRESH_SECONDS=4 script -qfc 'lv' "$CAP"`. Press `?` right away. Wait about 10s, until `refreshing…` has shown at least once, then press `q`. Now run:
-    `for s in $'⠋ probing…\e[0m' $'\e[90mkeys: r refresh · q quit · ? help\e[0m' $'\e[90m2/13 windows above 80% · next reset: claude session in ' $'\e[0m\e[90mrefreshing…\e[0m\e[1m · data 0h0m old · ' $'\e[?25h\e[?1049l'; do grep -aFc "$s" "$CAP"; done`
+10. Run `PRE="$SK:$SUM" ALLOWANCE_REFRESH_SECONDS=4 script -qfc 'lv' "$CAP"`. Press `?` right away. Wait about 10s, until `refreshing…` has shown at least once, then press `q`. Now run:
+    `for s in $'⠋ probing…\e[0m' $'\e[90mkeys: r refresh · q quit · ? help\e[0m' $'\e[90m2/11 windows above 80% · next reset: claude session in ' $'\e[0m\e[90mrefreshing…\e[0m\e[1m · data 0h0m old · ' $'\e[?25h\e[?1049l'; do grep -aFc "$s" "$CAP"; done`
     - **Expected:** on screen the spinner, summary, footer and `refreshing…` are grey, the banner text is bold, and the gauges have their ramp colours. `exit=0` is printed. Every one of the five counts is at least `1`.
 
 11. Run `PRE="$SLOW" NO_COLOR=1 lv`.

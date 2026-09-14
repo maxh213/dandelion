@@ -21,6 +21,8 @@ Feature: 007 - Live dashboard with parallel probes, auto-refresh and keys
   n counts every window of every ok result, k those with usedPct >= 80 (the hot threshold). When k is 0 the first segment is
   "all windows below 80%". The next reset is the soonest resetsAt after the frame time, ties by panel order then row order;
   with none, the second segment is "next reset: none". Balances are not windows.
+  The summary is at most 72 cells: when longer, only the window label is cut to its first L-1 cells, trailing spaces trimmed,
+  plus "…", with L the largest label length that makes the line fit 72; the id and "in <countdown>" are never cut.
   Help footer: "keys: r refresh · q quit · ? help".
   Colour (without NO_COLOR), with B="\e[1m", D="\e[90m", R="\e[0m": a banner without the marker is one span
   B<whole line>R, as in 006. With the marker it is B"ALLOWANCE<gap>"R D"refreshing…"R B" · data <age> old · HH:MM:SSZ"R.
@@ -79,6 +81,13 @@ Feature: 007 - Live dashboard with parallel probes, auto-refresh and keys
     And its claude "session" row ends in "↻ 8h38m" where the earlier frame's ended in "↻ 8h40m"
     And frames are drawn at about 1 per second while nothing is pending, so the clock changes every second
 
+  Scenario: A grok snapshot turns stale between frames
+    Given the grok log's newest billing event has ts "2026-09-11T10:01:00.000Z" and every probe settled at "2026-09-13T10:00:00Z"
+    And ALLOWANCE_REFRESH_SECONDS is "300" and NO_COLOR is unset
+    When a frame is drawn at "2026-09-13T10:00:00Z" and a later one at "2026-09-13T10:02:00Z" with no new result between
+    Then the earlier frame's grok panel is its fresh 004 rendering with the dim line "snapshot 1d23h old"
+    And the later frame's grok panel is dim throughout, as in the 004 stale scenario, with the line "stale snapshot 2d0h old"
+
   Scenario Outline: Fleet summary variations
     Given the on-screen results hold only <windows>
     Then the summary line is "<summary>"
@@ -89,6 +98,8 @@ Feature: 007 - Live dashboard with parallel probes, auto-refresh and keys
       | codex 5h 80% resetting 12:30:00Z and claude weekly 86% resetting 12:30:00Z  | 2/2 windows above 80% · next reset: claude weekly in 2h30m   |
       | grok credits 79% resetting 09:00:00Z (past) and kilo balance $14.15         | all windows below 80% · next reset: none                     |
       | no ok result (seven unavailable panels)                                     | all windows below 80% · next reset: none                     |
+      | the Background results, with agy "Claude and GPT models · Five Hour Limit" resetting 11:59:00Z | 2/13 windows above 80% · next reset: agy Claude and GPT models… in 1h59m |
+      | agy "Claude and GPT models · Five Hour Limit" 75% resetting 11:59:00Z only  | all windows below 80% · next reset: agy Claude and GPT models… in 1h59m |
 
   Scenario: Auto-refresh keeps the data on screen
     Given ALLOWANCE_REFRESH_SECONDS is "1"
