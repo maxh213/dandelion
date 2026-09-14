@@ -21,7 +21,7 @@ const RESET = '\x1b[0m';
 describe('terminal renderer', () => {
   it('renders banner', () => {
     const banner = renderBanner('2026-09-13T10:00:00.000Z', true);
-    expect(banner).toContain('ALLOWANCE');
+    expect(banner).toContain('DANDELION');
     expect(banner).toContain('10:00:00Z');
     expect(banner).toHaveLength(72);
   });
@@ -204,7 +204,7 @@ describe('terminal renderer', () => {
       }
     ];
     const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z');
-    expect(dash).toContain('ALLOWANCE');
+    expect(dash).toContain('DANDELION');
     expect(dash).toContain('##############------');
     expect(dash).toContain('other\nProbe crashed');
 
@@ -359,7 +359,7 @@ describe('live frame', () => {
   it('shows the age of the oldest on-screen result in the banner', () => {
     const usages = [okUsage('claude', [], { fetchedAt: NOW }), okUsage('agy', [], { fetchedAt: '2026-09-13T09:58:00.000Z' }), okUsage('kilo', [], { fetchedAt: '2026-09-13T09:59:00.000Z' })];
     const frame = renderLiveFrame(viewOf([...usages, undefined]), true, '2026-09-13T10:00:30.000Z').split('\n');
-    expect(frame[0]).toBe('ALLOWANCE'.padEnd(47) + 'data 0h2m old · 10:00:30Z');
+    expect(frame[0]).toBe('DANDELION'.padEnd(47) + 'data 0h2m old · 10:00:30Z');
   });
 
   it('renders a pending panel as the rule, the id and the spinner frame for the tick', () => {
@@ -373,7 +373,7 @@ describe('live frame', () => {
   it('colours the refreshing banner in spans, the summary and the footer dim, and panels as in once mode', () => {
     const frameNow = '2026-09-13T10:01:05.000Z';
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), false, frameNow).split('\n');
-    expect(lines[0]).toBe(`\x1b[1mALLOWANCE${' '.repeat(24)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05Z${RESET}`);
+    expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(24)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05Z${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
     expect(lines.at(-1)).toBe(`\x1b[90mkeys: r refresh · q quit · ? help${RESET}`);
     expect(lines.slice(2, -1).join('\n')).toBe(renderDashboard(background(), false, frameNow).split('\n').slice(1).join('\n'));
@@ -381,7 +381,7 @@ describe('live frame', () => {
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), true, '2026-09-13T10:01:05.000Z').split('\n');
-    expect(lines[0]).toBe('ALLOWANCE'.padEnd(33) + 'refreshing… · data 0h1m old · 10:01:05Z');
+    expect(lines[0]).toBe('DANDELION'.padEnd(33) + 'refreshing… · data 0h1m old · 10:01:05Z');
     expect(lines.at(-1)).toBe('keys: r refresh · q quit · ? help');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
   });

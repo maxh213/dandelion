@@ -5,7 +5,11 @@ import { EventEmitter } from 'node:events';
 import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ProbeIo } from './app/index.ts';
+
+const MAIN_URL = new URL('./main.ts', import.meta.url).href;
+const MAIN = fileURLToPath(MAIN_URL);
 
 vi.mock('./app/index.ts', async (importOriginal) => {
   const original = await importOriginal<typeof import('./app/index.ts')>();
@@ -46,7 +50,7 @@ function writeFixture(dir: string, name: string, body: string): void {
 }
 
 function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
-  const dir = mkdtempSync(join(tmpdir(), 'allowance-kilo-'));
+  const dir = mkdtempSync(join(tmpdir(), 'dandelion-kilo-'));
   try {
     const script = join(dir, 'kilo');
     writeFileSync(script, '#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "Name: Max\\nEmail: yeti213@googlemail.com\\nTeam: Personal\\nBalance: \\$14.15\\n"\n');
@@ -57,11 +61,11 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
     writeFixture(dir, 'codex', "echo 'Not logged in' >&2; exit 1");
     const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${dir}:${process.env.PATH}` };
     delete env.NO_COLOR;
-    delete env.ALLOWANCE_KILO_REFERENCE;
-    delete env.ALLOWANCE_KIMI_PORT;
-    delete env.ALLOWANCE_CURSOR_API_BASE;
+    delete env.DANDELION_KILO_REFERENCE;
+    delete env.DANDELION_KIMI_PORT;
+    delete env.DANDELION_CURSOR_API_BASE;
     delete env.CLAUDE_CONFIG_DIR;
-    Object.assign(env, { ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: dir }, extraEnv);
+    Object.assign(env, { DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir }, extraEnv);
     return spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -72,14 +76,14 @@ describe('main', () => {
   it('prints the kilo panel with a 14 of 20 gauge from a fixture kilo on PATH', () => {
     const result = runWithFixtureKilo({});
     expect(result.status).toBe(0);
-    expect(result.stdout.startsWith('\x1b[1mALLOWANCE ')).toBe(true);
-    expect(result.stdout).toMatch(/^\S+ALLOWANCE +\d{2}:\d{2}:\d{2}Z\S+\n/);
+    expect(result.stdout.startsWith('\x1b[1mDANDELION ')).toBe(true);
+    expect(result.stdout).toMatch(/^\S+DANDELION +\d{2}:\d{2}:\d{2}Z\S+\n/);
     expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\x1b[0m\nkilo\n$14.15 ' + '█'.repeat(14) + '░'.repeat(6) + ' '.repeat(45) + '\n\x1b[90mapi balance · kilo\x1b[0m');
     expect(result.stdout).not.toContain('not found');
   });
 
-  it('fills the gauge from a fixture kilo when ALLOWANCE_KILO_REFERENCE is 10', () => {
-    const result = runWithFixtureKilo({ ALLOWANCE_KILO_REFERENCE: '10', NO_COLOR: '1' });
+  it('fills the gauge from a fixture kilo when DANDELION_KILO_REFERENCE is 10', () => {
+    const result = runWithFixtureKilo({ DANDELION_KILO_REFERENCE: '10', NO_COLOR: '1' });
     expect(result.status).toBe(0);
     expect(result.stdout).not.toContain('\x1b[');
     expect(result.stdout).toContain('='.repeat(72) + '\nkilo\n$14.15 ' + '#'.repeat(20) + ' '.repeat(45) + '\n');
@@ -108,15 +112,15 @@ describe('main', () => {
   it('writes the dashboard to the stream', async () => {
     let output = '';
     await main(profileIo, { NO_COLOR: '1' }, { write: (out: string) => { output += out; } }, '2026-09-13T10:00:00.000Z');
-    expect(output).toContain('ALLOWANCE');
+    expect(output).toContain('DANDELION');
     expect(output).toContain('10:00:00Z');
     expect(output).toContain('$14.15');
     expect(output.endsWith('\n')).toBe(true);
   });
 
   it('runIfMain writes to stdout when invoked as the entry file', async () => {
-    const { proc, output } = procOf(['node', '/path/to/main.ts'], true, undefined);
-    await runIfMain('file:///path/to/main.ts', '/path/to/main.ts', profileIo, proc);
+    const { proc, output } = procOf(['node', MAIN], true, undefined);
+    await runIfMain(MAIN_URL, MAIN, profileIo, proc);
     expect(output()).toContain('$14.15');
     expect(output().endsWith('\n')).toBe(true);
     expect(output()).not.toContain(ENTER_ALTERNATE);
@@ -129,16 +133,28 @@ describe('main', () => {
     ['stdin not a terminal', ['node', 'main.ts'], undefined, true]
   ])('runIfMain runs once with %s', async (_case, argv, stdinTTY, stdoutTTY) => {
     const { proc, output, keyboard } = procOf(argv, stdinTTY, stdoutTTY);
-    await runIfMain('file:///path/to/main.ts', '/path/to/main.ts', profileIo, proc);
-    expect(output()).toMatch(/^ALLOWANCE +\d{2}:\d{2}:\d{2}Z\n/);
+    await runIfMain(MAIN_URL, MAIN, profileIo, proc);
+    expect(output()).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z\n/);
     expect(output()).not.toContain('probing…');
     expect(output()).not.toContain(ENTER_ALTERNATE);
     expect(keyboard.setRawMode).not.toHaveBeenCalled();
   });
 
+  it('runIfMain runs once when invoked through a symlink to main.ts, as npm link creates', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dandelion-bin-'));
+    try {
+      symlinkSync(MAIN, join(dir, 'dandelion'));
+      const { proc, output } = procOf(['node', join(dir, 'dandelion'), '--once'], true, true);
+      await runIfMain(MAIN_URL, join(dir, 'dandelion'), profileIo, proc);
+      expect(output()).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z\n/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('runIfMain runs the live dashboard on two terminals and exits 0 after q', async () => {
-    const { proc, output, keyboard } = procOf(['node', '/path/to/main.ts'], true, true);
-    const running = runIfMain('file:///path/to/main.ts', '/path/to/main.ts', profileIo, proc);
+    const { proc, output, keyboard } = procOf(['node', MAIN], true, true);
+    const running = runIfMain(MAIN_URL, MAIN, profileIo, proc);
     expect(output().startsWith(`${ENTER_ALTERNATE}\x1b[H\x1b[2J`)).toBe(true);
     expect(keyboard.setRawMode).toHaveBeenCalledWith(true);
     await vi.waitFor(() => expect(output()).toContain('$14.15'));
@@ -150,20 +166,21 @@ describe('main', () => {
 
   it('runIfMain does nothing for another entry file', async () => {
     const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn(), post: vi.fn() }, reader: { homeDir: vi.fn(), read: vi.fn(), isDirectory: vi.fn() }, spawner: { spawn: vi.fn() } };
-    await runIfMain('file:///path/to/main.ts', 'other.ts', io, procOf(['node', 'other.ts'], true, true).proc);
-    await runIfMain('file:///path/to/main.ts', undefined, io, procOf(['node'], true, true).proc);
+    await runIfMain(MAIN_URL, 'other.ts', io, procOf(['node', 'other.ts'], true, true).proc);
+    await runIfMain(MAIN_URL, 'README.md', io, procOf(['node', 'README.md'], true, true).proc);
+    await runIfMain(MAIN_URL, undefined, io, procOf(['node'], true, true).proc);
     expect(io.runner.run).not.toHaveBeenCalled();
     expect(io.launcher.launch).not.toHaveBeenCalled();
     expect(io.spawner.spawn).not.toHaveBeenCalled();
   });
 
   it('runs with only fixtures, node and sh on PATH and no runtime dependencies', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'allowance-nodebin-'));
+    const dir = mkdtempSync(join(tmpdir(), 'dandelion-nodebin-'));
     try {
       symlinkSync(process.execPath, join(dir, 'node'));
       symlinkSync('/bin/sh', join(dir, 'sh'));
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: dir };
+      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir };
       const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8', timeout: 60000 });
       expect(result.status).toBe(0);
       expect(result.stdout).toMatch(/\ngrok\n[^]*\ncodex\napi-key billing · no usage windows\ncodex · codex\n[^]*\ncursor\n[^]*\nkilo\n/);
@@ -174,13 +191,13 @@ describe('main', () => {
   });
 
   it('prints eight dim unavailable panels in order when no CLI is on PATH, grok home is empty and cursor auth is missing', () => {
-    const grokHome = mkdtempSync(join(tmpdir(), 'allowance-grok-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: grokHome };
+    const grokHome = mkdtempSync(join(tmpdir(), 'dandelion-grok-'));
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome };
     delete env.NO_COLOR;
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
     rmSync(grokHome, { recursive: true, force: true });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('ALLOWANCE');
+    expect(result.stdout).toContain('DANDELION');
     const panels = [
       ['claude', 'claude CLI not found in PATH', 'claude · personal · claude'],
       ['claude-work', 'claude CLI not found in PATH', 'claude · work · claude-work'],
@@ -197,9 +214,10 @@ describe('main', () => {
 
   it('README is updated with project details', () => {
     const readme = readFileSync('README.md', 'utf-8');
-    expect(readme).toContain('Allowance');
+    expect(readme.startsWith('# Dandelion Dashboard\n\nDandelion is a terminal dashboard')).toBe(true);
+    expect(readme).toMatch(/^- `dandelion` - .*`npm link`.*`dandelion --once`/m);
     expect(readme).toContain('npm start');
-    expect(readme).toContain('ALLOWANCE_KILO_REFERENCE');
+    expect(readme).toContain('DANDELION_KILO_REFERENCE');
   });
 
   it('README documents kimi', () => {
@@ -211,7 +229,7 @@ describe('main', () => {
     expect(kimi).toContain('20s');
     expect(kimi).toContain('10s request timeout');
     expect(kimi).toContain('SIGTERM, then SIGKILL after 5s');
-    expect(readme).toMatch(/^- `ALLOWANCE_KIMI_PORT` - .*Defaults to `59177`/m);
+    expect(readme).toMatch(/^- `DANDELION_KIMI_PORT` - .*Defaults to `59177`/m);
   });
 
   it('README documents grok', () => {
@@ -221,7 +239,7 @@ describe('main', () => {
     expect(grok).toContain('newest billing snapshot from `<grok home>/logs/unified.jsonl` without running grok');
     expect(grok).toContain('older than 48h is shown dim as stale');
     expect(readme).not.toContain('All four probes run in parallel');
-    expect(readme).toMatch(/^- `ALLOWANCE_GROK_HOME` - .*Defaults to `~\/\.grok`/m);
+    expect(readme).toMatch(/^- `DANDELION_GROK_HOME` - .*Defaults to `~\/\.grok`/m);
   });
 
   it('README documents codex', () => {
@@ -249,8 +267,8 @@ describe('main', () => {
     expect(cursor).toContain('15s timeout each');
     expect(cursor).toContain('total, auto and api windows with a reset countdown');
     expect(readme).not.toContain('All six probes run in parallel');
-    expect(readme).toMatch(/^- `ALLOWANCE_CURSOR_AUTH_FILE` - .*Defaults to `~\/\.config\/cursor\/auth\.json`/m);
-    expect(readme).toMatch(/^- `ALLOWANCE_CURSOR_API_BASE` - .*Defaults to `https:\/\/api2\.cursor\.sh`/m);
+    expect(readme).toMatch(/^- `DANDELION_CURSOR_AUTH_FILE` - .*Defaults to `~\/\.config\/cursor\/auth\.json`/m);
+    expect(readme).toMatch(/^- `DANDELION_CURSOR_API_BASE` - .*Defaults to `https:\/\/api2\.cursor\.sh`/m);
   });
 
   it('README documents the work claude account', () => {
@@ -263,7 +281,7 @@ describe('main', () => {
     expect(providers[1]).toContain('Without that dir it is unavailable');
     expect(readme).toContain('All eight probes run in parallel');
     expect(readme).not.toContain('All seven probes run in parallel');
-    expect(readme).toMatch(/^- `ALLOWANCE_CLAUDE_WORK_CONFIG_DIR` - .*Defaults to `~\/\.claude-work`/m);
+    expect(readme).toMatch(/^- `DANDELION_CLAUDE_WORK_CONFIG_DIR` - .*Defaults to `~\/\.claude-work`/m);
   });
 
   it('README documents live mode', () => {
@@ -272,6 +290,6 @@ describe('main', () => {
     expect(commands).toMatch(/^- `npm start` - .*live dashboard.*`r` refresh.*`q` quit.*`\?` help/m);
     expect(commands).toMatch(/^- `npm start -- --once` - Run the dashboard once and exit$/m);
     expect(commands).toContain('runs once when stdout or stdin is not a terminal');
-    expect(readme).toMatch(/^- `ALLOWANCE_REFRESH_SECONDS` - .*Defaults to `300`/m);
+    expect(readme).toMatch(/^- `DANDELION_REFRESH_SECONDS` - .*Defaults to `300`/m);
   });
 });

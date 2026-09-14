@@ -87,7 +87,7 @@ describe('probeCodex login', () => {
     expect(runs).toEqual([['codex', ['login', 'status'], 15000]]);
     expect(spawns).toEqual([['codex', ['app-server']]]);
     expect(child.sent).toEqual([
-      '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"allowance","title":null,"version":"0.1.0"}}}',
+      '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"dandelion","title":null,"version":"0.1.0"}}}',
       '{"jsonrpc":"2.0","method":"initialized"}',
       '{"jsonrpc":"2.0","id":2,"method":"account/rateLimits/read","params":{}}'
     ]);

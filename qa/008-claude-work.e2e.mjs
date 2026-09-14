@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NPM = join(dirname(process.execPath), 'npm');
 const OUTER_TIMEOUT_MS = 60000;
-const PREFIX = 'allowance-qa-008-';
+const PREFIX = 'dandelion-qa-008-';
 const PANEL_ORDER = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
 const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
 const PERSONAL_LINES = [
@@ -73,15 +73,15 @@ async function nodeBin() {
 }
 
 function runOnce(pathDir, bin, grokHome, workConfigDir) {
-  const { ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_CURSOR_API_BASE, CODEX_FIXTURE_MODE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
+  const { DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_CURSOR_API_BASE, CODEX_FIXTURE_MODE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
   const env = {
     ...inherited,
     PATH: `${pathDir}:${bin}`,
     NO_COLOR: '1',
     CODEX_FIXTURE_MODE: 'apikey',
-    ALLOWANCE_GROK_HOME: grokHome,
-    ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
-    ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir,
+    DANDELION_GROK_HOME: grokHome,
+    DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
+    DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir,
   };
   const result = spawnSync(NPM, ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   assert.equal(result.error, undefined, `spawn failed or hit the outer timeout: ${result.error}`);

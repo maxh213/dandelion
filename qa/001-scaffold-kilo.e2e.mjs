@@ -17,7 +17,7 @@ const KIMI_FIXTURE = '#!/bin/sh\nexit 0\n';
 const CODEX_FIXTURE = '#!/bin/sh\nexit 1\n';
 
 async function kiloFixture() {
-  const dir = await mkdtemp(join(tmpdir(), 'allowance-qa-kilo-'));
+  const dir = await mkdtemp(join(tmpdir(), 'dandelion-qa-kilo-'));
   const script = join(dir, 'kilo');
   const quoted = PROFILE.replaceAll('\n', '\\n').replaceAll('$', '\\$');
   await writeFile(script, `#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "${quoted}"\n`);
@@ -30,13 +30,13 @@ async function kiloFixture() {
 }
 
 async function emptyPathFixture() {
-  return mkdtemp(join(tmpdir(), 'allowance-qa-empty-'));
+  return mkdtemp(join(tmpdir(), 'dandelion-qa-empty-'));
 }
 
 function runApp(path, extraEnv) {
-  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
+  const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
   const home = path.split(':')[0];
-  const env = { ...inherited, PATH: path, ALLOWANCE_GROK_HOME: home, ALLOWANCE_CURSOR_AUTH_FILE: join(home, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
+  const env = { ...inherited, PATH: path, DANDELION_GROK_HOME: home, DANDELION_CURSOR_AUTH_FILE: join(home, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -63,7 +63,7 @@ function assertAscii(stdout) {
 async function happyPathDefaultReference(kiloDir) {
   const stdout = runApp(`${kiloDir}:${nodeBinDir}`, {});
   const plain = stripAnsi(stdout);
-  assert.match(plain, /^ALLOWANCE +\d{2}:\d{2}:\d{2}Z$/m);
+  assert.match(plain, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/m);
   assert.match(plain, /^kilo$/m);
   assert.ok(plain.includes('━'.repeat(72)), 'missing heavy top rule');
   assert.ok(plain.includes(`$14.15 ${'█'.repeat(14)}${'░'.repeat(6)}`), `missing 14/6 gauge:\n${plain}`);
@@ -73,9 +73,9 @@ async function happyPathDefaultReference(kiloDir) {
 }
 
 async function customReferenceFillsGauge(kiloDir) {
-  const stdout = runApp(`${kiloDir}:${nodeBinDir}`, { NO_COLOR: '1', ALLOWANCE_KILO_REFERENCE: '10' });
+  const stdout = runApp(`${kiloDir}:${nodeBinDir}`, { NO_COLOR: '1', DANDELION_KILO_REFERENCE: '10' });
   assert.ok(!stdout.includes(ESC), 'NO_COLOR output contains escape codes');
-  assert.match(stdout, /^ALLOWANCE /m);
+  assert.match(stdout, /^DANDELION /m);
   assert.ok(stdout.includes(`$14.15 ${'#'.repeat(20)}`), `gauge not full at reference 10:\n${stdout}`);
   assertAscii(stdout);
   assertWidth(stdout);
@@ -84,7 +84,7 @@ async function customReferenceFillsGauge(kiloDir) {
 async function missingKiloRendersUnavailable(emptyDir) {
   const stdout = runApp(`${emptyDir}:${nodeBinDir}`, {});
   const plain = stripAnsi(stdout);
-  assert.match(plain, /^ALLOWANCE /m);
+  assert.match(plain, /^DANDELION /m);
   assert.match(plain, /^kilo\nkilo CLI not found in PATH\n/m);
   assert.ok(!plain.includes('Command failed'), 'generic failure reason instead of missing CLI');
   assert.ok(!/[█░#]{20}/.test(plain), 'unavailable panel still shows a gauge');
@@ -95,7 +95,7 @@ async function missingKiloRendersUnavailable(emptyDir) {
 }
 
 async function nodeBin() {
-  const dir = await mkdtemp(join(tmpdir(), 'allowance-nodebin-'));
+  const dir = await mkdtemp(join(tmpdir(), 'dandelion-nodebin-'));
   await symlink(process.execPath, join(dir, 'node'));
   await symlink('/bin/sh', join(dir, 'sh'));
   return dir;
@@ -103,7 +103,7 @@ async function nodeBin() {
 
 export default async function () {
   nodeBinDir = await nodeBin();
-  workConfigDir = await mkdtemp(join(tmpdir(), 'allowance-qa-work-'));
+  workConfigDir = await mkdtemp(join(tmpdir(), 'dandelion-qa-work-'));
   try {
     const kiloDir = await kiloFixture();
     const emptyDir = await emptyPathFixture();

@@ -8,7 +8,7 @@ const BILLING_MSG = 'billing: fetched credits config';
 const UNAVAILABLE = 'no grok billing snapshot — run grok once';
 
 function grokHome(reader: FileReader, env: Record<string, string | undefined>): string {
-  return env['ALLOWANCE_GROK_HOME'] || `${reader.homeDir()}/.grok`;
+  return env['DANDELION_GROK_HOME'] || `${reader.homeDir()}/.grok`;
 }
 
 function usedPercent(config: unknown): number | undefined {

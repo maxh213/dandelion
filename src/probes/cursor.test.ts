@@ -13,7 +13,8 @@ const USAGE = {
 };
 const PLAN = { planInfo: { planName: 'Ultra', includedAmountCents: 40000, price: '$200/mo', billingCycleEnd: '1790786706000' } };
 const BASE = 'http://127.0.0.1:48006/aiserver.v1.DashboardService';
-const ENV = { ALLOWANCE_CURSOR_AUTH_FILE: '/auth.json', ALLOWANCE_CURSOR_API_BASE: 'http://127.0.0.1:48006' };
+const ENV = { DANDELION_CURSOR_AUTH_FILE: '/auth.json', DANDELION_CURSOR_API_BASE: 'http://127.0.0.1:48006' };
+const OLD_ENV = { ALLOWANCE_CURSOR_AUTH_FILE: '/auth.json', ALLOWANCE_CURSOR_API_BASE: 'http://127.0.0.1:48006' };
 const NO_AUTH = 'no cursor auth — run cursor-agent login';
 const PARSE_FAILURE = 'Could not parse usage from response';
 const WINDOWS = [
@@ -83,7 +84,7 @@ describe('probeCursor', () => {
     ]);
   });
 
-  it.each([[{}], [{ ALLOWANCE_CURSOR_AUTH_FILE: '', ALLOWANCE_CURSOR_API_BASE: '' }]])('defaults the auth file and API base for %j', async (env) => {
+  it.each([[{}], [{ DANDELION_CURSOR_AUTH_FILE: '', DANDELION_CURSOR_API_BASE: '' }]])('defaults the auth file and API base for %j', async (env) => {
     const { io, requests, reads } = ioOf({ '/home/tester/.config/cursor/auth.json': '{"accessToken":"home-token"}' });
     const usage = await probeCursor(io, env, NOW);
     expect(reads).toEqual(['/home/tester/.config/cursor/auth.json']);
@@ -92,6 +93,17 @@ describe('probeCursor', () => {
       ['https://api2.cursor.sh/aiserver.v1.DashboardService/GetPlanInfo', 'Bearer home-token']
     ]);
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'Ultra · $200/mo' });
+  });
+
+  it(`ignores the old ${Object.keys(OLD_ENV)[0].replace(/_AUTH_FILE$/, '_*')} names`, async () => {
+    const { io, requests, reads } = ioOf({ '/auth.json': AUTH, '/home/tester/.config/cursor/auth.json': '{"accessToken":"home-token"}' });
+    await probeCursor(io, OLD_ENV, NOW);
+    expect(reads).toEqual(['/home/tester/.config/cursor/auth.json']);
+    expect(requests.map(([url]) => url)).toEqual([
+      'https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage',
+      'https://api2.cursor.sh/aiserver.v1.DashboardService/GetPlanInfo'
+    ]);
+    expect(requests.some(([url]) => url.includes('127.0.0.1:48006'))).toBe(false);
   });
 
   it.each<[string, unknown, unknown[]]>([

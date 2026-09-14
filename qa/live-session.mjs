@@ -23,7 +23,7 @@ export const OTHER_PANELS = [
   /\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor\n/
 ];
 const OUTER_TIMEOUT_MS = 60000;
-const PREFIX = 'allowance-qa-007-';
+const PREFIX = 'dandelion-qa-007-';
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const CODEX_FIXTURE = "#!/bin/sh\necho 'Logged in using an API key - sk-proj-***n5zQA' >&2\n";
@@ -53,16 +53,16 @@ export async function appEnv(pathDir) {
   await symlink('/bin/sh', join(bin, 'sh'));
   const grokHome = await tempDir();
   const workConfigDir = await tempDir();
-  const { ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
+  const { DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
   return {
     ...inherited,
     PATH: `${pathDir}:${bin}`,
     SHELL: '/bin/sh',
     NO_COLOR: '1',
-    ALLOWANCE_REFRESH_SECONDS: '1',
-    ALLOWANCE_GROK_HOME: grokHome,
-    ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
-    ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir
+    DANDELION_REFRESH_SECONDS: '1',
+    DANDELION_GROK_HOME: grokHome,
+    DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
+    DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir
   };
 }
 

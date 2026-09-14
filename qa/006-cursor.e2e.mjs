@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NODE_DIR = dirname(process.execPath);
 const OUTER_TIMEOUT_MS = 60000;
-const PREFIX = 'allowance-qa-006-';
+const PREFIX = 'dandelion-qa-006-';
 const TOKEN = 'qa-dummy-cursor-token-006';
 const AUTH = JSON.stringify({ accessToken: TOKEN, refreshToken: 'qa-dummy-refresh-006' });
 const USAGE_PATH = '/aiserver.v1.DashboardService/GetCurrentPeriodUsage';
@@ -67,8 +67,8 @@ async function startFixture(cycleEnd) {
 }
 
 async function runApp(pathDir, bin, grokHome, base, authFile) {
-  const { ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_AUTH_FILE, ALLOWANCE_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${pathDir}:${bin}`, NO_COLOR: '1', ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_API_BASE: base, ALLOWANCE_CURSOR_AUTH_FILE: authFile, ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: await tempDir(PREFIX) };
+  const { DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_GROK_HOME, DANDELION_CURSOR_AUTH_FILE, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
+  const env = { ...inherited, PATH: `${pathDir}:${bin}`, NO_COLOR: '1', DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_API_BASE: base, DANDELION_CURSOR_AUTH_FILE: authFile, DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir(PREFIX) };
   const child = spawn(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, timeout: OUTER_TIMEOUT_MS });
   let stdout = '';
   let stderr = '';

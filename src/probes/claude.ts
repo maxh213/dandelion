@@ -107,7 +107,7 @@ export const claudeProbe: CliProbe = {
 };
 
 export function claudeWorkProbe(env: Record<string, string | undefined>, homeDir: string): CliProbe {
-  const configDir = env['ALLOWANCE_CLAUDE_WORK_CONFIG_DIR'] || `${homeDir}/.claude-work`;
+  const configDir = env['DANDELION_CLAUDE_WORK_CONFIG_DIR'] || `${homeDir}/.claude-work`;
   return {
     ...claudeProbe,
     id: WORK_ID,

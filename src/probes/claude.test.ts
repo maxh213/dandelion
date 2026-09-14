@@ -136,7 +136,7 @@ describe('claudeWorkProbe', () => {
   it('runs claude -p /usage with CLAUDE_CONFIG_DIR set to the configured work dir and reads its windows', async () => {
     const { reader, checked } = readerWith(['/work']);
     const calls: unknown[][] = [];
-    const probe = claudeWorkProbe({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/work' }, '/home/tester');
+    const probe = claudeWorkProbe({ DANDELION_CLAUDE_WORK_CONFIG_DIR: '/work' }, '/home/tester');
     expect(probe).toMatchObject({ id: 'claude-work', command: 'claude', planLabel: 'claude · work', args: ['-p', '/usage'], timeoutMs: 90000, env: { CLAUDE_CONFIG_DIR: '/work' } });
     const usage = await probeCli({ runner: { run: async (...call) => (calls.push(call), { stdout: WORK_TRANSCRIPT, stderr: '' }) }, reader }, probe, NOW);
     expect(checked).toEqual(['/work']);
@@ -157,7 +157,7 @@ describe('claudeWorkProbe', () => {
 
   it.each([
     ['unset', {}],
-    ['empty', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '' }]
+    ['empty', { DANDELION_CLAUDE_WORK_CONFIG_DIR: '' }]
   ])('defaults the work dir to ~/.claude-work when the env var is %s', async (_case, env) => {
     const { reader, checked } = readerWith(['/home/tester/.claude-work']);
     const probe = claudeWorkProbe(env, '/home/tester');
@@ -167,7 +167,7 @@ describe('claudeWorkProbe', () => {
   });
 
   it('leaves the personal probe without a config dir override or requirement', () => {
-    claudeWorkProbe({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/work' }, '/home/tester');
+    claudeWorkProbe({ DANDELION_CLAUDE_WORK_CONFIG_DIR: '/work' }, '/home/tester');
     expect(claudeProbe).not.toHaveProperty('env');
     expect(claudeProbe).not.toHaveProperty('command');
     expect(claudeProbe).not.toHaveProperty('requiresDirectory');
@@ -176,7 +176,7 @@ describe('claudeWorkProbe', () => {
 
 describe('claudeWorkProbe without its config dir', () => {
   it.each([
-    ['a configured dir that is not a directory', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' }],
+    ['a configured dir that is not a directory', { DANDELION_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' }],
     ['no default dir', {}]
   ])('is the dim work panel that says how to log in for %s, without running claude', async (_case, env) => {
     const calls: unknown[][] = [];

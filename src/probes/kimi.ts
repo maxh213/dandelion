@@ -41,7 +41,7 @@ function isValidPort(raw: string): boolean {
 
 function parsePort(raw: string | undefined): number {
   if (isDefaultPort(raw)) return DEFAULT_PORT;
-  if (!isValidPort(raw)) throw new ProbeUnavailable(`ALLOWANCE_KIMI_PORT must be an integer from 1 to ${MAX_PORT}`);
+  if (!isValidPort(raw)) throw new ProbeUnavailable(`DANDELION_KIMI_PORT must be an integer from 1 to ${MAX_PORT}`);
   return Number(raw);
 }
 
@@ -106,7 +106,7 @@ function parseUsage(body: string): UsageWindow[] {
 }
 
 async function readKimi(io: KimiIo, env: Record<string, string | undefined>): Promise<UsageWindow[]> {
-  const port = parsePort(env['ALLOWANCE_KIMI_PORT']);
+  const port = parsePort(env['DANDELION_KIMI_PORT']);
   const child = await io.launcher.launch('kimi', ['web', '--no-open', '--port', String(port)]);
   if (child === undefined) throw new ProbeUnavailable('kimi CLI not found in PATH');
   try {

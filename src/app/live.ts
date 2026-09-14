@@ -48,7 +48,7 @@ function refreshSecondsOf(raw: string): number {
 }
 
 function refreshMsOf(env: Record<string, string | undefined>): number {
-  return refreshSecondsOf(String(env['ALLOWANCE_REFRESH_SECONDS'])) * 1000;
+  return refreshSecondsOf(String(env['DANDELION_REFRESH_SECONDS'])) * 1000;
 }
 
 function viewOf(session: Session): LiveView {

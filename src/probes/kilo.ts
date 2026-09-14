@@ -27,6 +27,6 @@ export function kiloProbe(env: Record<string, string | undefined>): CliProbe {
     args: ['profile'],
     timeoutMs: 20000,
     reads: 'balance',
-    read: (stdout) => ({ windows: [], balance: parseBalance(stdout, env['ALLOWANCE_KILO_REFERENCE']) })
+    read: (stdout) => ({ windows: [], balance: parseBalance(stdout, env['DANDELION_KILO_REFERENCE']) })
   };
 }

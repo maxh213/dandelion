@@ -1,11 +1,11 @@
 import { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
-import { runApp, runLive, realIo } from './index.ts';
+import { realPath, runApp, runLive, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
@@ -51,7 +51,7 @@ function grokReader(log: string | undefined): FileReader {
 }
 
 const LONG_UNUSABLE = Array.from({ length: 50000 }, () => '{"msg":"billing: fetched credits config","ts":"x"}').join('\n');
-const GROK_ENV = { ALLOWANCE_GROK_HOME: '/grok' };
+const GROK_ENV = { DANDELION_GROK_HOME: '/grok' };
 const NO_GROK = grokReader(undefined);
 
 const CODEX_CHATGPT: CommandRunnerResult = { stdout: '', stderr: 'Logged in using ChatGPT\n' };
@@ -165,7 +165,7 @@ describe('claude and agy windows', () => {
   it('renders claude, agy, kimi, grok, codex, cursor and kilo panels in fixed order with captions', async () => {
     const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const lines = plain(output).split('\n');
-    expect(lines[0]).toMatch(/^ALLOWANCE +10:00:00Z$/);
+    expect(lines[0]).toMatch(/^DANDELION +10:00:00Z$/);
     expect(lines.filter((line) => line === RULE)).toHaveLength(8);
     expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40]);
     expect(lines[1]).toBe(RULE);
@@ -361,9 +361,9 @@ describe('claude-work panel', () => {
 
   it('runs claude once per account, the work one with its config dir', async () => {
     const { io, configDirs } = recordingIo();
-    await runApp(io, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/work' }, NOW);
+    await runApp(io, { DANDELION_CLAUDE_WORK_CONFIG_DIR: '/work' }, NOW);
     expect(configDirs).toEqual(['-']);
-    await runApp({ ...io, reader: { ...io.reader, isDirectory: async (path) => path === '/work' } }, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/work' }, NOW);
+    await runApp({ ...io, reader: { ...io.reader, isDirectory: async (path) => path === '/work' } }, { DANDELION_CLAUDE_WORK_CONFIG_DIR: '/work' }, NOW);
     expect(configDirs.sort()).toEqual(['-', '-', '/work']);
   });
 
@@ -378,9 +378,9 @@ describe('claude-work panel', () => {
   });
 
   it.each<[string, Record<string, string>]>([
-    ['names a dir that is not there', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' }],
+    ['names a dir that is not there', { DANDELION_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' }],
     ['is unset and the home has no .claude-work', {}],
-    ['is empty and the home has no .claude-work', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '' }]
+    ['is empty and the home has no .claude-work', { DANDELION_CLAUDE_WORK_CONFIG_DIR: '' }]
   ])('never runs claude for the work account when the config dir %s', async (_case, env) => {
     const happy = await runApp(routedRunner(), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
     const isDirectory = async (path: string) => path === '/elsewhere';
@@ -395,7 +395,7 @@ describe('claude-work panel', () => {
 
   it.each<[string, Record<string, string>]>([
     ['unset', {}],
-    ['empty', { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: '' }]
+    ['empty', { DANDELION_CLAUDE_WORK_CONFIG_DIR: '' }]
   ])('defaults the work config dir to ~/.claude-work when the env var is %s', async (_case, env) => {
     const { io, configDirs } = recordingIo();
     const output = await runApp(io, { ...env, NO_COLOR: '1' }, NOW);
@@ -422,15 +422,15 @@ describe('claude-work panel', () => {
   });
 
   it('reads a real work config dir and treats a regular file or a missing path as no config', async () => {
-    const scratch = mkdtempSync(join(tmpdir(), 'allowance-claude-work-'));
+    const scratch = mkdtempSync(join(tmpdir(), 'dandelion-claude-work-'));
     try {
       const file = join(scratch, 'claude-work-file');
       writeFileSync(file, '');
       expect(await Promise.all([scratch, file, join(scratch, 'no-such-dir')].map((path) => realIo.reader.isDirectory(path)))).toEqual([true, false, false]);
       const { io, configDirs } = recordingIo();
       const real = { ...io, reader: realIo.reader };
-      expect(panelOf(await runApp(real, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: scratch, NO_COLOR: '1' }, NOW), 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
-      expect(panelOf(await runApp(real, { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: file, NO_COLOR: '1' }, NOW), 'claude-work')[1]).toBe(NO_WORK_CONFIG);
+      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: scratch, NO_COLOR: '1' }, NOW), 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
+      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: file, NO_COLOR: '1' }, NOW), 'claude-work')[1]).toBe(NO_WORK_CONFIG);
       expect(configDirs.sort()).toEqual(['-', '-', scratch]);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
@@ -605,7 +605,7 @@ describe('real grok reader', () => {
   });
 
   function grokHome(): string {
-    scratch = mkdtempSync(join(tmpdir(), 'allowance-grok-'));
+    scratch = mkdtempSync(join(tmpdir(), 'dandelion-grok-'));
     return scratch;
   }
 
@@ -647,15 +647,15 @@ describe('real grok reader', () => {
     writeLog(home, grokLog());
     const io = { ...routedRunner(), reader: realIo.reader };
     const before = tree(home);
-    const output = await runApp(io, { ALLOWANCE_GROK_HOME: home, NO_COLOR: '1' }, NOW);
+    const output = await runApp(io, { DANDELION_GROK_HOME: home, NO_COLOR: '1' }, NOW);
     expect(output).toContain('\ngrok\ncredits                             ###############-----  75% ↻ 11h15m\n');
     expect(tree(home)).toEqual(before);
     const empty = join(home, 'empty');
     mkdirSync(empty);
     const emptyBefore = tree(empty);
-    expect(await runApp(io, { ALLOWANCE_GROK_HOME: empty }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(await runApp(io, { DANDELION_GROK_HOME: empty }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
     expect(tree(empty)).toEqual(emptyBefore);
-    expect(await runApp(io, { ALLOWANCE_GROK_HOME: join(home, 'missing') }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(await runApp(io, { DANDELION_GROK_HOME: join(home, 'missing') }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
     expect(readdirSync(home).sort()).toEqual(['empty', 'logs']);
   });
 });
@@ -892,7 +892,7 @@ describe('real kimi launcher', () => {
 
   it('leaves no log dir and no open descriptor when the binary is missing', async () => {
     const openDescriptors = () => readdirSync('/proc/self/fd').length;
-    const scratch = mkdtempSync(join(tmpdir(), 'allowance-test-'));
+    const scratch = mkdtempSync(join(tmpdir(), 'dandelion-test-'));
     vi.stubEnv('TMPDIR', scratch);
     try {
       await realIo.launcher.launch('thiscommanddoesnotexist', []);
@@ -937,7 +937,7 @@ describe('cursor panel', () => {
     planUsage: { totalSpend: 101050, includedSpend: 40000, limit: 40000, autoPercentUsed: 32.36, apiPercentUsed: 15.81, totalPercentUsed: 31.09 }
   });
   const PLAN = JSON.stringify({ planInfo: { planName: 'Ultra', includedAmountCents: 40000, price: '$200/mo', billingCycleEnd: '1790786706000' } });
-  const CURSOR_ENV = { ...GROK_ENV, ALLOWANCE_CURSOR_AUTH_FILE: '/cursor/auth.json', ALLOWANCE_CURSOR_API_BASE: 'http://127.0.0.1:48006' };
+  const CURSOR_ENV = { ...GROK_ENV, DANDELION_CURSOR_AUTH_FILE: '/cursor/auth.json', DANDELION_CURSOR_API_BASE: 'http://127.0.0.1:48006' };
   const ROWS = [
     'total                               ######--------------  31% ↻ 17d6h',
     'auto                                ######--------------  32% ↻ 17d6h',
@@ -1024,13 +1024,13 @@ describe('cursor panel', () => {
   });
 
   it('reads a real auth file without writing the token anywhere', async () => {
-    const scratch = mkdtempSync(join(tmpdir(), 'allowance-cursor-'));
+    const scratch = mkdtempSync(join(tmpdir(), 'dandelion-cursor-'));
     try {
       const authFile = join(scratch, 'auth.json');
       writeFileSync(authFile, AUTH);
       const before = readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs]);
       const io = { ...cursorIo(), reader: realIo.reader };
-      const output = await runApp(io, { ALLOWANCE_CURSOR_AUTH_FILE: authFile, NO_COLOR: '1' }, NOW);
+      const output = await runApp(io, { DANDELION_CURSOR_AUTH_FILE: authFile, NO_COLOR: '1' }, NOW);
       expect(panelOf(output, 'cursor')).toEqual(['cursor', ...ROWS, 'Ultra · $200/mo · cursor']);
       expect(readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs])).toEqual(before);
       expect(readFileSync(authFile, 'utf8')).toBe(AUTH);
@@ -1070,20 +1070,20 @@ describe('cursor panel', () => {
       await settleProbes();
       const frame = dashboard.lastFrame();
       expect(frame).not.toContain('probing…');
-      expect(frame.split('\n').slice(0, 2)).toEqual(['ALLOWANCE'.padEnd(47) + 'data 0h0m old · 10:00:00Z', '2/16 windows above 80% · next reset: claude session in 8h40m']);
+      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(47) + 'data 0h0m old · 10:00:00Z', '2/16 windows above 80% · next reset: claude session in 8h40m']);
       expect(frame.split('\n').every((line) => [...line].length <= 72)).toBe(true);
       dashboard.press('q');
       await dashboard.finished;
     });
 
     it('keeps time between frames drawn by the 1000ms timer without new data', async () => {
-      const dashboard = startDashboard(cursorIo(), { ...LIVE_ENV, ALLOWANCE_REFRESH_SECONDS: '300' });
+      const dashboard = startDashboard(cursorIo(), { ...LIVE_ENV, DANDELION_REFRESH_SECONDS: '300' });
       await settleProbes();
       expect(sessionRow(dashboard.lastFrame())).toMatch(/ ↻ 8h40m$/);
       const count = dashboard.frames().length;
       await vi.advanceTimersByTimeAsync(65100);
       const frame = dashboard.lastFrame();
-      expect(frame.split('\n').slice(0, 2)).toEqual(['ALLOWANCE'.padEnd(47) + 'data 0h1m old · 10:01:05Z', '2/16 windows above 80% · next reset: claude session in 8h38m']);
+      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(47) + 'data 0h1m old · 10:01:05Z', '2/16 windows above 80% · next reset: claude session in 8h38m']);
       expect(sessionRow(frame)).toMatch(/ ↻ 8h38m$/);
       expect(dashboard.frames().length - count).toBe(66);
       dashboard.press('q');
@@ -1093,7 +1093,7 @@ describe('cursor panel', () => {
     it('turns a grok snapshot stale between frames', async () => {
       const files: Record<string, string> = { '/grok/logs/unified.jsonl': grokLog('2026-09-11T10:01:00.000Z'), '/cursor/auth.json': AUTH };
       const io = { ...cursorIo(), reader: { homeDir: () => '/home/tester', read: async (path: string) => files[path], isDirectory: hasWorkConfig } };
-      const dashboard = startDashboard(io, { ...CURSOR_ENV, ALLOWANCE_REFRESH_SECONDS: '300' });
+      const dashboard = startDashboard(io, { ...CURSOR_ENV, DANDELION_REFRESH_SECONDS: '300' });
       await settleProbes();
       const earlier = dashboard.lastFrame();
       expect(earlier).toContain(`\ngrok\n${'credits'.padEnd(35)} \x1b[33m`);
@@ -1113,7 +1113,7 @@ describe('cursor panel', () => {
       await vi.advanceTimersByTimeAsync(65000);
       dashboard.press('r');
       const lines = dashboard.lastFrame().split('\n');
-      expect(lines[0]).toBe(`\x1b[1mALLOWANCE${' '.repeat(24)}\x1b[0m\x1b[90mrefreshing…\x1b[0m\x1b[1m · data 0h1m old · 10:01:05Z\x1b[0m`);
+      expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(24)}\x1b[0m\x1b[90mrefreshing…\x1b[0m\x1b[1m · data 0h1m old · 10:01:05Z\x1b[0m`);
       expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
       expect(lines.at(-1)).toBe('\x1b[90mkeys: r refresh · q quit · ? help\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
@@ -1223,7 +1223,7 @@ describe('wiring', () => {
 
   it('displays kilo balance with default reference', async () => {
     const output = await runApp(profileRunner(PROFILE), {}, NOW);
-    expect(output).toContain('ALLOWANCE');
+    expect(output).toContain('DANDELION');
     expect(output).toContain('10:00:00Z');
     expect(output).toContain('━'.repeat(72));
     expect(output).toContain('$14.15 ██████████████░░░░░░');
@@ -1241,12 +1241,12 @@ describe('wiring', () => {
   });
 
   it('renders an empty gauge when reference is empty', async () => {
-    const output = await runApp(profileRunner('Balance: $14.15'), { ALLOWANCE_KILO_REFERENCE: '' }, NOW);
+    const output = await runApp(profileRunner('Balance: $14.15'), { DANDELION_KILO_REFERENCE: '' }, NOW);
     expect(output).toContain('$14.15 ░░░░░░░░░░░░░░░░░░░░');
   });
 
   it('uses a custom reference', async () => {
-    const output = await runApp(profileRunner('Balance: $5.00'), { ALLOWANCE_KILO_REFERENCE: '10' }, NOW);
+    const output = await runApp(profileRunner('Balance: $5.00'), { DANDELION_KILO_REFERENCE: '10' }, NOW);
     expect(output).toContain('$5.00 ██████████░░░░░░░░░░');
   });
 
@@ -1267,7 +1267,7 @@ describe('wiring', () => {
   it('renders a dim unavailable panel when kilo is missing', async () => {
     const runner = mockRunner({ stdout: '', stderr: '', failure: 'missing' });
     const output = await runApp(runner, {}, NOW);
-    expect(output).toContain('ALLOWANCE');
+    expect(output).toContain('DANDELION');
     expect(output).toContain('\x1b[90m' + '━'.repeat(72) + '\nkilo\nkilo CLI not found in PATH');
   });
 
@@ -1368,7 +1368,7 @@ describe('quitting the live dashboard', () => {
   }
 
   it.each([['q'], ['\x03']])('stops every in-flight probe child before finishing on %j', async (key) => {
-    scratch = mkdtempSync(join(tmpdir(), 'allowance-live-'));
+    scratch = mkdtempSync(join(tmpdir(), 'dandelion-live-'));
     const hold = (name: string) => ['-e', HOLD, join(scratch, name)];
     const runner: CommandRunner = {
       run: (command, _args, timeoutMs, env) =>
@@ -1427,7 +1427,7 @@ describe('quitting the live dashboard', () => {
   });
 
   it('stops a kimi child when quit arrives in the same tick as its launch', async () => {
-    scratch = mkdtempSync(join(tmpdir(), 'allowance-live-'));
+    scratch = mkdtempSync(join(tmpdir(), 'dandelion-live-'));
     const holder: { dashboard?: ReturnType<typeof startDashboard> } = {};
     const launcher: Launcher = {
       launch: async () => {
@@ -1453,5 +1453,20 @@ describe('quitting the live dashboard', () => {
     expect((await realIo.runner.run(process.execPath, brief, 5000)).failure).toBeUndefined();
     open.press('q');
     await open.finished;
+  });
+});
+
+describe('realPath', () => {
+  it('resolves a symlink to its target and gives undefined for a missing path', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dandelion-realpath-'));
+    try {
+      const target = join(dir, 'main.ts');
+      writeFileSync(target, '');
+      symlinkSync(target, join(dir, 'dandelion'));
+      expect(realPath(join(dir, 'dandelion'))).toBe(realPath(target));
+      expect(realPath(join(dir, 'missing'))).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

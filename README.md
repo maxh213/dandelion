@@ -1,6 +1,6 @@
-# Allowance Dashboard
+# Dandelion Dashboard
 
-Allowance is a terminal dashboard that shows how much of your AI allowances you have left: subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, and the API balance for `kilo`.
+Dandelion is a terminal dashboard that shows how much of your AI allowances you have left: subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, and the API balance for `kilo`.
 
 ## Providers
 
@@ -19,8 +19,9 @@ All eight probes run in parallel. Window gauges are coloured by usage: below 50%
 
 ## Run Commands
 
-- `npm start` - Run the live dashboard: panels fill in as each probe settles, a fleet summary line shows how many windows are above 80% and the next reset, and everything is re-probed every `ALLOWANCE_REFRESH_SECONDS`. Keys: `r` refresh, `q` quit (or Ctrl-C), `?` help.
+- `npm start` - Run the live dashboard: panels fill in as each probe settles, a fleet summary line shows how many windows are above 80% and the next reset, and everything is re-probed every `DANDELION_REFRESH_SECONDS`. Keys: `r` refresh, `q` quit (or Ctrl-C), `?` help.
 - `npm start -- --once` - Run the dashboard once and exit
+- `dandelion` - Run the live dashboard from anywhere after `npm link`; `dandelion --once` runs it once and exits
 - `npm test` - Run unit tests
 - `npm run qa` - Run E2E tests
 
@@ -28,11 +29,11 @@ The app runs once when stdout or stdin is not a terminal, as if `--once` were gi
 
 ## Env-var Ledger
 
-- `ALLOWANCE_KILO_REFERENCE` - The reference amount (in dollars) used to calculate the gauge fill percentage for the `kilo` probe. Defaults to `20`. If set to an empty string, no reference gauge is shown. If set to a custom number, the gauge will fill relative to that amount.
-- `ALLOWANCE_CLAUDE_WORK_CONFIG_DIR` - The work claude config dir the `claude-work` probe passes to claude as `CLAUDE_CONFIG_DIR`. Defaults to `~/.claude-work` when unset or empty. When it is not a directory the panel says to log in with `CLAUDE_CONFIG_DIR=~/.claude-work claude`.
-- `ALLOWANCE_KIMI_PORT` - The local port `kimi web` is started on for the `kimi` probe. Defaults to `59177`. Any value other than an integer from 1 to 65535 makes the kimi panel unavailable.
-- `ALLOWANCE_GROK_HOME` - The grok home directory the `grok` probe reads `logs/unified.jsonl` from. Defaults to `~/.grok` when unset or empty. The app never writes to it.
-- `ALLOWANCE_CURSOR_AUTH_FILE` - The cursor-agent auth file the `cursor` probe reads `accessToken` from. Defaults to `~/.config/cursor/auth.json` when unset or empty. Without a token the panel says to run `cursor-agent login`.
-- `ALLOWANCE_CURSOR_API_BASE` - The base URL of the cursor dashboard API the `cursor` probe POSTs to. Defaults to `https://api2.cursor.sh` when unset or empty.
-- `ALLOWANCE_REFRESH_SECONDS` - Seconds the live dashboard waits after a round of probes settles before it probes again. Defaults to `300`; any value that is not a positive integer uses the default.
+- `DANDELION_KILO_REFERENCE` - The reference amount (in dollars) used to calculate the gauge fill percentage for the `kilo` probe. Defaults to `20`. If set to an empty string, no reference gauge is shown. If set to a custom number, the gauge will fill relative to that amount.
+- `DANDELION_CLAUDE_WORK_CONFIG_DIR` - The work claude config dir the `claude-work` probe passes to claude as `CLAUDE_CONFIG_DIR`. Defaults to `~/.claude-work` when unset or empty. When it is not a directory the panel says to log in with `CLAUDE_CONFIG_DIR=~/.claude-work claude`.
+- `DANDELION_KIMI_PORT` - The local port `kimi web` is started on for the `kimi` probe. Defaults to `59177`. Any value other than an integer from 1 to 65535 makes the kimi panel unavailable.
+- `DANDELION_GROK_HOME` - The grok home directory the `grok` probe reads `logs/unified.jsonl` from. Defaults to `~/.grok` when unset or empty. The app never writes to it.
+- `DANDELION_CURSOR_AUTH_FILE` - The cursor-agent auth file the `cursor` probe reads `accessToken` from. Defaults to `~/.config/cursor/auth.json` when unset or empty. Without a token the panel says to run `cursor-agent login`.
+- `DANDELION_CURSOR_API_BASE` - The base URL of the cursor dashboard API the `cursor` probe POSTs to. Defaults to `https://api2.cursor.sh` when unset or empty.
+- `DANDELION_REFRESH_SECONDS` - Seconds the live dashboard waits after a round of probes settles before it probes again. Defaults to `300`; any value that is not a positive integer uses the default.
 - `NO_COLOR` - If set, disables ANSI colors and uses ASCII fallback rendering.

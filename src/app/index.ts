@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcess, type ChildProcessByStdio, type ExecException } from 'node:child_process';
 import { once } from 'node:events';
-import { closeSync, mkdtempSync, openSync, rmSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, realpathSync, rmSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -125,7 +125,7 @@ function spawnLoggingTo(logDir: string, command: string, args: string[]): ChildP
 
 const realLauncher: Launcher = {
   launch(command, args) {
-    const logDir = mkdtempSync(join(tmpdir(), 'allowance-kimi-'));
+    const logDir = mkdtempSync(join(tmpdir(), 'dandelion-kimi-'));
     const child = spawnLoggingTo(logDir, command, args);
     const launched = launchedProcess(child, logDir);
     return new Promise((resolve) => {
@@ -181,6 +181,10 @@ const realReader: FileReader = {
 };
 
 export const realIo: ProbeIo = { runner: realCommandRunner, launcher: realLauncher, fetcher: realFetcher, reader: realReader, spawner: realSpawner };
+
+export function realPath(path: string): string | undefined {
+  return existsSync(path) ? realpathSync(path) : undefined;
+}
 
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
   const usages = await Promise.all(providerProbes(io, env).map(({ probe }) => probe(now)));

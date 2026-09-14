@@ -49,7 +49,7 @@ function bodyOf(value: unknown): FetchOutcome {
   return { status: 200, body: typeof value === 'string' ? value : JSON.stringify(value) };
 }
 
-const PORT = { ALLOWANCE_KIMI_PORT: '48123' };
+const PORT = { DANDELION_KIMI_PORT: '48123' };
 const PARSE_FAILURE = 'Could not parse usage from response';
 
 afterEach(() => {
@@ -238,9 +238,9 @@ describe('probeKimi', () => {
 
   it.each([
     [{}, '59177'],
-    [{ ALLOWANCE_KIMI_PORT: '' }, '59177'],
-    [{ ALLOWANCE_KIMI_PORT: '65535' }, '65535'],
-    [{ ALLOWANCE_KIMI_PORT: '1' }, '1']
+    [{ DANDELION_KIMI_PORT: '' }, '59177'],
+    [{ DANDELION_KIMI_PORT: '65535' }, '65535'],
+    [{ DANDELION_KIMI_PORT: '1' }, '1']
   ])('launches on the port from %j', async (env, port) => {
     const { io, launches, requests } = ioWith(fakeChild());
     await probeKimi(io, env, NOW);
@@ -249,13 +249,13 @@ describe('probeKimi', () => {
   });
 
   it.each(['abc', '0', '70000', '65536', '48123.5', '1e3', ' 80', '+80', '-1'])(
-    'never launches kimi for ALLOWANCE_KIMI_PORT "%s"',
+    'never launches kimi for DANDELION_KIMI_PORT "%s"',
     async (value) => {
       const { io, launches } = ioWith(fakeChild());
-      const usage = await probeKimi(io, { ALLOWANCE_KIMI_PORT: value }, NOW);
+      const usage = await probeKimi(io, { DANDELION_KIMI_PORT: value }, NOW);
       expect(usage).toMatchObject({
         status: 'unavailable',
-        reason: 'ALLOWANCE_KIMI_PORT must be an integer from 1 to 65535'
+        reason: 'DANDELION_KIMI_PORT must be an integer from 1 to 65535'
       });
       expect(launches).toEqual([]);
     }

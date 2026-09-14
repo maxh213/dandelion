@@ -1,4 +1,5 @@
-import { runApp, runLive, realIo, type Keyboard, type ProbeIo, type Screen } from './app/index.ts';
+#!/usr/bin/env node
+import { realPath, runApp, runLive, realIo, type Keyboard, type ProbeIo, type Screen } from './app/index.ts';
 import { fileURLToPath } from 'node:url';
 
 type Terminal = { isTTY?: boolean };
@@ -22,7 +23,7 @@ export async function main(
 }
 
 function isEntry(metaUrl: string, argv1: string | undefined): boolean {
-  return fileURLToPath(metaUrl) === argv1;
+  return argv1 !== undefined && realPath(argv1) === realPath(fileURLToPath(metaUrl));
 }
 
 function isLive(proc: Proc): boolean {

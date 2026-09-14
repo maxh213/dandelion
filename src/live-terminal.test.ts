@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync, chmodSync, rmSync, readFileSync, readdirSyn
 
 const NPM = join(dirname(process.execPath), 'npm');
 const OUTER_TIMEOUT_MS = 60000;
-const PREFIX = 'allowance-qa-007-';
+const PREFIX = 'dandelion-qa-007-';
 const ENTER = '\x1b[?1049h';
 const CLEAR = '\x1b[H\x1b[2J';
 const RESTORE = '\x1b[?25h\x1b[?1049l';
@@ -66,19 +66,19 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
   symlinkSync('/bin/sh', join(bin, 'sh'));
   const grokHome = tempDir();
   const inherited = { ...process.env };
-  delete inherited.ALLOWANCE_KILO_REFERENCE;
-  delete inherited.ALLOWANCE_KIMI_PORT;
-  delete inherited.ALLOWANCE_CURSOR_API_BASE;
+  delete inherited.DANDELION_KILO_REFERENCE;
+  delete inherited.DANDELION_KIMI_PORT;
+  delete inherited.DANDELION_CURSOR_API_BASE;
   delete inherited.CLAUDE_CONFIG_DIR;
   return {
     ...inherited,
     PATH: `${pathDir}:${bin}`,
     SHELL: '/bin/sh',
     NO_COLOR: '1',
-    ALLOWANCE_REFRESH_SECONDS: '1',
-    ALLOWANCE_GROK_HOME: grokHome,
-    ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: grokHome,
-    ALLOWANCE_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json')
+    DANDELION_REFRESH_SECONDS: '1',
+    DANDELION_GROK_HOME: grokHome,
+    DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome,
+    DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json')
   };
 }
 
@@ -182,9 +182,9 @@ describe('live mode on a real terminal', () => {
     run.child.stdin?.destroy();
     expect(status).toEqual([0, null]);
     const lines = run.output.split('\n');
-    expect(lines[0]).toMatch(/^ALLOWANCE +\d{2}:\d{2}:\d{2}Z$/);
+    expect(lines[0]).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
     expect(lines.filter((line) => IDS.includes(line))).toEqual(IDS);
-    expect(run.output.split('ALLOWANCE')).toHaveLength(2);
+    expect(run.output.split('DANDELION')).toHaveLength(2);
     expect(run.output).not.toContain('probing…');
     expect(run.output).not.toContain(ENTER);
   }, 60000);

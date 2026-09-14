@@ -34,7 +34,7 @@ function isFilled(value: unknown): value is string {
 }
 
 function authFile(reader: FileReader, env: Env): string {
-  return env['ALLOWANCE_CURSOR_AUTH_FILE'] || `${reader.homeDir()}/.config/cursor/auth.json`;
+  return env['DANDELION_CURSOR_AUTH_FILE'] || `${reader.homeDir()}/.config/cursor/auth.json`;
 }
 
 function tokenOf(auth: unknown): string {
@@ -53,7 +53,7 @@ async function readToken(reader: FileReader, env: Env): Promise<string> {
 }
 
 function postTo(io: CursorIo, env: Env, token: string, method: string): Promise<FetchOutcome> {
-  const url = `${env['ALLOWANCE_CURSOR_API_BASE'] || API_BASE}${SERVICE}/${method}`;
+  const url = `${env['DANDELION_CURSOR_API_BASE'] || API_BASE}${SERVICE}/${method}`;
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   return io.fetcher.post(url, headers, '{}', REQUEST_TIMEOUT_MS);
 }

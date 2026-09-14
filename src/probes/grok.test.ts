@@ -53,7 +53,7 @@ function ioWithLog(log: string): GrokIo {
   return readerOf({ '/grok/logs/unified.jsonl': log }).io;
 }
 
-const HOME = { ALLOWANCE_GROK_HOME: '/grok' };
+const HOME = { DANDELION_GROK_HOME: '/grok' };
 
 describe('probeGrok', () => {
   it('reads the newest billing snapshot from the grok home log', async () => {
@@ -70,7 +70,7 @@ describe('probeGrok', () => {
     expect(reads).toEqual(['/grok/logs/unified.jsonl']);
   });
 
-  it.each([[{}], [{ ALLOWANCE_GROK_HOME: '' }]])('defaults grok home to ~/.grok for %j', async (env) => {
+  it.each([[{}], [{ DANDELION_GROK_HOME: '' }]])('defaults grok home to ~/.grok for %j', async (env) => {
     const { io, reads } = readerOf({ '/home/tester/.grok/logs/unified.jsonl': BACKGROUND });
     const usage = await probeGrok(io, env, NOW);
     expect(reads).toEqual(['/home/tester/.grok/logs/unified.jsonl']);

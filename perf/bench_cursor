@@ -71,15 +71,15 @@ await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
 async function timeCli(auth) {
-  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: auth, ALLOWANCE_CURSOR_API_BASE: base };
+  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, DANDELION_GROK_HOME: fixture, HOME: fixture, DANDELION_CURSOR_AUTH_FILE: auth, DANDELION_CURSOR_API_BASE: base };
   delete env.NO_COLOR;
   const start = process.hrtime.bigint();
   await run(process.execPath, [main], { cwd: tree, env });
   return Number(process.hrtime.bigint() - start) / 1e6;
 }
 
-const env = { ALLOWANCE_CURSOR_AUTH_FILE: authFile, ALLOWANCE_CURSOR_API_BASE: base };
-const missingEnv = { ALLOWANCE_CURSOR_AUTH_FILE: missingAuth, ALLOWANCE_CURSOR_API_BASE: base };
+const env = { DANDELION_CURSOR_AUTH_FILE: authFile, DANDELION_CURSOR_API_BASE: base };
+const missingEnv = { DANDELION_CURSOR_AUTH_FILE: missingAuth, DANDELION_CURSOR_API_BASE: base };
 const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
 const authText = JSON.stringify({ accessToken: TOKEN });
 const stubIo = {

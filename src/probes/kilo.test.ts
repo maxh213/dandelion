@@ -39,13 +39,13 @@ describe('probeKilo', () => {
 
   it('handles custom reference', async () => {
     const runner = mockRunner({ stdout: 'Balance: $14.15', stderr: '' });
-    const res = await probeKilo(runner, 'now', { ALLOWANCE_KILO_REFERENCE: '10' });
+    const res = await probeKilo(runner, 'now', { DANDELION_KILO_REFERENCE: '10' });
     expect(res).toMatchObject({ status: 'ok', balance: { reference: 10 } });
   });
 
   it('handles empty reference', async () => {
     const runner = mockRunner({ stdout: 'Balance: $14.15', stderr: '' });
-    const res = await probeKilo(runner, 'now', { ALLOWANCE_KILO_REFERENCE: '' });
+    const res = await probeKilo(runner, 'now', { DANDELION_KILO_REFERENCE: '' });
     expect(res).toMatchObject({ status: 'ok', balance: { amount: 14.15, currency: '$' } });
     expect(res).not.toHaveProperty('balance.reference');
   });
