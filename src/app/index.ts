@@ -24,6 +24,7 @@ import { renderDashboard, renderRoute } from '../render/index.ts';
 import { startLive, type Keyboard, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
+export { NO_ROUTE } from '../render/index.ts';
 export type { Keyboard, Screen } from './live.ts';
 
 type Stop = () => Promise<void>;

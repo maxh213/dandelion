@@ -6,6 +6,7 @@ import {
   successBody,
   unavailableReason,
   validInstant,
+  withReset,
   type Fetcher,
   type ProviderUsage,
   type UsageWindow
@@ -87,8 +88,7 @@ function weeklyWindow(summary: unknown): UsageWindow {
   const usedPct = percentOf(summary);
   if (usedPct === undefined) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
   const resetsAt = validInstant(fieldOf(summary, 'reset_at'));
-  const window: UsageWindow = { label: 'weekly', kind: 'weekly', usedPct };
-  return resetsAt === undefined ? window : { ...window, resetsAt };
+  return withReset({ label: 'weekly', kind: 'weekly', usedPct }, resetsAt);
 }
 
 function hourWindow(entry: unknown): UsageWindow[] {

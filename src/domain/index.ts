@@ -54,6 +54,10 @@ export function validInstant(value: unknown): string | undefined {
   return typeof value === 'string' && DATE_BEFORE_TIME.test(value) && !Number.isNaN(Date.parse(value)) ? value : undefined;
 }
 
+export function withReset(window: UsageWindow, resetsAt: string | undefined): UsageWindow {
+  return resetsAt === undefined ? window : { ...window, resetsAt };
+}
+
 export const HOT_PCT = 80;
 
 export type FleetReset = { id: string; label: string; resetsAt: string };
@@ -93,7 +97,7 @@ const ROUTING_TABLE: Route[] = [
   { id: 'grok', standard: 'grok-4.6', max: 'grok-4.6' },
   { id: 'cursor', standard: 'kimi-k3-max', max: 'kimi-k3-max' }
 ];
-const NO_ROUTE = 'none';
+export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
 const FULL_LEFT = 100;
 

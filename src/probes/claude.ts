@@ -84,12 +84,16 @@ function windowLabel(model: string | undefined): string {
   return model === 'all models' ? 'weekly' : `weekly ${model}`;
 }
 
+function windowKind(model: string | undefined): ReadWindow['kind'] {
+  return model === undefined ? 'rolling' : 'weekly';
+}
+
 function parseWindowLine(rawLine: string, now: string): ReadWindow | [] {
   const line = rawLine.trim();
   const match = WINDOW_LINE.exec(line);
   if (!match) return [];
   const resetsAt = parseReset(line.slice(match[0].length), now);
-  return { label: windowLabel(match[2]), kind: match[2] === undefined ? 'rolling' : 'weekly', usedPct: Number(match[3]), resetsAt };
+  return { label: windowLabel(match[2]), kind: windowKind(match[2]), usedPct: Number(match[3]), resetsAt };
 }
 
 function readClaudeUsage(stdout: string, now: string): Reading {

@@ -1,4 +1,4 @@
-import { fieldOf, isCount, isRecord, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
+import { fieldOf, isCount, isRecord, withReset, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
 import type { CommandRunner, CommandRunnerResult, RunFailure } from './cli.ts';
 
 export type RpcChild = {
@@ -77,9 +77,8 @@ function windowOf(limits: unknown, name: string): UsageWindow[] {
   const usedPercent = fieldOf(entry, 'usedPercent');
   if (!isCount(usedPercent)) return [];
   const label = labelOf(fieldOf(entry, 'windowDurationMins'), name);
-  const window: UsageWindow = { label, kind: kindOf(label), usedPct: Math.round(usedPercent) };
   const resetsAt = resetInstant(fieldOf(entry, 'resetsAt'));
-  return [resetsAt === undefined ? window : { ...window, resetsAt }];
+  return [withReset({ label, kind: kindOf(label), usedPct: Math.round(usedPercent) }, resetsAt)];
 }
 
 function errorMessage(error: unknown): string {

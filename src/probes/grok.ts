@@ -1,4 +1,4 @@
-import { fieldOf, isCount, validInstant, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, validInstant, withReset, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type GrokIo = { reader: FileReader };
 
@@ -23,8 +23,7 @@ function tierOf(ctx: unknown): string {
 
 function creditsWindow(usedPct: number, config: unknown): UsageWindow {
   const resetsAt = validInstant(fieldOf(fieldOf(config, 'currentPeriod'), 'end'));
-  const window: UsageWindow = { label: 'credits', kind: 'weekly', usedPct };
-  return resetsAt === undefined ? window : { ...window, resetsAt };
+  return withReset({ label: 'credits', kind: 'weekly', usedPct }, resetsAt);
 }
 
 function usableSnapshots(event: unknown): Snapshot[] {

@@ -1,4 +1,4 @@
-import type { Balance, FileReader, ProviderUsage, UsageWindow, WindowKind } from '../domain/index.ts';
+import { withReset, type Balance, type FileReader, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
 
 export type RunFailure = 'missing' | 'timeout' | 'exit';
 
@@ -50,8 +50,7 @@ function runFailureReason(command: string, timeoutMs: number, failure: RunFailur
 }
 
 function usageWindow({ resetsAt, ...window }: ReadWindow): UsageWindow {
-  if (resetsAt === undefined) return window;
-  return { ...window, resetsAt };
+  return withReset(window, resetsAt);
 }
 
 function isEmpty(reading: Reading): boolean {

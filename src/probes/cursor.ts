@@ -6,6 +6,7 @@ import {
   isSuccess,
   successBody,
   unavailableReason,
+  withReset,
   type FetchOutcome,
   type Fetcher,
   type FileReader,
@@ -69,8 +70,7 @@ function cycleEnd(value: unknown): string | undefined {
 
 function windowOf(label: string, percent: unknown, resetsAt: string | undefined): UsageWindow[] {
   if (!isCount(percent)) return [];
-  const window: UsageWindow = { label, kind: 'weekly', usedPct: Math.round(percent) };
-  return resetsAt === undefined ? [window] : [{ ...window, resetsAt }];
+  return [withReset({ label, kind: 'weekly', usedPct: Math.round(percent) }, resetsAt)];
 }
 
 function windowsOf(usage: unknown): UsageWindow[] {
