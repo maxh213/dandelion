@@ -2,10 +2,10 @@
 
 Earlier procedures are unchanged by 010.
 
-Set up once in the repo root, in a real terminal. First run the set-up block of `qa/005-codex.md`, so `$NODEBIN` exists (node and sh only). Then build one fixture `q` that acts as claude, agy, kimi, codex and kilo by its name, writes the grok snapshot and cursor auth, and serves the cursor API on port 48010. Each provider reads `Q_<NAME>` as `rolling,weekly,resetHours` (`weekly,resetHours` for grok and cursor). An unset variable makes it unavailable. `TZQ` puts local time near 11:00, so `resetHours` 2 is today and 14 is after midnight. `rt VAR=value…` runs `node src/main.ts route` with only those variables.
+Set up once in the repo root, in a real terminal. First run the set-up block of `qa/005-codex.md`, so `$NODEBIN` exists (node and sh only). Then build one fixture `q` that acts as claude, agy, kimi, codex and kilo by its name, writes the grok snapshot and cursor auth, and serves the cursor API on port 48010. Each provider reads `Q_<NAME>` as `rolling,weekly,resetHours` (`weekly,resetHours` for grok and cursor). An unset variable makes it unavailable. `TZQ` puts local time near 11:00, so `resetHours` 2 is today and 14 is after midnight. `rt VAR=value…` runs `node src/main.ts route` with only those variables; `A='args'` among them replaces `route` with those arguments. `$RB` holds a `dandelion` symlink to `src/main.ts`.
 
 ```bash
-export RX="$(mktemp -d)" RH="$(mktemp -d)" KQ=$((40000 + RANDOM % 20000)); mkdir -p "$RH/.claude-work"
+export RX="$(mktemp -d)" RH="$(mktemp -d)" RB="$(mktemp -d)" KQ=$((40000 + RANDOM % 20000)); mkdir -p "$RH/.claude-work"; ln -s "$PWD/src/main.ts" "$RB/dandelion"
 export TZQ="Etc/GMT$(printf %+d $(( 10#$(date -u +%H) - 11 )))"
 cat > "$RX/q" <<'EOF'
 #!/usr/bin/env node
@@ -35,7 +35,7 @@ if (c) { fs.writeFileSync(path.join(dir, 'cursor.q'), c); fs.mkdirSync(`${home}/
 EOF
 chmod +x "$RX/q"; for n in claude agy kimi codex kilo; do ln -s q "$RX/$n"; done
 env PATH="$NODEBIN" node "$RX/q" serve & sleep 0.5
-rt() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ DANDELION_CURSOR_API_BASE=http://127.0.0.1:48010 "$@" sh -c 'q prep && node "$1/src/main.ts" route; echo "exit=$?"' - "$PWD"; }
+rt() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ DANDELION_CURSOR_API_BASE=http://127.0.0.1:48010 "$@" sh -c 'q prep && node "$1/src/main.ts" ${A-route}; echo "exit=$?"' - "$PWD"; }
 ```
 
 1. Run `rt Q_CLAUDE=0,86,2 Q_AGY=0,0,72`.
@@ -53,8 +53,8 @@ rt() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ D
 3. Run `rt Q_CLAUDE=20,30,72 Q_WORK=10,5,72 Q_AGY=15,20,72`, then `rt Q_CLAUDE=20,30,72 Q_AGY=5,5,72`.
    - **Expected:** `claude-opus-5 high`, then `gemini-3.1-pro-high medium`, each followed by `exit=0`.
 
-4. Run `rt Q_KIMI=90,10,72 Q_GROK=50,72`, then `rt Q_KIMI=10,10,72 Q_GROK=50,72`, then `rt Q_AGY=20,20,72 Q_KIMI=20,20,72`.
-   - **Expected:** `grok-4.6`, then `kimi-code/kimi-for-coding-highspeed`, then `gemini-3.1-pro-high medium`, each followed by `exit=0`.
+4. Run `rt Q_KIMI=90,10,72 Q_AGY=50,50,72`, then `rt Q_KIMI=90,10,72 Q_GROK=50,72`, then `rt Q_KIMI=10,10,72 Q_GROK=50,72`, then `rt Q_AGY=20,20,72 Q_KIMI=20,20,72`.
+   - **Expected:** `gemini-3.1-pro-high medium` (kimi is bound by its 5h window), then `grok-4.6` (grok has no rolling window, so 100 counts), then `kimi-code/kimi-for-coding-highspeed`, then `gemini-3.1-pro-high medium`, each followed by `exit=0`.
 
 5. Run `rt Q_CURSOR=40,72`, then `rt`.
    - **Expected:** `kimi-k3-max` and `exit=0`. Then `none` and `exit=1`: codex and kilo are "ok" but never routed.
@@ -62,11 +62,14 @@ rt() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ D
 6. Run `rt Q_CLAUDE=0,86,2 2>/tmp/010.err | od -c | head -3; wc -c < /tmp/010.err`.
    - **Expected:** `od` shows exactly `c l a u d e - o p u s - 5   m a x \n` and then `e x i t = 0 \n`, with no `033`. `wc` prints `0`.
 
-7. Run `B="$(mktemp -d)"; ln -s "$PWD/src/main.ts" "$B/dandelion"; env -i HOME="$RH" TZ="$TZQ" PATH="$B:$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ Q_CLAUDE=0,86,2 dandelion route; echo "exit=$?"` in the terminal, without redirecting.
+7. Run `env -i HOME="$RH" TZ="$TZQ" PATH="$RB:$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ DANDELION_CURSOR_API_BASE=http://127.0.0.1:48010 Q_CLAUDE=0,86,2 sh -c 'q prep && dandelion route; echo "exit=$?"'` in the terminal, without redirecting.
    - **Expected:** the screen does not clear, no dashboard appears, and the only output is `claude-opus-5 max` then `exit=0`.
 
-8. Run `node qa/e2e.mjs; pgrep -fa dandelion-qa; git diff --stat ec04f8e -- 'qa/00*.e2e.mjs'`.
+8. Run `rt A='route extra' Q_CLAUDE=0,86,2`, then `rt NO_COLOR=1 A='--once route' Q_CLAUDE=0,86,2 | head -1`, then `rt NO_COLOR=1 A=routes Q_CLAUDE=0,86,2 | head -1`.
+   - **Expected:** `claude-opus-5 max` and `exit=0`. Then twice a line starting `DANDELION` followed by a time: only a first argument of `route` routes.
+
+9. Run `node qa/e2e.mjs; pgrep -fa dandelion-qa; git diff --stat ec04f8e -- 'qa/00*.e2e.mjs'`.
    - **Expected:** exits 0 and every `*.e2e.mjs` prints PASS, including `010-route-command.e2e.mjs`. `pgrep` and `git diff` print nothing.
 
-9. Run step 2 of `qa/009-rename-dandelion.md`, then `grep -n 'route\|kilo\|codex' README.md`, then `pkill -f "$RX/q serve"; rm -rf "$RX" "$RH" "$B" /tmp/010.err`.
-   - **Expected:** the dashboard matches 009 step 2 exactly; no row shows a window kind. The README documents `dandelion route`, both rules, the routing table, and that kilo and codex are never routed.
+10. Run the set-up block of `qa/009-rename-dandelion.md` (which runs those of 002 to 008), then its step 2, then `grep -n 'route\|kilo\|codex' README.md`, then `pkill -f "$RX/q serve"; rm -rf "$RX" "$RH" "$RB" "$B" "$H0" /tmp/010.err /tmp/009.txt`.
+    - **Expected:** the dashboard matches 009 step 2 exactly; no row shows a window kind. The README documents `dandelion route`, both rules, the routing table, and that kilo and codex are never routed.
