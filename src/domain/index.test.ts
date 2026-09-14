@@ -33,9 +33,21 @@ describe('routeLine', () => {
   const NOW = '2026-09-14T11:00:00.000Z';
   const MIDNIGHT = '2026-09-15T00:00:00.000Z';
 
+  const WINDOW_KINDS: readonly WindowKind[] = ['rolling', 'weekly', 'other'];
+
+  function kindOf(text: string): WindowKind {
+    const found = WINDOW_KINDS.find((kind) => kind === text);
+    if (found === undefined) throw new Error(`unknown window kind ${text}`);
+    return found;
+  }
+
+  it('rejects an unknown window kind in a table row', () => {
+    expect(() => kindOf('weakly')).toThrow('unknown window kind weakly');
+  });
+
   function windowOf(text: string): UsageWindow {
     const [kind, used, at] = text.split(' ');
-    const window: UsageWindow = { label: kind, kind: kind as WindowKind, usedPct: Number(used) };
+    const window: UsageWindow = { label: kind, kind: kindOf(kind), usedPct: Number(used) };
     return at === '@-' ? window : { ...window, resetsAt: at.slice(1) };
   }
 
