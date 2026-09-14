@@ -1410,6 +1410,22 @@ describe('quitting the live dashboard', () => {
     }
   });
 
+  it('does not run a stop again on quit while that stop is still waiting for its child to exit', async () => {
+    const dashboard = startDashboard(mockRunner(MISSING_RUN), { NO_COLOR: '1' });
+    const child = realIo.spawner.spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => setTimeout(() => process.exit(0), 300)); console.log("ready"); setInterval(() => {}, 1000)']);
+    await child.lines[Symbol.asyncIterator]().next();
+    const kill = vi.spyOn(ChildProcess.prototype, 'kill');
+    try {
+      const stopping = child.stop();
+      dashboard.press('q');
+      await dashboard.finished;
+      await stopping;
+      expect(kill).toHaveBeenCalledTimes(1);
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
   it('stops a kimi child when quit arrives in the same tick as its launch', async () => {
     scratch = mkdtempSync(join(tmpdir(), 'allowance-live-'));
     const holder: { dashboard?: ReturnType<typeof startDashboard> } = {};
