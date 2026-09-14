@@ -61,9 +61,10 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
     Given the usages claude 0/86@2 and the state file {"claude": false, "kilo": false}
     When the user runs `NO_COLOR=1 node src/main.ts --once`
     Then the exit code is 0, the claude header line is "claude" then spaces then "routing off" ending at column 72, and so is kilo's
-    And every other line is byte-for-byte the output with no state file, and the state file's bytes and mtime are unchanged
+    And every other line is byte-for-byte the output with no state file apart from the banner clock, and the state file's bytes and mtime
+      are unchanged
     When the state file holds the bytes "{not json", then "null"
-    Then each output is byte-for-byte the output with no state file
+    Then each output is byte-for-byte the output with no state file apart from the banner clock
     When the state file is missing
     Then the output has no "routing off", no "▸", and "<tmp>/state" still does not exist
 
@@ -95,7 +96,7 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
     Then once settled the claude header line is "claude" then spaces then "routing off", and no panel has "▸"
 
   Scenario: A rewrite keeps unknown keys and overwrites edits made while running
-    Given the state file {"nope": 1, "agy": false}
+    Given the usages claude 0/86@2 and the state file {"nope": 1, "agy": false}
     When the user starts live mode, and once settled the file is replaced by {"kimi": false}
     Then the agy header still shows "routing off" and kimi's does not
     When the user presses "j" then space
@@ -171,7 +172,8 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
 
   Scenario: Nothing else changes
     When no state file exists
-    Then `--once` output is byte-for-byte that of 010, every 010 route row prints its 010 line, and live frames differ from 010 only in the footer
+    Then `--once` output is byte-for-byte that of 010 apart from the banner clock, every 010 route row prints its 010 line, and live
+      frames differ from 010 only in the footer and the banner's clock and data age
 
   Scenario: README documents eligibility
     When I read "README.md"
@@ -188,6 +190,7 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
     And "qa/011-route-eligibility-toggle.e2e.mjs" uses temp dirs prefixed "dandelion-qa-011-" and sets DANDELION_STATE_FILE in every child env
     And it covers every row of "route skips ineligible providers before both rules" and "The default state file path", and "--once shows
       the tag and never writes", including a byte comparison of `--once` output with the state file "{not json" against the no-file output
+      after replacing the HH:MM:SSZ clock in line 1 of both with a fixed placeholder
     And it runs live mode under `/usr/bin/script` with NO_COLOR and covers "Toggle a provider off and on in live mode" and the kilo row of
       "Non-routable panels flash and write nothing"
     And no e2e runs a real provider binary, and every temp dir is removed
