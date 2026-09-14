@@ -1,0 +1,65 @@
+#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { VALUES, absent, bothNames, emit, perCallSync, repeat } from './timing.mjs';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const ITERATIONS = 2000;
+
+const TARGETS = {
+  cliSymlink: 'cli one-shot kilo via dandelion symlink',
+  entrySymlink: 'isEntryFile symlinked argv1 (in-process, per call)',
+  entryDirect: 'isEntryFile direct argv1 (in-process, per call)',
+  entryOther: 'isEntryFile other argv1 (in-process, per call)'
+};
+
+if (!existsSync(main) || !existsSync(appEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const app = await import(pathToFileURL(appEntry).href);
+if (typeof app.isEntryFile !== 'function') {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-entry-'));
+const empty = mkdtempSync(join(tmpdir(), 'bench-entry-empty-'));
+const kilo = join(fixture, 'kilo');
+writeFileSync(kilo, '#!/bin/sh\nprintf "Name: Max\\nEmail: a@b.c\\nTeam: Personal\\nBalance: $14.15\\n"\n');
+chmodSync(kilo, 0o755);
+const link = join(fixture, 'dandelion');
+symlinkSync(main, link);
+const moduleUrl = pathToFileURL(main).href;
+
+function timeCli() {
+  const env = bothNames({ ...process.env, PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: empty, ALLOWANCE_CURSOR_AUTH_FILE: join(empty, 'missing-auth.json') });
+  delete env.NO_COLOR;
+  delete env.ALLOWANCE_CURSOR_API_BASE;
+  delete env.DANDELION_CURSOR_API_BASE;
+  const start = process.hrtime.bigint();
+  const out = execFileSync(link, ['--once'], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
+  if (!out.includes('kilo')) throw new Error(`symlinked dandelion printed no dashboard:\n${out}`);
+  return elapsed;
+}
+
+try {
+  if (!app.isEntryFile(moduleUrl, link) || !app.isEntryFile(moduleUrl, main) || app.isEntryFile(moduleUrl, kilo)) {
+    throw new Error('isEntryFile gave an unexpected answer');
+  }
+  timeCli();
+  emit(TARGETS.cliSymlink, await repeat(VALUES, timeCli), 'ms');
+  emit(TARGETS.entrySymlink, perCallSync(ITERATIONS, () => app.isEntryFile(moduleUrl, link)), 'us');
+  emit(TARGETS.entryDirect, perCallSync(ITERATIONS, () => app.isEntryFile(moduleUrl, main)), 'us');
+  emit(TARGETS.entryOther, perCallSync(ITERATIONS, () => app.isEntryFile(moduleUrl, kilo)), 'us');
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+  rmSync(empty, { recursive: true, force: true });
+}

@@ -43,3 +43,9 @@ export function perCallSync(count, fn) {
   }
   return values;
 }
+
+export function bothNames(env) {
+  const kept = Object.entries(env).filter(([name]) => !name.startsWith('DANDELION_'));
+  const mirrored = kept.filter(([name]) => name.startsWith('ALLOWANCE_')).map(([name, value]) => [`DANDELION_${name.slice('ALLOWANCE_'.length)}`, value]);
+  return Object.fromEntries([...kept, ...mirrored]);
+}

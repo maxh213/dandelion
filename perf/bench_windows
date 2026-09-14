@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { VALUES, emit, perCall, perCallSync, repeat } from './timing.mjs';
+import { VALUES, bothNames, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
 const main = join(tree, 'src', 'main.ts');
@@ -53,9 +53,10 @@ for (const [name, out] of Object.entries(OUTPUTS)) {
 }
 
 function timeCli() {
-  const env = { ...process.env, PATH: `${fixture}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') };
+  const env = bothNames({ ...process.env, PATH: `${fixture}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
   delete env.NO_COLOR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
+  delete env.DANDELION_CURSOR_API_BASE;
   const start = process.hrtime.bigint();
   execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
   return Number(process.hrtime.bigint() - start) / 1e6;
