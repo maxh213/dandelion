@@ -13,7 +13,9 @@ Feature: 010 - dandelion route picks the subscription to burn
     | other   | everything else; route ignores it in both rules                                                |
   left = 100 - usedPct, compared as raw floats.
   Evaporation: a weekly window with a resetsAt strictly after now and strictly before the next local midnight (process TZ), with
-    left < 97. A window without resetsAt never evaporates. A candidate's evaporation score is the highest left among its evaporating
+    left < 97. The next local midnight is the first instant strictly after now at which the local date changes in the IANA zone;
+    `route` works it out from the real clock and the process TZ (Intl.DateTimeFormat().resolvedOptions().timeZone), and passes it to
+    the decision. A window without resetsAt never evaporates. A candidate's evaporation score is the highest left among its evaporating
     windows. If any candidate has one, print the max line of the candidate with the highest score.
   Otherwise binding = min(lowest rolling left, lowest weekly left), a missing kind counting as 100. Print the standard line of the
   candidate with the highest binding. Every tie goes to the earlier candidate in dashboard order.
@@ -103,6 +105,22 @@ Feature: 010 - dandelion route picks the subscription to burn
       | codex as the only ok provider           | codex: weekly 10 @2026-09-20T00:00:00.000Z                                                                                  | none                                |
       | kilo as the only ok provider            | kilo: no windows                                                                                                            | none                                |
     And every line of the routing table, standard and max, is pinned by a test
+
+  Scenario Outline: The next local midnight, unit level
+    Given the unit tests of the next-local-midnight function in "src/domain/index.test.ts", which pass the zone as an argument and never
+      read or set the process TZ
+    When it gets the zone "<zone>" and now <now>
+    Then it returns <midnight>
+
+    Examples:
+      | case                                   | zone          | now                      | midnight                 |
+      | UTC                                    | UTC           | 2026-09-14T11:00:00.000Z | 2026-09-15T00:00:00.000Z |
+      | UTC-7, local 13:00 on Sep 14           | Etc/GMT+7     | 2026-09-14T20:00:00.000Z | 2026-09-15T07:00:00.000Z |
+      | UTC+10, local 06:00 on Sep 15          | Etc/GMT-10    | 2026-09-14T20:00:00.000Z | 2026-09-15T14:00:00.000Z |
+      | exactly local midnight gives the next  | Etc/GMT+7     | 2026-09-15T07:00:00.000Z | 2026-09-16T07:00:00.000Z |
+      | 1 ms before local midnight             | Etc/GMT+7     | 2026-09-15T06:59:59.999Z | 2026-09-15T07:00:00.000Z |
+      | a 25-hour day (DST ends in Berlin)     | Europe/Berlin | 2026-10-25T12:00:00.000Z | 2026-10-25T23:00:00.000Z |
+    And a test in "src/main.test.ts" pins that `route` passes the real clock's now and the process TZ to it
 
   Scenario Outline: Probes set the window kind
     Given the unit tests of "src/probes/<probe>.test.ts"
