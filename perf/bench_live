@@ -1,0 +1,108 @@
+#!/usr/bin/env node
+import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { VALUES, absent, emit, perCall, perCallSync } from './timing.mjs';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const liveEntry = join(tree, 'src', 'app', 'live.ts');
+const renderEntry = join(tree, 'src', 'render', 'terminal.ts');
+const domainEntry = join(tree, 'src', 'domain', 'index.ts');
+const NOW = '2026-09-13T10:00:00.000Z';
+const ITERATIONS = 2000;
+const RUNNER_ITERATIONS = VALUES;
+const SESSIONS = VALUES;
+
+const TARGETS = {
+  runner: 'realIo runner run sh (in-process, per call)',
+  fleet: 'summariseFleet seven providers (in-process, per call)',
+  frameSettled: 'renderLiveFrame seven settled refreshing footer (in-process, per call)',
+  framePending: 'renderLiveFrame seven pending (in-process, per call)',
+  session: 'startLive seven stub probes first round then quit (in-process, per session)'
+};
+
+const win = (label, usedPct, resetsAt) => ({ label, usedPct, resetsAt });
+const usages = [
+  { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [win('session', 3, '2026-09-13T18:40:00.000Z'), win('weekly', 86, '2026-09-13T22:00:00.000Z'), win('Fable', 40, '2026-09-16T22:00:00.000Z')] },
+  { id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok', windows: [win('Claude and GPT models · Five Hour Limit', 100, '2026-09-13T11:59:00Z'), win('Gemini Models · Weekly Limit', 0, '2026-09-20T17:13:45Z')] },
+  { id: 'kimi', displayName: 'kimi', planLabel: 'kimi', fetchedAt: NOW, status: 'ok', windows: [win('weekly', 20, '2026-09-18T00:00:00Z'), win('5h', 10, '2026-09-13T14:00:00Z')] },
+  { id: 'grok', displayName: 'grok', planLabel: 'grok', fetchedAt: '2026-09-12T10:00:00.000Z', status: 'ok', windows: [win('monthly', 55, '2026-10-01T00:00:00Z')] },
+  { id: 'codex', displayName: 'codex', planLabel: 'codex', fetchedAt: NOW, status: 'unavailable', windows: [], reason: 'codex CLI not found' },
+  { id: 'cursor', displayName: 'cursor', planLabel: 'Ultra · $200/mo', fetchedAt: NOW, status: 'ok', windows: [win('total', 31, '2026-09-30T16:45:06.000Z'), win('auto', 32, '2026-09-30T16:45:06.000Z'), win('api', 16, '2026-09-30T16:45:06.000Z')] },
+  { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
+];
+
+if (!existsSync(appEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-live-'));
+const script = join(fixture, 'kilo');
+writeFileSync(script, '#!/bin/sh\nprintf "Balance: $14.15\\n"\n');
+chmodSync(script, 0o755);
+
+function keyboardStub() {
+  const listeners = [];
+  return {
+    setRawMode: () => undefined,
+    setEncoding: () => undefined,
+    on: (_event, listener) => listeners.push(listener),
+    pause: () => undefined,
+    press: (key) => listeners.forEach((listener) => listener(key))
+  };
+}
+
+async function session(startLive, probes) {
+  const keyboard = keyboardStub();
+  let bytes = 0;
+  const screen = { write: (text) => (bytes += text.length) };
+  const settled = [];
+  const tracked = probes.map(({ id, probe }) => ({ id, probe: (now) => { const p = probe(now); settled.push(p); return p; } }));
+  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined });
+  await Promise.allSettled(settled);
+  await new Promise((resolve) => setImmediate(resolve));
+  keyboard.press('q');
+  await ended;
+  return bytes;
+}
+
+try {
+  const { realIo } = await import(pathToFileURL(appEntry).href);
+  await realIo.runner.run(script, [], 5000);
+  emit(TARGETS.runner, await perCall(RUNNER_ITERATIONS, () => realIo.runner.run(script, [], 5000)), 'us');
+
+  const domain = await import(pathToFileURL(domainEntry).href);
+  if (domain.summariseFleet) {
+    domain.summariseFleet(usages, NOW);
+    emit(TARGETS.fleet, perCallSync(ITERATIONS, () => domain.summariseFleet(usages, NOW)), 'us');
+  } else {
+    absent(TARGETS.fleet);
+  }
+
+  const render = await import(pathToFileURL(renderEntry).href);
+  if (render.renderLiveFrame) {
+    const settledView = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true };
+    const pendingView = { slots: usages.map(({ id }) => ({ id, usage: undefined })), spinner: 3, refreshing: false, footer: false };
+    render.renderLiveFrame(settledView, false, NOW);
+    render.renderLiveFrame(pendingView, false, NOW);
+    emit(TARGETS.frameSettled, perCallSync(ITERATIONS, () => render.renderLiveFrame(settledView, false, NOW)), 'us');
+    emit(TARGETS.framePending, perCallSync(ITERATIONS, () => render.renderLiveFrame(pendingView, false, NOW)), 'us');
+  } else {
+    absent(TARGETS.frameSettled, TARGETS.framePending);
+  }
+
+  if (existsSync(liveEntry)) {
+    const { startLive } = await import(pathToFileURL(liveEntry).href);
+    const probes = usages.map((usage) => ({ id: usage.id, probe: async () => usage }));
+    const bytes = await session(startLive, probes);
+    if (bytes < 1000) throw new Error(`live session drew too little: ${bytes}`);
+    emit(TARGETS.session, await perCall(SESSIONS, () => session(startLive, probes)), 'us');
+  } else {
+    absent(TARGETS.session);
+  }
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}

@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { VALUES, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
 const main = join(tree, 'src', 'main.ts');
@@ -34,10 +35,6 @@ const AGY_OUT = [
 ].join('\n');
 const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
 const OUTPUTS = { claude: CLAUDE_OUT, agy: AGY_OUT, kilo: KILO_OUT };
-
-function emit(target, value, unit) {
-  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
-}
 
 if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
   for (const target of Object.values(TARGETS)) console.log(JSON.stringify({ target, absent: true }));
@@ -96,16 +93,11 @@ try {
   await runApp(stub, {}, NOW);
   if (hasWindows) renderDashboard(usages, false, NOW);
 
-  emit(TARGETS.cli, timeCli(), 'ms');
-
-  let start = process.hrtime.bigint();
-  for (let i = 0; i < ITERATIONS; i++) await runApp(stub, {}, NOW);
-  emit(TARGETS.runApp, Number(process.hrtime.bigint() - start) / 1e3 / ITERATIONS, 'us');
+  emit(TARGETS.cli, await repeat(VALUES, () => timeCli()), 'ms');
+  emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(stub, {}, NOW)), 'us');
 
   if (hasWindows) {
-    start = process.hrtime.bigint();
-    for (let i = 0; i < ITERATIONS; i++) renderDashboard(usages, false, NOW);
-    emit(TARGETS.render, Number(process.hrtime.bigint() - start) / 1e3 / ITERATIONS, 'us');
+    emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW)), 'us');
   } else {
     console.log(JSON.stringify({ target: TARGETS.render, absent: true }));
   }

@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync, chmodSync, rmSync } 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { VALUES, absent, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
 const main = join(tree, 'src', 'main.ts');
@@ -12,7 +13,7 @@ const renderEntry = join(tree, 'src', 'render', 'index.ts');
 const codexEntry = join(tree, 'src', 'probes', 'codex.ts');
 const NOW = '2026-09-13T10:00:00.000Z';
 const ITERATIONS = 2000;
-const SPAWN_ITERATIONS = 50;
+const SPAWN_ITERATIONS = VALUES;
 
 const TARGETS = {
   cliApiKey: 'cli one-shot six providers codex api-key',
@@ -24,14 +25,6 @@ const TARGETS = {
   renderApiKey: 'renderDashboard six providers codex api-key (in-process, per call)',
   renderChatGpt: 'renderDashboard six providers codex windows (in-process, per call)'
 };
-
-function emit(target, value, unit) {
-  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
-}
-
-function absent(...targets) {
-  for (const target of targets) console.log(JSON.stringify({ target, absent: true }));
-}
 
 if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry) || !existsSync(codexEntry)) {
   absent(TARGETS.cliApiKey, TARGETS.cliChatGpt, TARGETS.probeApiKey, TARGETS.probeChatGpt, TARGETS.probeRealSpawn, TARGETS.runApp);
@@ -116,12 +109,6 @@ function ioWith(login, spawner) {
   };
 }
 
-async function perCall(iterations, fn) {
-  const start = process.hrtime.bigint();
-  for (let i = 0; i < iterations; i++) await fn();
-  return Number(process.hrtime.bigint() - start) / 1e3 / iterations;
-}
-
 function usages(codex) {
   return [
     { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' }] },
@@ -148,8 +135,8 @@ try {
   if (existsSync(codexEntry)) {
     timeCli('apikey');
     timeCli('chatgpt');
-    emit(TARGETS.cliApiKey, timeCli('apikey'), 'ms');
-    emit(TARGETS.cliChatGpt, timeCli('chatgpt'), 'ms');
+    emit(TARGETS.cliApiKey, await repeat(VALUES, () => timeCli('apikey')), 'ms');
+    emit(TARGETS.cliChatGpt, await repeat(VALUES, () => timeCli('chatgpt')), 'ms');
     const { probeCodex } = await import(pathToFileURL(codexEntry).href);
     const apiIo = ioWith(API_KEY_LOGIN, stubSpawner);
     const realSpawnIo = ioWith(CHATGPT_LOGIN, realIo.spawner);
@@ -166,8 +153,8 @@ try {
 
   renderDashboard(apiKeyUsages, false, NOW);
   renderDashboard(windowUsages, false, NOW);
-  emit(TARGETS.renderApiKey, await perCall(ITERATIONS, () => renderDashboard(apiKeyUsages, false, NOW)), 'us');
-  emit(TARGETS.renderChatGpt, await perCall(ITERATIONS, () => renderDashboard(windowUsages, false, NOW)), 'us');
+  emit(TARGETS.renderApiKey, perCallSync(ITERATIONS, () => renderDashboard(apiKeyUsages, false, NOW)), 'us');
+  emit(TARGETS.renderChatGpt, perCallSync(ITERATIONS, () => renderDashboard(windowUsages, false, NOW)), 'us');
 } finally {
   rmSync(fixture, { recursive: true, force: true });
 }

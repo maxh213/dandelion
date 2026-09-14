@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { VALUES, absent, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
 const main = join(tree, 'src', 'main.ts');
@@ -21,14 +22,6 @@ const TARGETS = {
   runApp: 'runApp claude+agy+kimi+kilo ok (in-process, per call)',
   render: 'renderDashboard four providers with kimi (in-process, per call)'
 };
-
-function emit(target, value, unit) {
-  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
-}
-
-function absent(...targets) {
-  for (const target of targets) console.log(JSON.stringify({ target, absent: true }));
-}
 
 if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
   absent(...Object.values(TARGETS));
@@ -105,12 +98,6 @@ const usages = [
 const okFixture = makeFixture('bench-kimi-ok-', KIMI_OK);
 const noTokenFixture = makeFixture('bench-kimi-notoken-', '#!/bin/sh\nexit 0\n');
 
-async function perCall(fn) {
-  const start = process.hrtime.bigint();
-  for (let i = 0; i < ITERATIONS; i++) await fn();
-  return Number(process.hrtime.bigint() - start) / 1e3 / ITERATIONS;
-}
-
 try {
   const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
   if (existsSync(kimiEntry)) {
@@ -120,15 +107,15 @@ try {
     await timeCli(noTokenFixture);
     await probeKimi(io, {}, NOW);
     await runApp(io, {}, NOW);
-    emit(TARGETS.cliOk, await timeCli(okFixture), 'ms');
-    emit(TARGETS.cliNoToken, await timeCli(noTokenFixture), 'ms');
-    emit(TARGETS.probe, await perCall(() => probeKimi(io, {}, NOW)), 'us');
-    emit(TARGETS.runApp, await perCall(() => runApp(io, {}, NOW)), 'us');
+    emit(TARGETS.cliOk, await repeat(VALUES, () => timeCli(okFixture)), 'ms');
+    emit(TARGETS.cliNoToken, await repeat(VALUES, () => timeCli(noTokenFixture)), 'ms');
+    emit(TARGETS.probe, await perCall(ITERATIONS, () => probeKimi(io, {}, NOW)), 'us');
+    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(io, {}, NOW)), 'us');
   } else {
     absent(TARGETS.cliOk, TARGETS.cliNoToken, TARGETS.probe, TARGETS.runApp);
   }
   renderDashboard(usages, false, NOW);
-  emit(TARGETS.render, await perCall(() => renderDashboard(usages, false, NOW)), 'us');
+  emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW)), 'us');
 } finally {
   rmSync(okFixture, { recursive: true, force: true });
   rmSync(noTokenFixture, { recursive: true, force: true });

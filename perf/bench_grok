@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync, chmodSync, rmSync } 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { VALUES, absent, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
 const main = join(tree, 'src', 'main.ts');
@@ -26,14 +27,6 @@ const TARGETS = {
   renderFresh: 'renderDashboard five providers grok fresh (in-process, per call)',
   renderStale: 'renderDashboard five providers grok stale (in-process, per call)'
 };
-
-function emit(target, value, unit) {
-  console.log(JSON.stringify({ target, unit, better: 'lower', value }));
-}
-
-function absent(...targets) {
-  for (const target of targets) console.log(JSON.stringify({ target, absent: true }));
-}
 
 if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
   absent(...Object.values(TARGETS));
@@ -105,12 +98,6 @@ function ioWith(log) {
   };
 }
 
-async function perCall(iterations, fn) {
-  const start = process.hrtime.bigint();
-  for (let i = 0; i < iterations; i++) await fn();
-  return Number(process.hrtime.bigint() - start) / 1e3 / iterations;
-}
-
 function usages(snapshotAt) {
   return [
     { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' }] },
@@ -129,8 +116,8 @@ try {
 
   timeCli(home);
   timeCli(emptyHome);
-  emit(TARGETS.cli, timeCli(home), 'ms');
-  emit(TARGETS.cliEmpty, timeCli(emptyHome), 'ms');
+  emit(TARGETS.cli, await repeat(VALUES, () => timeCli(home)), 'ms');
+  emit(TARGETS.cliEmpty, await repeat(VALUES, () => timeCli(emptyHome)), 'ms');
 
   if (existsSync(grokEntry)) {
     const { probeGrok } = await import(pathToFileURL(grokEntry).href);
@@ -151,8 +138,8 @@ try {
 
   renderDashboard(fresh, false, NOW);
   renderDashboard(stale, false, NOW);
-  emit(TARGETS.renderFresh, await perCall(RENDER_ITERATIONS, () => renderDashboard(fresh, false, NOW)), 'us');
-  emit(TARGETS.renderStale, await perCall(RENDER_ITERATIONS, () => renderDashboard(stale, false, NOW)), 'us');
+  emit(TARGETS.renderFresh, perCallSync(RENDER_ITERATIONS, () => renderDashboard(fresh, false, NOW)), 'us');
+  emit(TARGETS.renderStale, perCallSync(RENDER_ITERATIONS, () => renderDashboard(stale, false, NOW)), 'us');
 } finally {
   rmSync(fixture, { recursive: true, force: true });
 }
