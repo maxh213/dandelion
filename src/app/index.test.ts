@@ -1532,11 +1532,11 @@ describe('isEntryFile', () => {
 
 describe('runRoute', () => {
   it('probes every provider once and routes by the next local midnight of the given zone', async () => {
-    expect(await runRoute(routedRunner(), {}, NOW, 'UTC')).toBe('claude-opus-5 max');
-    expect(await runRoute(routedRunner(), {}, NOW, 'Etc/GMT-2')).toBe('claude-opus-5 high');
+    expect(await runRoute(routedRunner(), {}, NOW, 'UTC')).toEqual({ line: 'claude-opus-5 max', routed: true });
+    expect(await runRoute(routedRunner(), {}, NOW, 'Etc/GMT-2')).toEqual({ line: 'claude-opus-5 high', routed: true });
   });
 
   it('is none when every provider is unavailable', async () => {
-    expect(await runRoute(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW, 'UTC')).toBe('none');
+    expect(await runRoute(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW, 'UTC')).toEqual({ line: 'none', routed: false });
   });
 });

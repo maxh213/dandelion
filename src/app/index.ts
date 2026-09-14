@@ -20,11 +20,11 @@ import {
   type RpcSpawner,
   type RunFailure
 } from '../probes/index.ts';
-import { renderDashboard, renderRoute } from '../render/index.ts';
+import { renderDashboard, renderRoute, type RouteOutput } from '../render/index.ts';
 import { startLive, type Keyboard, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
-export { NO_ROUTE } from '../render/index.ts';
+export type { RouteOutput } from '../render/index.ts';
 export type { Keyboard, Screen } from './live.ts';
 
 type Stop = () => Promise<void>;
@@ -202,7 +202,7 @@ export async function runApp(io: ProbeIo, env: Record<string, string | undefined
   return renderDashboard(usages, noColor, now);
 }
 
-export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, now: string, zone: string): Promise<string> {
+export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, now: string, zone: string): Promise<RouteOutput> {
   return renderRoute(await probeOnce(io, env, now), now, zone);
 }
 
