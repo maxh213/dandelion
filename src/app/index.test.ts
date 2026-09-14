@@ -1103,7 +1103,7 @@ describe('cursor panel', () => {
       const cursor = cursorIo();
       const post = vi.spyOn(cursor.fetcher, 'post');
       expect(panelOf(await runApp(cursor, { ...CURSOR_ENV, NO_COLOR: '1' }, NOW), 'cursor').slice(1, 4)).toEqual(ROWS);
-      expect(post.mock.calls.map(([url]) => url.slice(0, 22))).toEqual(['http://127.0.0.1:48006', 'http://127.0.0.1:48006']);
+      expect(post.mock.calls.map(([url]) => new URL(url).origin)).toEqual(['http://127.0.0.1:48006', 'http://127.0.0.1:48006']);
     });
 
     it('reads its settings under the DANDELION_* names and no other name', async () => {
@@ -1125,7 +1125,7 @@ describe('cursor panel', () => {
       expect(dashboard.writes.join('')).not.toContain('refreshing…');
       await vi.advanceTimersByTimeAsync(295000);
       expect(claudeRuns()).toBe(4);
-      expect(recorded.names()).toEqual([...SETTINGS.slice(0, 6), 'DANDELION_REFRESH_SECONDS', 'NO_COLOR']);
+      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_REFRESH_SECONDS'].sort());
       dashboard.press('q');
       await dashboard.finished;
     });
