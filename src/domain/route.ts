@@ -25,14 +25,14 @@ type Pick = { route: Route | undefined; score: number };
 
 type Tonight = { nowMs: number; midnightMs: number };
 
-function isCandidate(usage: RoutableUsage | undefined): usage is RoutableUsage {
+export function isRoutable(usage: RoutableUsage | undefined): usage is RoutableUsage {
   return usage?.status === 'ok' && usage.windows.length > 0;
 }
 
-function candidatesOf(usages: RoutableUsage[]): Candidate[] {
+function candidatesOf(usages: RoutableUsage[], ineligible: string[]): Candidate[] {
   return ROUTING_TABLE.flatMap((route) => {
-    const usage = usages.find((each) => each.id === route.id);
-    return isCandidate(usage) ? [{ route, windows: usage.windows }] : [];
+    const usage = usages.find((each) => each.id === route.id && !ineligible.includes(each.id));
+    return isRoutable(usage) ? [{ route, windows: usage.windows }] : [];
   });
 }
 
@@ -64,8 +64,8 @@ function highest(candidates: Candidate[], score: (windows: RoutableWindow[]) => 
   }, { route: undefined, score: -Infinity });
 }
 
-export function routeLine(usages: RoutableUsage[], now: string, midnight: string): string {
-  const candidates = candidatesOf(usages);
+export function routeLine(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
+  const candidates = candidatesOf(usages, ineligible);
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
   const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight));
   if (evaporating.route !== undefined) return evaporating.route.max;

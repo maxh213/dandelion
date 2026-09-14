@@ -83,7 +83,7 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
     delete env.DANDELION_KIMI_PORT;
     delete env.DANDELION_CURSOR_API_BASE;
     delete env.CLAUDE_CONFIG_DIR;
-    Object.assign(env, { DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir }, extraEnv);
+    Object.assign(env, { DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') }, extraEnv);
     return spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -219,7 +219,7 @@ describe('main', () => {
       writeFixture(dir, 'claude', "[ -z \"$CLAUDE_CONFIG_DIR\" ] || exit 1\nprintf '%s\\n' 'Current week (all models): 86% used'");
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
-      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing') };
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const routed = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
       expect([routed.stdout, routed.stderr, routed.status]).toEqual(['claude-opus-5 high\n', '', 0]);
       rmSync(join(dir, 'claude'));
@@ -257,7 +257,7 @@ describe('main', () => {
       writeFixture(dir, 'kimi', 'exit 0');
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
-      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir };
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const runs = ['src/main.ts', join(dir, 'dandelion')].map((entry) => spawnSync(process.execPath, [entry, '--once'], { env, encoding: 'utf-8', timeout: 60000 }));
       const panelOrder = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
       for (const run of runs) {
@@ -279,7 +279,7 @@ describe('main', () => {
     try {
       linkNodeAndShell(dir);
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir };
+      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8', timeout: 60000 });
       expect(result.status).toBe(0);
       expect(result.stdout).toMatch(/\ngrok\n[^]*\ncodex\napi-key billing · no usage windows\ncodex · codex\n[^]*\ncursor\n[^]*\nkilo\n/);
@@ -291,7 +291,7 @@ describe('main', () => {
 
   it('prints eight dim unavailable panels in order when no CLI is on PATH, grok home is empty and cursor auth is missing', () => {
     const grokHome = mkdtempSync(join(tmpdir(), 'dandelion-grok-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome };
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome, DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json') };
     delete env.NO_COLOR;
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
     rmSync(grokHome, { recursive: true, force: true });
@@ -400,6 +400,17 @@ describe('main', () => {
       '| grok | `grok-4.6` | `grok-4.6` |',
       '| cursor | `kimi-k3-max` | `kimi-k3-max` |'
     ]) expect(route).toContain(row);
+  });
+
+  it('README documents route eligibility', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const commands = readme.split('## Run Commands')[1].split('## ')[0];
+    expect(commands).toMatch(/^- `npm start` - .*`↑↓\/jk select`.*`space routing on\/off`/m);
+    const route = readme.split('## Route')[1].split('## ')[0];
+    const paragraphs = route.split('\n\n').filter((paragraph) => paragraph.includes('ineligible'));
+    expect(paragraphs).toHaveLength(1);
+    expect(paragraphs[0]).toMatch(/dropped before both rules.*press space.*cannot be toggled.*state file/);
+    expect(readme).toMatch(/^- `DANDELION_STATE_FILE` - .*Defaults to `\$XDG_STATE_HOME\/dandelion\/eligibility\.json`, else `~\/\.local\/state\/dandelion\/eligibility\.json`/m);
   });
 
   it('README documents live mode', () => {

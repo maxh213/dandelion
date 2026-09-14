@@ -1,9 +1,9 @@
 import { execFile, spawn, type ChildProcess, type ChildProcessByStdio, type ExecException } from 'node:child_process';
 import { once } from 'node:events';
-import { closeSync, existsSync, mkdtempSync, openSync, realpathSync, rmSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { PassThrough, pipeline, type Readable, type Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
@@ -20,7 +20,16 @@ import {
   type RpcSpawner,
   type RunFailure
 } from '../probes/index.ts';
-import { renderDashboard, renderRoute, type RouteOutput } from '../render/index.ts';
+import {
+  eligibilityPath,
+  ineligibleIds,
+  parseEligibility,
+  renderDashboard,
+  renderRoute,
+  serializeEligibility,
+  type EligibilityState,
+  type RouteOutput
+} from '../render/index.ts';
 import { startLive, type Keyboard, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
@@ -196,17 +205,60 @@ function probeOnce(io: ProbeIo, env: Record<string, string | undefined>, now: st
   return Promise.all(providerProbes(io, env).map(({ probe }) => probe(now)));
 }
 
+function statePathOf(io: ProbeIo, env: Record<string, string | undefined>): string {
+  return eligibilityPath(env, io.reader.homeDir());
+}
+
+function readText(path: string): string | undefined {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+function readState(path: string): EligibilityState {
+  return parseEligibility(readText(path));
+}
+
+function ineligibleFor(io: ProbeIo, env: Record<string, string | undefined>): string[] {
+  return ineligibleIds(readState(statePathOf(io, env)));
+}
+
+function replaceFile(path: string, text: string): boolean {
+  const temp = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`);
+  try {
+    writeFileSync(temp, text);
+    renameSync(temp, path);
+    return true;
+  } catch {
+    rmSync(temp, { force: true });
+    return false;
+  }
+}
+
+function writeState(path: string, state: EligibilityState): boolean {
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+  } catch {
+    return false;
+  }
+  return replaceFile(path, serializeEligibility(state));
+}
+
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
   const usages = await probeOnce(io, env, now);
   const noColor = env['NO_COLOR'] !== undefined;
-  return renderDashboard(usages, noColor, now);
+  return renderDashboard(usages, noColor, now, ineligibleFor(io, env));
 }
 
 export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, now: string, zone: string): Promise<RouteOutput> {
-  return renderRoute(await probeOnce(io, env, now), now, zone);
+  return renderRoute(await probeOnce(io, env, now), now, zone, ineligibleFor(io, env));
 }
 
 export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {
   registry.closed = false;
-  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren });
+  const path = statePathOf(io, env);
+  const saveState = (state: EligibilityState) => writeState(path, state);
+  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren, state: readState(path), saveState });
 }

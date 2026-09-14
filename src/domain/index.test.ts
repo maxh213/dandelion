@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { formatCountdown, nextLocalMidnight, routeLine, summariseFleet, type ProviderUsage, type UsageWindow, type WindowKind } from './index.ts';
+import {
+  eligibilityPath,
+  formatCountdown,
+  ineligibleIds,
+  nextLocalMidnight,
+  parseEligibility,
+  routeLine,
+  serializeEligibility,
+  summariseFleet,
+  withToggledEligibility,
+  type ProviderUsage,
+  type UsageWindow,
+  type WindowKind
+} from './index.ts';
 
 describe('formatCountdown', () => {
   it('formats days and hours', () => {
@@ -58,9 +71,21 @@ describe('routeLine', () => {
     return { ...identity, windows: body === 'no windows' ? [] : body.split(', ').map(windowOf), status: 'ok' };
   }
 
-  function routeOf(candidates: string): string {
-    return routeLine(candidates.split('; ').map(usageOf), NOW, MIDNIGHT);
+  function routeOf(candidates: string, ineligible: string[] = []): string {
+    return routeLine(candidates.split('; ').map(usageOf), NOW, MIDNIGHT, ineligible);
   }
+
+  it('drops an ineligible provider before the evaporation rule', () => {
+    expect(routeOf('claude: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', ['claude'])).toBe('gemini-3.1-pro-high medium');
+  });
+
+  it.each([
+    ['before the headroom rule', 'claude: rolling 20 @-, weekly 30 @-; claude-work: rolling 10 @-, weekly 5 @-; agy: rolling 15 @-, weekly 20 @-', ['claude-work', 'nope'], 'gemini-3.1-pro-high medium'],
+    ['leaving nothing to route', 'claude: weekly 50 @2026-09-14T20:00:00.000Z', ['claude'], 'none'],
+    ['only when named', 'claude: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', ['agy'], 'claude-opus-5 max']
+  ])('drops ineligible providers %s', (_case, candidates, ineligible, line) => {
+    expect(routeOf(candidates, ineligible)).toBe(line);
+  });
 
   it.each([
     ['raw floats, headroom', 'claude: rolling 50.4 @-; agy: rolling 50.2 @-', 'gemini-3.1-pro-high medium'],
@@ -100,6 +125,43 @@ describe('routeLine', () => {
   it('breaks ties in dashboard order whatever order the usages come in', () => {
     expect(routeOf('kimi: rolling 20 @-; agy: rolling 20 @-')).toBe('gemini-3.1-pro-high medium');
     expect(routeOf('kimi: weekly 10 @2026-09-14T20:00:00.000Z; agy: weekly 10 @2026-09-14T20:00:00.000Z')).toBe('gemini-3.1-pro-high high');
+  });
+});
+
+describe('eligibility state', () => {
+  it.each<[string, Record<string, string | undefined>, string]>([
+    ['DANDELION_STATE_FILE wins', { DANDELION_STATE_FILE: '/s/e.json', XDG_STATE_HOME: '/xdg' }, '/s/e.json'],
+    ['XDG_STATE_HOME when the file is unset', { XDG_STATE_HOME: '/xdg' }, '/xdg/dandelion/eligibility.json'],
+    ['XDG_STATE_HOME when the file is empty', { DANDELION_STATE_FILE: '', XDG_STATE_HOME: '/xdg' }, '/xdg/dandelion/eligibility.json'],
+    ['home when both are unset', {}, '/home/u/.local/state/dandelion/eligibility.json'],
+    ['home when XDG_STATE_HOME is empty', { XDG_STATE_HOME: '' }, '/home/u/.local/state/dandelion/eligibility.json']
+  ])('resolves the state path: %s', (_case, env, path) => {
+    expect(eligibilityPath(env, '/home/u')).toBe(path);
+  });
+
+  it.each<[string, string | undefined, string[]]>([
+    ['a missing file', undefined, []],
+    ['bytes that are not JSON', '{not json', []],
+    ['JSON null', 'null', []],
+    ['a JSON array', '[false]', []],
+    ['a JSON number', '5', []],
+    ['a JSON string', '"x"', []],
+    ['only exactly false', '{"claude": false, "agy": "no", "kimi": true, "grok": 0, "cursor": null}', ['claude']],
+    ['a constructor key', '{"constructor": false}', ['constructor']]
+  ])('reads %s as ineligible %j', (_case, text, ids) => {
+    expect(ineligibleIds(parseEligibility(text))).toEqual(ids);
+  });
+
+  it('flips false to true and anything else to false, keeping unknown keys', () => {
+    const state = parseEligibility('{"nope": 1, "agy": false, "kimi": "x"}');
+    const off = withToggledEligibility(withToggledEligibility(state, 'claude'), 'kimi');
+    expect(off).toEqual({ nope: 1, agy: false, kimi: false, claude: false });
+    expect(withToggledEligibility(off, 'agy')).toEqual({ nope: 1, agy: true, kimi: false, claude: false });
+    expect(state).toEqual({ nope: 1, agy: false, kimi: 'x' });
+  });
+
+  it('serializes as two-space JSON with a trailing newline', () => {
+    expect(serializeEligibility({ claude: false })).toBe('{\n  "claude": false\n}\n');
   });
 });
 

@@ -25,17 +25,30 @@ function deferredProbe(id: string, writes: string[]) {
   return { probe, calls };
 }
 
-function startSession(env: Record<string, string | undefined> = { NO_COLOR: '1' }, stopChildren = vi.fn(async () => undefined)) {
+function startSession(env: Record<string, string | undefined> = { NO_COLOR: '1' }, stopChildren = vi.fn(async () => undefined), state: Record<string, unknown> = {}) {
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen: { write: (text: string) => writes.push(text) }, stopChildren });
+  const saveState = vi.fn<(state: Record<string, unknown>) => boolean>(() => true);
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen: { write: (text: string) => writes.push(text) }, stopChildren, state, saveState });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
-  const settleRound = async (round: number) => {
-    probes.forEach(({ probe, calls }) => calls[round].resolve(usageOf(probe.id, calls[round].now)));
+  const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
+    probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { writes, probes, keyboard, finished, frames, stopChildren, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { writes, probes, keyboard, finished, frames, stopChildren, saveState, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+}
+
+const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
+const NO_WINDOWS: Usage = { id: 'kilo', displayName: 'kilo', planLabel: 'plan', windows: [], fetchedAt: START, status: 'ok' };
+
+function lineAfter(frame: string, header: string, offset: number): string | undefined {
+  const lines = frame.split('\n');
+  return lines[lines.indexOf(header) + offset];
+}
+
+function markedHeaders(frame: string): string[] {
+  return frame.split('\n').filter((line) => line.startsWith('▸ '));
 }
 
 describe('live session', () => {
@@ -166,7 +179,7 @@ describe('live session', () => {
     const session = startSession();
     await session.settleRound(0);
     session.press('?');
-    expect(session.lastFrame().split('\n').at(-1)).toBe('keys: r refresh · q quit · ? help');
+    expect(session.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
     session.press('?');
     expect(session.lastFrame()).not.toContain('keys:');
     const count = session.writes.length;
@@ -231,6 +244,134 @@ describe('live session', () => {
     await vi.advanceTimersByTimeAsync(600000);
     expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
     expect(session.writes).toHaveLength(count);
+  });
+
+  it.each<[string, string[], string]>([
+    ['j twice', ['j', 'j'], 'agy'],
+    ['Down, Down, Up', ['\x1b[B', '\x1b[B', '\x1b[A'], 'claude'],
+    ['k from nothing', ['k'], 'kilo'],
+    ['j then k', ['j', 'k'], 'claude'],
+    ['j nine times', Array(9).fill('j'), 'kilo'],
+    ['k, Up, k', ['k', '\x1b[A', 'k'], 'codex'],
+    ['Up past the top', ['j', '\x1b[A', 'k'], 'claude']
+  ])('moves the selection one panel per key and stops at the ends: %s', async (_case, keys, id) => {
+    const session = startSession();
+    await session.settleRound(0);
+    expect(markedHeaders(session.lastFrame())).toEqual([]);
+    const count = session.frames().length;
+    keys.forEach(session.press);
+    expect(session.frames()).toHaveLength(count + keys.length);
+    expect(markedHeaders(session.lastFrame())).toEqual([`▸ ${id}`]);
+    expect(session.saveState).not.toHaveBeenCalled();
+    session.press('q');
+    await session.finished;
+  });
+
+  it('flips the selected routable provider on space, saves the whole state and tags its header at once', async () => {
+    const session = startSession({ NO_COLOR: '1' }, undefined, { nope: 1, agy: false });
+    await session.settleRound(0);
+    expect(session.lastFrame().split('\n')).toContain(TAG('agy'));
+    session.press('j');
+    const rows = lineAfter(session.lastFrame(), '▸ claude', 1);
+    const count = session.frames().length;
+    session.press(' ');
+    expect(session.saveState).toHaveBeenLastCalledWith({ nope: 1, agy: false, claude: false });
+    expect(session.frames()).toHaveLength(count + 1);
+    expect(lineAfter(session.lastFrame(), TAG('▸ claude'), 1)).toBe(rows);
+    session.press(' ');
+    expect(session.saveState).toHaveBeenLastCalledWith({ nope: 1, agy: false, claude: true });
+    expect(markedHeaders(session.lastFrame())).toEqual(['▸ claude']);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('flashes a settled non-routable panel for 2 s without saving, and forgets the flash on quit', async () => {
+    const unavailable: Usage = { ...NO_WINDOWS, id: 'claude', displayName: 'claude', status: 'unavailable', reason: 'claude CLI not found in PATH' };
+    const session = startSession();
+    await session.settleRound(0, { kilo: NO_WINDOWS, claude: unavailable });
+    session.press('k');
+    const count = session.frames().length;
+    session.press(' ');
+    expect(session.frames()).toHaveLength(count + 1);
+    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('not routable (no usage windows)');
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('not routable (no usage windows)');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('plan · kilo');
+    ['k', 'k', 'k', 'k', 'k', 'k', ' '].forEach(session.press);
+    expect(lineAfter(session.lastFrame(), '▸ claude', 2)).toBe('not routable (no usage windows)');
+    expect(session.saveState).not.toHaveBeenCalled();
+    session.press('q');
+    await session.finished;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps a flash on the pressed panel and restarts the 2 s on a new flash', async () => {
+    const session = startSession();
+    await session.settleRound(0, { kilo: NO_WINDOWS, codex: { ...NO_WINDOWS, id: 'codex', displayName: 'codex' } });
+    session.press('k');
+    session.press(' ');
+    await vi.advanceTimersByTimeAsync(500);
+    session.press('k');
+    session.press('k');
+    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('not routable (no usage windows)');
+    expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('plan · codex');
+    await vi.advanceTimersByTimeAsync(1000);
+    session.press(' ');
+    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('plan · kilo');
+    expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('not routable (no usage windows)');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('not routable (no usage windows)');
+    await vi.advanceTimersByTimeAsync(1499);
+    expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('not routable (no usage windows)');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('plan · codex');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('leaves a running flash alone when a toggle succeeds', async () => {
+    const session = startSession();
+    await session.settleRound(0, { kilo: NO_WINDOWS });
+    session.press('k');
+    session.press(' ');
+    await vi.advanceTimersByTimeAsync(1000);
+    ['k', 'k', 'k', 'k', 'k', 'k', ' '].forEach(session.press);
+    expect(session.saveState).toHaveBeenLastCalledWith({ claude: false });
+    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('not routable (no usage windows)');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('plan · kilo');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('does nothing on space with nothing selected or on a pending panel', async () => {
+    const session = startSession();
+    const count = session.writes.length;
+    session.press(' ');
+    expect(session.writes).toHaveLength(count);
+    session.press('j');
+    session.press(' ');
+    expect(session.writes).toHaveLength(count + 1);
+    expect(session.lastFrame()).toContain('\n▸ claude\n⠋ probing…\n');
+    expect(session.saveState).not.toHaveBeenCalled();
+    session.press('q');
+    await session.finished;
+  });
+
+  it('flashes routing state not saved and keeps the old state when saving fails', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.saveState.mockReturnValueOnce(false);
+    session.press('j');
+    session.press(' ');
+    expect(lineAfter(session.lastFrame(), '▸ claude', 2)).toBe('routing state not saved');
+    expect(session.lastFrame()).not.toContain('routing off');
+    session.press(' ');
+    expect(session.saveState.mock.calls).toEqual([[{ claude: false }], [{ claude: false }]]);
+    expect(session.lastFrame().split('\n')).toContain(TAG('▸ claude'));
+    session.press('q');
+    await session.finished;
   });
 
   it('finishes only after every child has been stopped', async () => {

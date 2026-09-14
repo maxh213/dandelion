@@ -11,12 +11,14 @@ import {
   renderLiveFrame,
   styleToken,
   STYLE_TOKENS,
-  type LiveView
+  type LiveView,
+  type PanelMarks
 } from './terminal.ts';
 import type { ProviderUsage, UsageWindow } from '../domain/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const RESET = '\x1b[0m';
+const PLAIN: PanelMarks = { selected: false, ineligible: false };
 
 describe('terminal renderer', () => {
   it('renders banner', () => {
@@ -57,7 +59,7 @@ describe('terminal renderer', () => {
       status: 'ok',
       balance: { amount: 14.15, currency: '$', reference: 20 }
     };
-    const panel = renderPanelOk(usage, true, NOW);
+    const panel = renderPanelOk(usage, true, NOW, PLAIN);
     expect(panel).toContain('kilo');
     expect(panel).toContain('$14.15');
     expect(panel).toContain('##############------');
@@ -72,7 +74,7 @@ describe('terminal renderer', () => {
       status: 'ok',
       balance: { amount: 14.15, currency: '$' }
     };
-    const panel = renderPanelOk(usage, true, NOW);
+    const panel = renderPanelOk(usage, true, NOW, PLAIN);
     expect(panel).toContain('--------------------');
   });
 
@@ -85,7 +87,7 @@ describe('terminal renderer', () => {
       fetchedAt: 'now',
       status: 'ok'
     };
-    const panel = renderPanelOk(usage, true, NOW);
+    const panel = renderPanelOk(usage, true, NOW, PLAIN);
     expect(panel).toContain('kilo');
     expect(panel).toContain('api balance · kilo');
     expect(panel.split('\n')).toContain(' '.repeat(72));
@@ -93,13 +95,13 @@ describe('terminal renderer', () => {
 
   it('renders the note unpadded where window rows would be', () => {
     const usage: ProviderUsage = { id: 'codex', displayName: 'codex', planLabel: 'codex', windows: [], fetchedAt: 'now', status: 'ok', note: 'api-key billing · no usage windows' };
-    expect(renderPanelOk(usage, true, NOW).split('\n')).toEqual(['='.repeat(72), 'codex', 'api-key billing · no usage windows', 'codex · codex']);
-    expect(renderPanelOk(usage, false, NOW)).toBe(`\x1b[90m${'━'.repeat(72)}${RESET}\ncodex\napi-key billing · no usage windows\n\x1b[90mcodex · codex${RESET}`);
+    expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n')).toEqual(['='.repeat(72), 'codex', 'api-key billing · no usage windows', 'codex · codex']);
+    expect(renderPanelOk(usage, false, NOW, PLAIN)).toBe(`\x1b[90m${'━'.repeat(72)}${RESET}\ncodex\napi-key billing · no usage windows\n\x1b[90mcodex · codex${RESET}`);
   });
 
   it('renders a caption of just the name when the plan is unknown', () => {
     const usage: ProviderUsage = { id: 'x', displayName: 'x', windows: [], fetchedAt: 'now', status: 'ok' };
-    expect(renderPanelOk(usage, true, NOW).split('\n').at(-1)).toBe('x');
+    expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n').at(-1)).toBe('x');
   });
 
   it('renders window rows between the name and the caption', () => {
@@ -114,7 +116,7 @@ describe('terminal renderer', () => {
       fetchedAt: 'now',
       status: 'ok'
     };
-    expect(renderPanelOk(usage, true, NOW).split('\n')).toEqual([
+    expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n')).toEqual([
       '='.repeat(72),
       'claude',
       'session                             #-------------------   3% ↻ 8h40m',
@@ -133,14 +135,14 @@ describe('terminal renderer', () => {
       status: 'ok',
       snapshotAt: '2026-09-12T16:00:00.000Z'
     };
-    expect(renderPanelOk(usage, true, NOW).split('\n')).toEqual([
+    expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n')).toEqual([
       '='.repeat(72),
       'grok',
       'credits                             ###############-----  75% ↻ 11h15m',
       'snapshot 18h0m old',
       'SuperGrok Heavy · grok'
     ]);
-    expect(renderPanelOk(usage, false, NOW)).toContain(`\x1b[90msnapshot 18h0m old${RESET}\n\x1b[90mSuperGrok Heavy · grok${RESET}`);
+    expect(renderPanelOk(usage, false, NOW, PLAIN)).toContain(`\x1b[90msnapshot 18h0m old${RESET}\n\x1b[90mSuperGrok Heavy · grok${RESET}`);
   });
 
   it.each([
@@ -148,7 +150,7 @@ describe('terminal renderer', () => {
     ['2026-09-11T09:59:59.999Z', 'stale snapshot 2d0h old']
   ])('marks a snapshot at %s as "%s"', (snapshotAt, line) => {
     const usage: ProviderUsage = { id: 'g', displayName: 'g', windows: [{ label: 'credits', kind: 'weekly', usedPct: 10 }], fetchedAt: 'now', status: 'ok', snapshotAt };
-    expect(renderPanelOk(usage, true, NOW).split('\n')[3]).toBe(line);
+    expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n')[3]).toBe(line);
   });
 
   it('dims a stale panel as one block with plain gauge glyphs and no ramp escape', () => {
@@ -161,10 +163,10 @@ describe('terminal renderer', () => {
       status: 'ok',
       snapshotAt: '2026-09-10T17:14:22.812Z'
     };
-    expect(renderPanelOk(usage, false, NOW)).toBe(
+    expect(renderPanelOk(usage, false, NOW, PLAIN)).toBe(
       `\x1b[90m${'━'.repeat(72)}\ngrok\n${'credits'.padEnd(35)} ${'█'.repeat(19)}░  96%\nstale snapshot 2d16h old\ngrok · grok${RESET}`
     );
-    expect(renderPanelOk({ ...usage, windows: [] }, true, NOW).split('\n')[2]).toBe(' '.repeat(72));
+    expect(renderPanelOk({ ...usage, windows: [] }, true, NOW, PLAIN).split('\n')[2]).toBe(' '.repeat(72));
   });
 
   it('renders unavailable panel', () => {
@@ -177,10 +179,10 @@ describe('terminal renderer', () => {
       status: 'unavailable',
       reason: 'Missing CLI'
     };
-    const panel = renderPanelUnavailable(usage, true);
+    const panel = renderPanelUnavailable(usage, true, PLAIN);
     expect(panel).toBe(`${'='.repeat(72)}\nkilo\nMissing CLI\napi balance · kilo`);
 
-    const panelColor = renderPanelUnavailable(usage, false);
+    const panelColor = renderPanelUnavailable(usage, false, PLAIN);
     expect(panelColor).toContain('\x1b[90m');
   });
 
@@ -203,18 +205,18 @@ describe('terminal renderer', () => {
         reason: 'Probe crashed'
       }
     ];
-    const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z');
+    const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z', []);
     expect(dash).toContain('DANDELION');
     expect(dash).toContain('##############------');
     expect(dash).toContain('other\nProbe crashed');
 
-    const dashColor = renderDashboard(usages, false, '2026-09-13T10:00:00.000Z');
+    const dashColor = renderDashboard(usages, false, '2026-09-13T10:00:00.000Z', []);
     expect(dashColor).toContain('\x1b[90m');
   });
 
   it('rejects a provider status it does not know', () => {
     const usage = { id: 'x', displayName: 'x', windows: [], fetchedAt: 'now', status: 'bogus' } as unknown as ProviderUsage;
-    expect(() => renderDashboard([usage], true, '2026-09-13T10:00:00.000Z')).toThrow('Unexpected provider status');
+    expect(() => renderDashboard([usage], true, '2026-09-13T10:00:00.000Z', [])).toThrow('Unexpected provider status');
   });
 });
 
@@ -284,6 +286,7 @@ describe('live frame', () => {
     spinner: 0,
     refreshing: false,
     footer: false,
+    ineligible: [],
     ...extra
   });
   const AGY_FIVE_HOUR = 'Claude and GPT models · Five Hour Limit';
@@ -375,14 +378,75 @@ describe('live frame', () => {
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), false, frameNow).split('\n');
     expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(24)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05Z${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
-    expect(lines.at(-1)).toBe(`\x1b[90mkeys: r refresh · q quit · ? help${RESET}`);
-    expect(lines.slice(2, -1).join('\n')).toBe(renderDashboard(background(), false, frameNow).split('\n').slice(1).join('\n'));
+    expect(lines.at(-1)).toBe(`\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help${RESET}`);
+    expect(lines.slice(2, -1).join('\n')).toBe(renderDashboard(background(), false, frameNow, []).split('\n').slice(1).join('\n'));
   });
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), true, '2026-09-13T10:01:05.000Z').split('\n');
     expect(lines[0]).toBe('DANDELION'.padEnd(33) + 'refreshing… · data 0h1m old · 10:01:05Z');
-    expect(lines.at(-1)).toBe('keys: r refresh · q quit · ? help');
+    expect(lines.at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+  });
+});
+
+describe('panel marks', () => {
+  const BOLD = '\x1b[1m';
+  const DIM = '\x1b[90m';
+  const REASON = 'claude CLI not found in PATH';
+  const CAPTION = 'claude · personal · claude';
+  const WEEKLY: UsageWindow = { label: 'weekly', kind: 'weekly', usedPct: 86 };
+  const freshClaude: ProviderUsage = { id: 'claude', displayName: 'claude', planLabel: 'claude · personal', windows: [WEEKLY], fetchedAt: NOW, status: 'ok' };
+  const unavailableClaude: ProviderUsage = { id: 'claude', displayName: 'claude', planLabel: 'claude · personal', windows: [], fetchedAt: NOW, status: 'unavailable', reason: REASON };
+  const liveView = (usage: ProviderUsage | undefined, extra: Partial<LiveView> = {}): LiveView => ({
+    slots: [{ id: 'claude', usage }],
+    spinner: 0,
+    refreshing: false,
+    footer: false,
+    ineligible: ['claude'],
+    ...extra
+  });
+  const panelOf = (view: LiveView, noColor = false) => renderLiveFrame(view, noColor, NOW).split('\n').slice(2).join('\n');
+
+  it.each<[string, ProviderUsage | undefined, number | undefined, string]>([
+    ['unavailable, not selected', unavailableClaude, undefined, `${DIM}${'━'.repeat(72)}\nclaude${' '.repeat(55)}routing off\n${REASON}\n${CAPTION}${RESET}`],
+    ['unavailable, selected', unavailableClaude, 0, `${BOLD}${'━'.repeat(72)}${RESET}\n${DIM}▸ claude${' '.repeat(53)}routing off\n${REASON}\n${CAPTION}${RESET}`],
+    ['pending, not selected', undefined, undefined, `${DIM}${'━'.repeat(72)}\nclaude${' '.repeat(55)}routing off\n⠋ probing…${RESET}`],
+    ['pending, selected', undefined, 0, `${BOLD}${'━'.repeat(72)}${RESET}\n${DIM}▸ claude${' '.repeat(53)}routing off\n⠋ probing…${RESET}`]
+  ])('keeps the tag inside the dim span of an all-dim panel: %s', (_case, usage, selected, bytes) => {
+    expect(panelOf(liveView(usage, { selected }))).toBe(bytes);
+  });
+
+  it('dims the tag on its own and bolds the selected rule of a fresh panel', () => {
+    const row = renderWindowRow(WEEKLY, false, NOW);
+    expect(panelOf(liveView(freshClaude, { selected: 0 }))).toBe(
+      [`${BOLD}${'━'.repeat(72)}${RESET}`, `▸ claude${' '.repeat(53)}${DIM}routing off${RESET}`, row, `${DIM}${CAPTION}${RESET}`].join('\n')
+    );
+    expect(panelOf(liveView(freshClaude, { ineligible: [], selected: 0 }))).toBe(`${BOLD}${'━'.repeat(72)}${RESET}\n▸ claude\n${row}\n${DIM}${CAPTION}${RESET}`);
+    expect(panelOf(liveView(freshClaude, { ineligible: ['claude-work'] }))).toBe(renderPanelOk(freshClaude, false, NOW, PLAIN));
+  });
+
+  it('keeps the plain rule and ends the tag at column 72 under NO_COLOR', () => {
+    const row = renderWindowRow(WEEKLY, true, NOW);
+    expect(panelOf(liveView(freshClaude, { selected: 0 }), true).split('\n')).toEqual(['='.repeat(72), `▸ claude${' '.repeat(53)}routing off`, row, CAPTION]);
+    const stale = renderPanelOk({ ...freshClaude, snapshotAt: '2026-09-10T00:00:00.000Z' }, true, NOW, { selected: true, ineligible: true });
+    expect(stale.split('\n').slice(0, 2)).toEqual(['='.repeat(72), `▸ claude${' '.repeat(53)}routing off`]);
+    expect(panelOf(liveView(unavailableClaude), true).split('\n')[1]).toHaveLength(72);
+  });
+
+  it('shows the flash in place of the caption of the flashed panel only, in the caption style', () => {
+    const kilo: ProviderUsage = { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok' };
+    const view: LiveView = { ...liveView(unavailableClaude), slots: [{ id: 'claude', usage: unavailableClaude }, { id: 'kilo', usage: kilo }], ineligible: [] };
+    const message = 'not routable (no usage windows)';
+    expect(panelOf({ ...view, flash: { index: 1, message } }).split('\n').slice(-2)).toEqual([' '.repeat(72), `${DIM}${message}${RESET}`]);
+    expect(panelOf({ ...view, flash: { index: 0, message } })).toContain(`\n${REASON}\n${message}${RESET}\n`);
+    expect(panelOf({ ...view, flash: { index: 0, message } })).toContain(`${DIM}api balance · kilo${RESET}`);
+  });
+
+  it('tags the ineligible panels of the once dashboard and nothing else', () => {
+    const kilo: ProviderUsage = { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok' };
+    const lines = renderDashboard([freshClaude, unavailableClaude, kilo], true, NOW, ['kilo']).split('\n');
+    expect(lines.filter((line) => line.includes('routing off'))).toEqual([`kilo${' '.repeat(57)}routing off`]);
+    expect(renderDashboard([freshClaude, kilo], true, NOW, [])).not.toContain('▸');
   });
 });

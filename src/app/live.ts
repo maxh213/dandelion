@@ -1,5 +1,14 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { renderLiveFrame, type LiveSlot, type LiveView } from '../render/index.ts';
+import {
+  ineligibleIds,
+  isRoutable,
+  renderLiveFrame,
+  withToggledEligibility,
+  type EligibilityState,
+  type Flash,
+  type LiveSlot,
+  type LiveView
+} from '../render/index.ts';
 
 export type Screen = { write(text: string): unknown };
 
@@ -16,6 +25,8 @@ type LiveOptions = {
   screen: Screen;
   keyboard: Keyboard;
   stopChildren(): Promise<void>;
+  state: EligibilityState;
+  saveState(state: EligibilityState): boolean;
 };
 
 type Timer = ReturnType<typeof setTimeout>;
@@ -29,8 +40,11 @@ type Session = LiveOptions & {
   running?: boolean;
   rounds: number;
   quitting: boolean;
+  selected?: number;
+  flash?: Flash;
   frameTimer?: Timer;
   refreshTimer?: Timer;
+  flashTimer?: Timer;
   done(): void;
 };
 
@@ -39,8 +53,11 @@ const CLEAR = '\x1b[H\x1b[2J';
 const LEAVE_ALTERNATE = '\x1b[?25h\x1b[?1049l';
 const PENDING_TICK_MS = 100;
 const SETTLED_TICK_MS = 1000;
+const FLASH_MS = 2000;
 const DEFAULT_REFRESH_SECONDS = 300;
 const DIGITS_ONLY = /^\d+$/;
+const NOT_ROUTABLE = 'not routable (no usage windows)';
+const NOT_SAVED = 'routing state not saved';
 
 function refreshSecondsOf(raw: string): number {
   const seconds = DIGITS_ONLY.test(raw) ? Number(raw) : 0;
@@ -56,7 +73,10 @@ function viewOf(session: Session): LiveView {
     slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index] })),
     spinner: session.spinner,
     refreshing: session.running === true && session.rounds > 1,
-    footer: session.footer
+    footer: session.footer,
+    ineligible: ineligibleIds(session.state),
+    selected: session.selected,
+    flash: session.flash
   };
 }
 
@@ -112,11 +132,52 @@ function toggleFooter(session: Session): void {
   draw(session);
 }
 
+function move(session: Session, step: number): void {
+  const last = session.probes.length - 1;
+  const from = session.selected ?? (step > 0 ? -1 : last + 1);
+  session.selected = Math.min(last, Math.max(0, from + step));
+  draw(session);
+}
+
+function endFlash(session: Session): void {
+  session.flash = undefined;
+  draw(session);
+}
+
+function showFlash(session: Session, index: number, message: string): void {
+  clearTimeout(session.flashTimer);
+  session.flash = { index, message };
+  session.flashTimer = setTimeout(() => endFlash(session), FLASH_MS);
+  draw(session);
+}
+
+function saveToggle(session: Session, index: number): void {
+  const state = withToggledEligibility(session.state, session.probes[index].id);
+  if (!session.saveState(state)) {
+    showFlash(session, index, NOT_SAVED);
+    return;
+  }
+  session.state = state;
+  draw(session);
+}
+
+function toggleSettled(session: Session, index: number, usage: LiveSlot['usage']): void {
+  if (isRoutable(usage)) saveToggle(session, index);
+  else showFlash(session, index, NOT_ROUTABLE);
+}
+
+function toggleSelected(session: Session): void {
+  const index = session.selected;
+  const usage = index === undefined ? undefined : session.results[index];
+  if (index !== undefined && usage !== undefined) toggleSettled(session, index, usage);
+}
+
 async function quit(session: Session): Promise<void> {
   if (session.quitting) return;
   session.quitting = true;
   clearTimeout(session.frameTimer);
   clearTimeout(session.refreshTimer);
+  clearTimeout(session.flashTimer);
   session.screen.write(LEAVE_ALTERNATE);
   session.keyboard.setRawMode(false);
   session.keyboard.pause();
@@ -128,10 +189,20 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['r', refresh],
   ['?', toggleFooter],
   ['q', quit],
-  ['\x03', quit]
+  ['\x03', quit],
+  ['j', (session) => move(session, 1)],
+  ['\x1b[B', (session) => move(session, 1)],
+  ['k', (session) => move(session, -1)],
+  ['\x1b[A', (session) => move(session, -1)],
+  [' ', toggleSelected]
 ]);
 
 function press(session: Session, chunk: string): void {
+  const whole = KEYS.get(chunk);
+  if (whole) {
+    whole(session);
+    return;
+  }
   for (const key of chunk) KEYS.get(key)?.(session);
 }
 

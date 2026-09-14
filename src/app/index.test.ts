@@ -1088,7 +1088,7 @@ describe('cursor panel', () => {
       return { env, names: () => [...names].sort() };
     }
 
-    const SETTINGS = ['DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_KILO_REFERENCE', 'DANDELION_KIMI_PORT', 'NO_COLOR'];
+    const SETTINGS = ['DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_KILO_REFERENCE', 'DANDELION_KIMI_PORT', 'DANDELION_STATE_FILE', 'NO_COLOR', 'XDG_STATE_HOME'];
 
     it('applies every setting under its DANDELION_* name', async () => {
       const launch = vi.fn(HAPPY_KIMI.launch);
@@ -1170,7 +1170,7 @@ describe('cursor panel', () => {
       const lines = dashboard.lastFrame().split('\n');
       expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(24)}\x1b[0m\x1b[90mrefreshing…\x1b[0m\x1b[1m · data 0h1m old · 10:01:05Z\x1b[0m`);
       expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
-      expect(lines.at(-1)).toBe('\x1b[90mkeys: r refresh · q quit · ? help\x1b[0m');
+      expect(lines.at(-1)).toBe('\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
       expect(lines.slice(2, -1).join('\n')).toBe(once.split('\n').slice(1).join('\n'));
       dashboard.press('q');
@@ -1200,7 +1200,7 @@ describe('cursor panel', () => {
       const dashboard = startDashboard(io, LIVE_ENV);
       await settleProbes();
       dashboard.press('?');
-      expect(dashboard.lastFrame().split('\n').at(-1)).toBe('keys: r refresh · q quit · ? help');
+      expect(dashboard.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
       dashboard.press('?');
       expect(dashboard.lastFrame()).not.toContain('keys:');
       dashboard.press('r');
@@ -1538,5 +1538,185 @@ describe('runRoute', () => {
 
   it('is none when every provider is unavailable', async () => {
     expect(await runRoute(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW, 'UTC')).toEqual({ line: 'none', routed: false });
+  });
+});
+
+describe('route eligibility state file', () => {
+  const CLAUDE_TAG = `claude${' '.repeat(55)}routing off`;
+  let scratch = '';
+  let statePath = '';
+
+  beforeEach(() => {
+    scratch = mkdtempSync(join(tmpdir(), 'dandelion-state-'));
+    statePath = join(scratch, 'state', 'eligibility.json');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    rmSync(scratch, { recursive: true, force: true });
+  });
+
+  function writeState(bytes: string): void {
+    mkdirSync(join(scratch, 'state'), { recursive: true });
+    writeFileSync(statePath, bytes);
+  }
+
+  function stateOf(): unknown {
+    return JSON.parse(readFileSync(statePath, 'utf8'));
+  }
+
+  async function settleProbes(): Promise<void> {
+    for (let turn = 0; turn < 10; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  async function settledDashboard(io: ProbeIo, env: Record<string, string>) {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date(NOW));
+    const dashboard = startDashboard({ ...io, launcher: MISSING_KIMI }, { NO_COLOR: '1', DANDELION_STATE_FILE: statePath, ...env });
+    await settleProbes();
+    return dashboard;
+  }
+
+  async function quit(dashboard: ReturnType<typeof startDashboard>): Promise<void> {
+    dashboard.press('q');
+    await dashboard.finished;
+  }
+
+  function headerOf(frame: string, id: string): string | undefined {
+    return frame.split('\n').find((line) => line.replace(/^▸ /, '').split(' ')[0] === id);
+  }
+
+  it('routes as the 010 rules say with no state file and never creates one', async () => {
+    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC')).toEqual({ line: 'claude-opus-5 max', routed: true });
+    expect(readdirSync(scratch)).toEqual([]);
+  });
+
+  it.each<[string, string, string]>([
+    ['claude and claude-work off', '{"claude": false, "claude-work": false}', 'kimi-code/kimi-for-coding-highspeed'],
+    ['claude off, true and other values eligible', '{"claude": false, "claude-work": true, "kimi": "no"}', 'claude-opus-5 high'],
+    ['corrupt bytes', '{not json', 'claude-opus-5 max'],
+    ['JSON null', 'null', 'claude-opus-5 max'],
+    ['a JSON array', '[false]', 'claude-opus-5 max']
+  ])('routes around ineligible providers and never writes: %s', async (_case, bytes, line) => {
+    writeState(bytes);
+    const before = statSync(statePath).mtimeMs;
+    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC')).toEqual({ line, routed: true });
+    expect([readFileSync(statePath, 'utf8'), statSync(statePath).mtimeMs]).toEqual([bytes, before]);
+  });
+
+  it('routes as if every provider is eligible when the state path is a directory, and is none when all are off', async () => {
+    mkdirSync(statePath, { recursive: true });
+    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC')).toEqual({ line: 'claude-opus-5 max', routed: true });
+    rmSync(statePath, { recursive: true });
+    writeState('{"claude": false, "claude-work": false, "agy": false, "kimi": false}');
+    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC')).toEqual({ line: 'none', routed: false });
+  });
+
+  it.each<[string, (home: string) => Record<string, string>, (home: string) => string]>([
+    ['XDG_STATE_HOME', (home) => ({ XDG_STATE_HOME: join(home, 'xdg') }), (home) => join(home, 'xdg', 'dandelion', 'eligibility.json')],
+    ['home with an empty DANDELION_STATE_FILE', () => ({ DANDELION_STATE_FILE: '' }), (home) => join(home, '.local', 'state', 'dandelion', 'eligibility.json')],
+    ['home with an empty XDG_STATE_HOME', () => ({ XDG_STATE_HOME: '' }), (home) => join(home, '.local', 'state', 'dandelion', 'eligibility.json')]
+  ])('reads the default state path under %s', async (_case, envOf, pathOf) => {
+    const io = routedRunner();
+    const homed = { ...io, reader: { ...io.reader, homeDir: () => scratch } };
+    expect((await runRoute(homed, envOf(scratch), NOW, 'UTC')).line).toBe('claude-opus-5 max');
+    mkdirSync(join(pathOf(scratch), '..'), { recursive: true });
+    writeFileSync(pathOf(scratch), '{"claude": false}');
+    expect((await runRoute(homed, envOf(scratch), NOW, 'UTC')).line).toBe('kimi-code/kimi-for-coding-highspeed');
+  });
+
+  it('tags ineligible panels in --once output, changes no other line and never writes', async () => {
+    const env = { NO_COLOR: '1', DANDELION_STATE_FILE: statePath };
+    const plainOutput = await runApp(routedRunner(), env, NOW);
+    expect(readdirSync(scratch)).toEqual([]);
+    expect(plainOutput).not.toMatch(/routing off|▸/);
+    writeState('{"claude": false, "kilo": false}');
+    const mtime = statSync(statePath).mtimeMs;
+    const tagged = (await runApp(routedRunner(), env, NOW)).split('\n');
+    const expected = plainOutput.split('\n').map((line) => (line === 'claude' || line === 'kilo' ? `${line}${' '.repeat(72 - line.length - 11)}routing off` : line));
+    expect(tagged).toEqual(expected);
+    expect(statSync(statePath).mtimeMs).toBe(mtime);
+    for (const bytes of ['{not json', 'null']) {
+      writeState(bytes);
+      expect(await runApp(routedRunner(), env, NOW)).toBe(plainOutput);
+    }
+  });
+
+  it('toggles claude off and on with j and space, writing only the state file, and keeps the choice across restarts', async () => {
+    const dashboard = await settledDashboard(routedRunner(), {});
+    expect(dashboard.lastFrame()).not.toMatch(/routing off|▸/);
+    dashboard.press('j');
+    expect(headerOf(dashboard.lastFrame(), 'claude')).toBe('▸ claude');
+    expect(readdirSync(scratch)).toEqual([]);
+    const rows = dashboard.lastFrame().split('\n').filter((line) => line.startsWith('session ') || line.startsWith('weekly '));
+    dashboard.press(' ');
+    expect(stateOf()).toEqual({ claude: false });
+    expect(readFileSync(statePath, 'utf8')).toBe('{\n  "claude": false\n}\n');
+    expect(readdirSync(join(scratch, 'state'))).toEqual(['eligibility.json']);
+    expect(headerOf(dashboard.lastFrame(), 'claude')).toBe(`▸ ${CLAUDE_TAG.slice(0, -13)}routing off`);
+    expect(dashboard.lastFrame().split('\n').filter((line) => line.startsWith('session ') || line.startsWith('weekly '))).toEqual(rows);
+    expect((await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC')).line).toBe('claude-opus-5 high');
+    dashboard.press(' ');
+    expect(stateOf()).toEqual({ claude: true });
+    expect(headerOf(dashboard.lastFrame(), 'claude')).toBe('▸ claude');
+    dashboard.press(' ');
+    await quit(dashboard);
+    const again = startDashboard({ ...routedRunner(), launcher: MISSING_KIMI }, { NO_COLOR: '1', DANDELION_STATE_FILE: statePath });
+    await settleProbes();
+    expect(headerOf(again.lastFrame(), 'claude')).toBe(CLAUDE_TAG);
+    expect(again.lastFrame()).not.toContain('▸');
+    await quit(again);
+  });
+
+  it('rewrites the state read at start with unknown keys kept, overwriting edits made while running', async () => {
+    writeState('{"nope": 1, "agy": false}');
+    const dashboard = await settledDashboard(routedRunner(), {});
+    writeState('{"kimi": false}');
+    dashboard.press('?');
+    expect(headerOf(dashboard.lastFrame(), 'agy')).toBe(`agy${' '.repeat(58)}routing off`);
+    expect(headerOf(dashboard.lastFrame(), 'kimi')).toBe('kimi');
+    dashboard.press('j');
+    dashboard.press(' ');
+    expect(stateOf()).toEqual({ nope: 1, agy: false, claude: false });
+    await quit(dashboard);
+  });
+
+  it('keeps nothing from a corrupt file when it rewrites', async () => {
+    writeState('{not json');
+    const dashboard = await settledDashboard(routedRunner(), {});
+    dashboard.press('j');
+    dashboard.press(' ');
+    expect(stateOf()).toEqual({ claude: false });
+    await quit(dashboard);
+  });
+
+  it('flashes kilo as not routable and writes nothing', async () => {
+    const dashboard = await settledDashboard(routedRunner(), {});
+    dashboard.press('k');
+    dashboard.press(' ');
+    expect(dashboard.lastFrame().split('\n').at(-1)).toBe('not routable (no usage windows)');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(dashboard.lastFrame().split('\n').at(-1)).toBe('api balance · kilo');
+    expect(readdirSync(scratch)).toEqual([]);
+    await quit(dashboard);
+  });
+
+  it.each<[string, (root: string) => string, (root: string) => void, (root: string) => string]>([
+    ['a parent that is a file', (root) => join(root, 'blocked', 'eligibility.json'), (root) => writeFileSync(join(root, 'blocked'), ''), (root) => root],
+    ['a non-empty directory at the path', (root) => join(root, 'state', 'eligibility.json'), (root) => mkdirSync(join(root, 'state', 'eligibility.json', 'keep'), { recursive: true }), (root) => join(root, 'state')]
+  ])('flashes routing state not saved and leaves no temp file behind with %s', async (_case, pathOf, block, dirOf) => {
+    block(scratch);
+    const entries = readdirSync(dirOf(scratch)).sort();
+    const dashboard = await settledDashboard(routedRunner(), { DANDELION_STATE_FILE: pathOf(scratch) });
+    dashboard.press('j');
+    dashboard.press(' ');
+    expect(dashboard.lastFrame()).toContain('\nrouting state not saved\n');
+    expect(dashboard.lastFrame()).not.toContain('routing off');
+    expect(readdirSync(dirOf(scratch)).sort()).toEqual(entries);
+    rmSync(join(pathOf(scratch), '..', pathOf(scratch).endsWith(join('blocked', 'eligibility.json')) ? '' : 'eligibility.json'), { recursive: true });
+    dashboard.press(' ');
+    expect(JSON.parse(readFileSync(pathOf(scratch), 'utf8'))).toEqual({ claude: false });
+    expect(headerOf(dashboard.lastFrame(), 'claude')).toBe(`▸ claude${' '.repeat(53)}routing off`);
+    await quit(dashboard);
   });
 });

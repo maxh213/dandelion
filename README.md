@@ -19,7 +19,7 @@ All eight probes run in parallel. Window gauges are coloured by usage: below 50%
 
 ## Run Commands
 
-- `npm start` - Run the live dashboard: panels fill in as each probe settles, a fleet summary line shows how many windows are above 80% and the next reset, and everything is re-probed every `DANDELION_REFRESH_SECONDS`. Keys: `r` refresh, `q` quit (or Ctrl-C), `?` help.
+- `npm start` - Run the live dashboard: panels fill in as each probe settles, a fleet summary line shows how many windows are above 80% and the next reset, and everything is re-probed every `DANDELION_REFRESH_SECONDS`. Keys: `↑↓/jk select` a panel, `space routing on/off` for the selected provider, `r` refresh, `q` quit (or Ctrl-C), `?` help.
 - `npm start -- --once` - Run the dashboard once and exit
 - `dandelion` - Run the live dashboard from anywhere after `npm link`; `dandelion --once` runs it once and exits
 - `dandelion route` (or `npm start -- route`) - Run every probe once and print one line naming the subscription to use right now, such as `claude-opus-5 max`, then exit; it prints `none` and exits 1 when no provider can be routed. It never draws the dashboard, even on a terminal.
@@ -39,6 +39,8 @@ Each window is rolling (claude session, kimi 5h, agy Five Hour Limit), weekly (a
 
 Ties go to the provider earlier in dashboard order.
 
+Eligibility: ineligible providers are dropped before both rules, so an ineligible provider is never routed, not even by evaporation. In the live dashboard, select a panel with `↑↓/jk` and press space to toggle its routing on or off; an ineligible panel shows `routing off` and keeps showing its usage. Non-routable panels (no usage windows, unavailable or failed) cannot be toggled and flash `not routable (no usage windows)` instead. The choice is kept in the state file (`DANDELION_STATE_FILE`), a JSON object where `false` marks a provider ineligible; a missing, unreadable or corrupt file makes every provider eligible. `--once` and `route` read the state file and never write it.
+
 | provider | standard line | max line |
 |---|---|---|
 | claude | `claude-opus-5 high` | `claude-opus-5 max` |
@@ -57,4 +59,5 @@ Ties go to the provider earlier in dashboard order.
 - `DANDELION_CURSOR_AUTH_FILE` - The cursor-agent auth file the `cursor` probe reads `accessToken` from. Defaults to `~/.config/cursor/auth.json` when unset or empty. Without a token the panel says to run `cursor-agent login`.
 - `DANDELION_CURSOR_API_BASE` - The base URL of the cursor dashboard API the `cursor` probe POSTs to. Defaults to `https://api2.cursor.sh` when unset or empty.
 - `DANDELION_REFRESH_SECONDS` - Seconds the live dashboard waits after a round of probes settles before it probes again. Defaults to `300`; any value that is not a positive integer uses the default.
+- `DANDELION_STATE_FILE` - The route eligibility state file the live dashboard writes when space toggles a provider, and `route` and `--once` read. Defaults to `$XDG_STATE_HOME/dandelion/eligibility.json`, else `~/.local/state/dandelion/eligibility.json`, when unset or empty. Writes go to a temp file in the same directory, then rename over it.
 - `NO_COLOR` - If set, disables ANSI colors and uses ASCII fallback rendering.

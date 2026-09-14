@@ -78,7 +78,8 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
     DANDELION_REFRESH_SECONDS: '1',
     DANDELION_GROK_HOME: grokHome,
     DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome,
-    DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json')
+    DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
+    DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json')
   };
 }
 
@@ -195,6 +196,33 @@ describe('live mode on a real terminal', () => {
     await waitWithin(run, () => completeFrames(run).some(othersDoneKiloPending), 5000, 'frame with six settled panels and a pending kilo');
     await waitWithin(run, () => completeFrames(run).some((frame) => frame.includes(KILO_TIMED_OUT)), 30000, 'kilo timeout reason');
     run.child.stdin?.write('q');
+    expect(await run.closed).toEqual([0, null]);
+  }, 60000);
+});
+
+function lastFrame(run: Run): string {
+  return completeFrames(run).at(-1) ?? '';
+}
+
+function send(run: Run, key: string): void {
+  run.child.stdin?.write(key);
+}
+
+describe('route eligibility on a real terminal', () => {
+  it('toggleWritesState: j then space writes claude false and tags its header; space again flips it back', async () => {
+    const env = appEnv(fixtureDir(KIMI_EXITS));
+    const statePath = String(env.DANDELION_STATE_FILE);
+    const run = startLive(env);
+    await waitWithin(run, () => settledIndex(run) >= 0, 20000, 'frame with no probing…');
+    send(run, 'j');
+    await waitWithin(run, () => lastFrame(run).includes('\n▸ claude\n'), 20000, 'selected claude');
+    send(run, ' ');
+    await waitWithin(run, () => lastFrame(run).includes(`\n▸ claude${' '.repeat(53)}routing off\n`), 20000, 'claude routing off tag');
+    expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual({ claude: false });
+    send(run, ' ');
+    await waitWithin(run, () => lastFrame(run).includes('\n▸ claude\n'), 20000, 'claude tag gone');
+    expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual({ claude: true });
+    send(run, 'q');
     expect(await run.closed).toEqual([0, null]);
   }, 60000);
 });

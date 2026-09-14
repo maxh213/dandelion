@@ -20,7 +20,11 @@ const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
 const TITLE = 'DANDELION';
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
-const HELP_FOOTER = 'keys: r refresh · q quit · ? help';
+const HELP_FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
+const ROUTING_OFF = 'routing off';
+const MARKER = '▸ ';
+
+export type PanelMarks = { selected: boolean; ineligible: boolean; caption?: string };
 
 function styled(text: string, code: string, noColor: boolean): string {
   if (noColor) return text;
@@ -61,6 +65,21 @@ function plainRule(noColor: boolean): string {
 
 export function renderRule(noColor: boolean): string {
   return dim(plainRule(noColor), noColor);
+}
+
+function markedRule(marks: PanelMarks, noColor: boolean): string {
+  return marks.selected ? styled(plainRule(noColor), BOLD, noColor) : renderRule(noColor);
+}
+
+function headerLine(name: string, marks: PanelMarks, tag: (text: string) => string): string {
+  const lead = marks.selected ? `${MARKER}${name}` : name;
+  if (!marks.ineligible) return lead;
+  return `${lead}${repeatChar(' ', WIDTH - cellCount(lead) - ROUTING_OFF.length)}${tag(ROUTING_OFF)}`;
+}
+
+function dimPanel(lines: string[], marks: PanelMarks, noColor: boolean): string {
+  if (!marks.selected) return dim([plainRule(noColor), ...lines].join('\n'), noColor);
+  return `${markedRule(marks, noColor)}\n${dim(lines.join('\n'), noColor)}`;
 }
 
 function gaugeCells(filledCells: number, noColor: boolean): string {
@@ -136,6 +155,10 @@ function caption(usage: ProviderUsage): string {
   return `${usage.planLabel} · ${usage.displayName}`;
 }
 
+function captionLine(usage: ProviderUsage, marks: PanelMarks): string {
+  return marks.caption ?? caption(usage);
+}
+
 type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
 type FailedUsage = Exclude<ProviderUsage, OkUsage>;
 
@@ -157,53 +180,63 @@ function snapshotLines(usage: OkUsage, now: string): string[] {
   return usage.snapshotAt === undefined ? [] : [snapshotLine(usage.snapshotAt, now)];
 }
 
-function renderPanelStale(usage: OkUsage, noColor: boolean, now: string): string {
+function renderPanelStale(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
   const rows = panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String));
-  return dim([plainRule(noColor), usage.displayName, ...rows, ...snapshotLines(usage, now), caption(usage)].join('\n'), noColor);
+  return dimPanel([headerLine(usage.displayName, marks, String), ...rows, ...snapshotLines(usage, now), captionLine(usage, marks)], marks, noColor);
 }
 
-function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string): string {
+function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
   return [
-    renderRule(noColor),
-    usage.displayName,
+    markedRule(marks, noColor),
+    headerLine(usage.displayName, marks, (text) => dim(text, noColor)),
     ...panelBody(usage, noColor, (window) => renderWindowRow(window, noColor, now)),
     ...snapshotLines(usage, now).map((line) => dim(line, noColor)),
-    dim(caption(usage), noColor)
+    dim(captionLine(usage, marks), noColor)
   ].join('\n');
 }
 
-export function renderPanelOk(usage: OkUsage, noColor: boolean, now: string): string {
-  return isStale(usage.snapshotAt, now) ? renderPanelStale(usage, noColor, now) : renderPanelFresh(usage, noColor, now);
+export function renderPanelOk(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
+  return isStale(usage.snapshotAt, now) ? renderPanelStale(usage, noColor, now, marks) : renderPanelFresh(usage, noColor, now, marks);
 }
 
-export function renderPanelUnavailable(usage: FailedUsage, noColor: boolean): string {
-  return dim([plainRule(noColor), usage.displayName, usage.reason, caption(usage)].join('\n'), noColor);
+export function renderPanelUnavailable(usage: FailedUsage, noColor: boolean, marks: PanelMarks): string {
+  return dimPanel([headerLine(usage.displayName, marks, String), usage.reason, captionLine(usage, marks)], marks, noColor);
 }
 
 function assertNever(value: never): never {
   throw new Error(`Unexpected provider status: ${JSON.stringify(value)}`);
 }
 
-function renderPanel(usage: ProviderUsage, noColor: boolean, now: string): string {
+function renderPanel(usage: ProviderUsage, noColor: boolean, now: string, marks: PanelMarks): string {
   switch (usage.status) {
     case 'ok':
-      return renderPanelOk(usage, noColor, now);
+      return renderPanelOk(usage, noColor, now, marks);
     case 'unavailable':
     case 'error':
-      return renderPanelUnavailable(usage, noColor);
+      return renderPanelUnavailable(usage, noColor, marks);
     default:
       return assertNever(usage);
   }
 }
 
-export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string): string {
-  const panels = usages.map((usage) => renderPanel(usage, noColor, now));
+export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string, ineligible: string[]): string {
+  const panels = usages.map((usage) => renderPanel(usage, noColor, now, { selected: false, ineligible: ineligible.includes(usage.id) }));
   return [renderBanner(now, noColor), ...panels].join('\n');
 }
 
 export type LiveSlot = { id: string; usage: ProviderUsage | undefined };
 
-export type LiveView = { slots: LiveSlot[]; spinner: number; refreshing: boolean; footer: boolean };
+export type Flash = { index: number; message: string };
+
+export type LiveView = {
+  slots: LiveSlot[];
+  spinner: number;
+  refreshing: boolean;
+  footer: boolean;
+  ineligible: string[];
+  selected?: number;
+  flash?: Flash;
+};
 
 function settledUsages(slots: LiveSlot[]): ProviderUsage[] {
   return slots.flatMap((slot) => (slot.usage === undefined ? [] : [slot.usage]));
@@ -242,18 +275,23 @@ function summaryLine(usages: ProviderUsage[], now: string): string {
   return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now);
 }
 
-function pendingPanel(id: string, spinner: number, noColor: boolean): string {
+function pendingPanel(id: string, spinner: number, noColor: boolean, marks: PanelMarks): string {
   const frame = SPINNER_FRAMES[spinner % SPINNER_FRAMES.length];
-  return dim([plainRule(noColor), id, `${frame} probing…`].join('\n'), noColor);
+  return dimPanel([headerLine(id, marks, String), `${frame} probing…`], marks, noColor);
 }
 
-function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string): string {
-  return slot.usage === undefined ? pendingPanel(slot.id, spinner, noColor) : renderPanel(slot.usage, noColor, now);
+function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
+  const caption = view.flash?.index === index ? view.flash.message : undefined;
+  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), caption };
+}
+
+function livePanel(view: LiveView, slot: LiveSlot, noColor: boolean, now: string, marks: PanelMarks): string {
+  return slot.usage === undefined ? pendingPanel(slot.id, view.spinner, noColor, marks) : renderPanel(slot.usage, noColor, now, marks);
 }
 
 export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
   const usages = settledUsages(view.slots);
-  const panels = view.slots.map((slot) => livePanel(slot, view.spinner, noColor, now));
+  const panels = view.slots.map((slot, index) => livePanel(view, slot, noColor, now, slotMarks(view, slot, index)));
   const footer = view.footer ? [dim(HELP_FOOTER, noColor)] : [];
   return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...panels, ...footer].join('\n');
 }
