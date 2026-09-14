@@ -64,10 +64,10 @@ writeFileSync(envScript, '#!/bin/sh\nprintf "%s\\n" "$CLAUDE_CONFIG_DIR"\n');
 chmodSync(envScript, 0o755);
 
 function timeCli(workConfigDir) {
-  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, DANDELION_GROK_HOME: fixture, DANDELION_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir };
+  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir };
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
-  delete env.DANDELION_CURSOR_API_BASE;
+  delete env.ALLOWANCE_CURSOR_API_BASE;
   const start = process.hrtime.bigint();
   execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
   return Number(process.hrtime.bigint() - start) / 1e6;
@@ -83,7 +83,7 @@ const stubIo = {
   fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
   reader: stubReader
 };
-const appEnv = { DANDELION_CLAUDE_WORK_CONFIG_DIR: workDir, DANDELION_GROK_HOME: fixture, DANDELION_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') };
+const appEnv = { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') };
 
 const win = (label, usedPct, resetsAt) => ({ label, usedPct, resetsAt });
 const usages = [
@@ -114,8 +114,8 @@ try {
   emit(TARGETS.probePersonal, await perCall(ITERATIONS, () => probeCli(cliIo, claude.claudeProbe, NOW)), 'us');
 
   if (claude.claudeWorkProbe && realIo.reader.isDirectory) {
-    const work = claude.claudeWorkProbe({ DANDELION_CLAUDE_WORK_CONFIG_DIR: workDir }, fixture);
-    const missing = claude.claudeWorkProbe({ DANDELION_CLAUDE_WORK_CONFIG_DIR: missingDir }, fixture);
+    const work = claude.claudeWorkProbe({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir }, fixture);
+    const missing = claude.claudeWorkProbe({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: missingDir }, fixture);
     const realReaderIo = { runner, reader: realIo.reader };
     const workUsage = await probeCli(cliIo, work, NOW);
     if (workUsage.status !== 'ok' || workUsage.windows[1]?.usedPct !== 12) throw new Error(`work probe failed: ${JSON.stringify(workUsage)}`);

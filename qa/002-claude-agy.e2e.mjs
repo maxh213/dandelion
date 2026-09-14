@@ -48,7 +48,7 @@ async function writeExecutable(dir, name, body) {
 }
 
 async function fixtureDir(overrides) {
-  const dir = await mkdtemp(join(tmpdir(), 'dandelion-qa-002-'));
+  const dir = await mkdtemp(join(tmpdir(), 'allowance-qa-002-'));
   const scripts = { claude: claudeFixture(), agy: agyFixture(), kilo: KILO_FIXTURE, ...overrides };
   for (const [name, body] of Object.entries(scripts)) {
     if (body !== undefined) await writeExecutable(dir, name, body);
@@ -57,8 +57,8 @@ async function fixtureDir(overrides) {
 }
 
 function runApp(dir, extraEnv) {
-  const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
+  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_GROK_HOME, ALLOWANCE_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
+  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, ALLOWANCE_GROK_HOME: dir, ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -83,7 +83,7 @@ function lineIndex(lines, pattern) {
 
 function assertPanelOrder(plain) {
   const lines = plain.split('\n');
-  const banner = lineIndex(lines, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+  const banner = lineIndex(lines, /^ALLOWANCE +\d{2}:\d{2}:\d{2}Z$/);
   const claude = lineIndex(lines, /^claude$/);
   const claudeWork = lineIndex(lines, /^claude-work$/);
   const agy = lineIndex(lines, /^agy$/);
@@ -172,7 +172,7 @@ async function garbageAgy() {
 }
 
 async function noCliOnPath() {
-  const dir = await mkdtemp(join(tmpdir(), 'dandelion-qa-002-empty-'));
+  const dir = await mkdtemp(join(tmpdir(), 'allowance-qa-002-empty-'));
   try {
     const stdout = runApp(dir, {});
     assertPanelOrder(stripAnsi(stdout));
@@ -185,7 +185,7 @@ async function noCliOnPath() {
 }
 
 async function nodeBin() {
-  const dir = await mkdtemp(join(tmpdir(), 'dandelion-nodebin-'));
+  const dir = await mkdtemp(join(tmpdir(), 'allowance-nodebin-'));
   await symlink(process.execPath, join(dir, 'node'));
   await symlink('/bin/sh', join(dir, 'sh'));
   return dir;
@@ -193,7 +193,7 @@ async function nodeBin() {
 
 export default async function () {
   nodeBinDir = await nodeBin();
-  workConfigDir = await mkdtemp(join(tmpdir(), 'dandelion-qa-002-work-'));
+  workConfigDir = await mkdtemp(join(tmpdir(), 'allowance-qa-002-work-'));
   try {
     const dir = await fixtureDir({});
     try {

@@ -1076,6 +1076,60 @@ describe('cursor panel', () => {
       await dashboard.finished;
     });
 
+    function recordingEnv(values: Record<string, string>) {
+      const names = new Set<string>();
+      const env = new Proxy(values, {
+        get: (target, name) => {
+          names.add(String(name));
+          return Reflect.get(target, name);
+        }
+      });
+      return { env, names: () => [...names].sort() };
+    }
+
+    const SETTINGS = ['DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_KILO_REFERENCE', 'DANDELION_KIMI_PORT', 'NO_COLOR'];
+
+    it('applies every setting under its DANDELION_* name', async () => {
+      const launch = vi.fn(HAPPY_KIMI.launch);
+      const io = { ...routedRunner({ kilo: { stdout: 'Balance: $5.00', stderr: '' } }, { launch }, NO_GROK), fetcher: KIMI_FETCHER };
+      const env = { NO_COLOR: '1', DANDELION_KILO_REFERENCE: '10', DANDELION_KIMI_PORT: 'abc', DANDELION_GROK_HOME: '/empty-grok', DANDELION_CURSOR_AUTH_FILE: '/missing.json', DANDELION_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' };
+      const output = await runApp(io, env, NOW);
+      expect(panelOf(output, 'kilo')[1]).toMatch(/^\$5\.00 #{10}-{10} /);
+      expect(panelOf(output, 'kimi')[1]).toBe('DANDELION_KIMI_PORT must be an integer from 1 to 65535');
+      expect(launch).not.toHaveBeenCalled();
+      expect(panelOf(output, 'grok')[1]).toBe('no grok billing snapshot — run grok once');
+      expect(panelOf(output, 'cursor')[1]).toBe('no cursor auth — run cursor-agent login');
+      expect(panelOf(output, 'claude-work')[1]).toBe('no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude');
+      const cursor = cursorIo();
+      const post = vi.spyOn(cursor.fetcher, 'post');
+      expect(panelOf(await runApp(cursor, { ...CURSOR_ENV, NO_COLOR: '1' }, NOW), 'cursor').slice(1, 4)).toEqual(ROWS);
+      expect(post.mock.calls.map(([url]) => url.slice(0, 22))).toEqual(['http://127.0.0.1:48006', 'http://127.0.0.1:48006']);
+    });
+
+    it('reads its settings under the DANDELION_* names and no other name', async () => {
+      const recorded = recordingEnv({ ...CURSOR_ENV, NO_COLOR: '1' });
+      const output = await runApp(cursorIo(), recorded.env, NOW);
+      expect(output.split('\n')[0]).toMatch(/^DANDELION /);
+      expect(recorded.names()).toEqual(SETTINGS);
+    });
+
+    it('waits the default 300 seconds between rounds unless DANDELION_REFRESH_SECONDS is set, reading no other name', async () => {
+      const io = cursorIo();
+      const run = vi.spyOn(io.runner, 'run');
+      const claudeRuns = () => run.mock.calls.filter(([command]) => command === 'claude').length;
+      const recorded = recordingEnv({ ...CURSOR_ENV, NO_COLOR: '1' });
+      const dashboard = startDashboard(io, recorded.env);
+      await settleProbes();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(claudeRuns()).toBe(2);
+      expect(dashboard.writes.join('')).not.toContain('refreshing…');
+      await vi.advanceTimersByTimeAsync(295000);
+      expect(claudeRuns()).toBe(4);
+      expect(recorded.names()).toEqual([...SETTINGS.slice(0, 6), 'DANDELION_REFRESH_SECONDS', 'NO_COLOR']);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
     it('keeps time between frames drawn by the 1000ms timer without new data', async () => {
       const dashboard = startDashboard(cursorIo(), { ...LIVE_ENV, DANDELION_REFRESH_SECONDS: '300' });
       await settleProbes();

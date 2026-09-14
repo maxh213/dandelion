@@ -43,7 +43,7 @@ async function writeExecutable(dir, name, body) {
 }
 
 async function fixtureDir(kimi) {
-  const dir = await mkdtemp(join(tmpdir(), 'dandelion-qa-003-'));
+  const dir = await mkdtemp(join(tmpdir(), 'allowance-qa-003-'));
   const scripts = { claude: CLAUDE_FIXTURE, agy: AGY_FIXTURE, kimi, kilo: KILO_FIXTURE };
   for (const [name, body] of Object.entries(scripts)) await writeExecutable(dir, name, body);
   return dir;
@@ -61,8 +61,8 @@ function freePort() {
 }
 
 async function runApp(dir) {
-  const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, NO_COLOR: '1', DANDELION_KIMI_PORT: String(await freePort()), DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir };
+  const { NO_COLOR, ALLOWANCE_KILO_REFERENCE, ALLOWANCE_KIMI_PORT, ALLOWANCE_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
+  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, NO_COLOR: '1', ALLOWANCE_KIMI_PORT: String(await freePort()), ALLOWANCE_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir };
   const started = Date.now();
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   const elapsed = Date.now() - started;
@@ -98,7 +98,7 @@ async function assertNoQaProcessLeft() {
   const entries = await readdir('/proc');
   for (const entry of entries.filter((name) => /^\d+$/.test(name) && Number(name) !== process.pid)) {
     const cmdline = await readFile(join('/proc', entry, 'cmdline'), 'utf8').catch(() => '');
-    assert.ok(!cmdline.includes('dandelion-qa'), `process ${entry} still running: ${cmdline.replaceAll('\0', ' ')}`);
+    assert.ok(!cmdline.includes('allowance-qa'), `process ${entry} still running: ${cmdline.replaceAll('\0', ' ')}`);
   }
 }
 
@@ -131,7 +131,7 @@ async function kimiExitsWithoutToken() {
 }
 
 async function nodeBin() {
-  const dir = await mkdtemp(join(tmpdir(), 'dandelion-nodebin-'));
+  const dir = await mkdtemp(join(tmpdir(), 'allowance-nodebin-'));
   await symlink(process.execPath, join(dir, 'node'));
   await symlink('/bin/sh', join(dir, 'sh'));
   return dir;
@@ -139,7 +139,7 @@ async function nodeBin() {
 
 export default async function () {
   nodeBinDir = await nodeBin();
-  workConfigDir = await mkdtemp(join(tmpdir(), 'dandelion-qa-003-work-'));
+  workConfigDir = await mkdtemp(join(tmpdir(), 'allowance-qa-003-work-'));
   try {
     await kimiServesUsage();
     await kimiExitsWithoutToken();

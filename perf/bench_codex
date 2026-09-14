@@ -77,9 +77,9 @@ chmodSync(codexFile, 0o755);
 process.env.PATH = `${bin}:${process.env.PATH}`;
 
 function timeCli(mode) {
-  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, DANDELION_GROK_HOME: fixture, CODEX_BENCH_MODE: mode, DANDELION_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') };
+  const env = { ...process.env, PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: fixture, CODEX_BENCH_MODE: mode, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') };
   delete env.NO_COLOR;
-  delete env.DANDELION_CURSOR_API_BASE;
+  delete env.ALLOWANCE_CURSOR_API_BASE;
   const start = process.hrtime.bigint();
   execFileSync(process.execPath, [main], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'] });
   return Number(process.hrtime.bigint() - start) / 1e6;

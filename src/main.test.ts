@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -172,6 +172,42 @@ describe('main', () => {
     expect(io.runner.run).not.toHaveBeenCalled();
     expect(io.launcher.launch).not.toHaveBeenCalled();
     expect(io.spawner.spawn).not.toHaveBeenCalled();
+  });
+
+  it('declares the dandelion bin with a shebang on an executable main.ts and no dependencies', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
+    expect([pkg.name, pkg.bin, pkg.dependencies]).toEqual(['dandelion', { dandelion: 'src/main.ts' }, undefined]);
+    expect(readFileSync(MAIN, 'utf-8').split('\n')[0]).toBe('#!/usr/bin/env node');
+    expect(statSync(MAIN).mode & 0o111).toBe(0o111);
+  });
+
+  it('prints the same DANDELION dashboard through node src/main.ts, ./src/main.ts and a dandelion symlink', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dandelion-entry-'));
+    try {
+      symlinkSync(process.execPath, join(dir, 'node'));
+      symlinkSync('/bin/sh', join(dir, 'sh'));
+      symlinkSync(MAIN, join(dir, 'dandelion'));
+      writeFixture(dir, 'claude', "printf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'");
+      writeFixture(dir, 'agy', "printf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'");
+      writeFixture(dir, 'kimi', 'exit 0');
+      writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
+      writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir };
+      const runs = [[process.execPath, 'src/main.ts'], ['./src/main.ts'], ['dandelion']].map(([command, ...args]) => spawnSync(command, [...args, '--once'], { env, encoding: 'utf-8', timeout: 60000 }));
+      const names = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+      for (const run of runs) {
+        expect(run.status).toBe(0);
+        const lines = run.stdout.split('\n');
+        expect(lines[0]).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+        expect(lines.filter((line) => names.includes(line))).toEqual(names);
+        expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+        expect(run.stdout).not.toMatch(/allowance/i);
+      }
+      const bodies = runs.map((run) => run.stdout.split('\n').slice(1).map((line) => line.replace(/ ↻ \S+$/, '')).join('\n'));
+      expect(new Set(bodies).size).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('runs with only fixtures, node and sh on PATH and no runtime dependencies', () => {
