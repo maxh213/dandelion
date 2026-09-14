@@ -1,14 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import {
-  ineligibleIds,
-  isRoutable,
-  renderLiveFrame,
-  withToggledEligibility,
-  type EligibilityState,
-  type Flash,
-  type LiveSlot,
-  type LiveView
-} from '../render/index.ts';
+import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type LiveSlot, type LiveView } from '../render/index.ts';
 
 export type Screen = { write(text: string): unknown };
 
@@ -25,8 +16,7 @@ type LiveOptions = {
   screen: Screen;
   keyboard: Keyboard;
   stopChildren(): Promise<void>;
-  state: EligibilityState;
-  saveState(state: EligibilityState): boolean;
+  eligibility: Eligibility;
 };
 
 type Timer = ReturnType<typeof setTimeout>;
@@ -74,7 +64,7 @@ function viewOf(session: Session): LiveView {
     spinner: session.spinner,
     refreshing: session.running === true && session.rounds > 1,
     footer: session.footer,
-    ineligible: ineligibleIds(session.state),
+    ineligible: session.eligibility.ineligible(),
     selected: session.selected,
     flash: session.flash
   };
@@ -152,13 +142,8 @@ function showFlash(session: Session, index: number, message: string): void {
 }
 
 function saveToggle(session: Session, index: number): void {
-  const state = withToggledEligibility(session.state, session.probes[index].id);
-  if (!session.saveState(state)) {
-    showFlash(session, index, NOT_SAVED);
-    return;
-  }
-  session.state = state;
-  draw(session);
+  if (session.eligibility.toggle(session.probes[index].id)) draw(session);
+  else showFlash(session, index, NOT_SAVED);
 }
 
 function toggleSettled(session: Session, index: number, usage: LiveSlot['usage']): void {

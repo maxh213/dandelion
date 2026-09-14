@@ -108,6 +108,13 @@ module.exports = {
       to: { path: '^src/probes/', dependencyTypesNot: ['type-only'] }
     },
     {
+      name: 'live-session-gets-eligibility-injected',
+      severity: 'error',
+      comment: 'The live session sees only the render entry and probe types; the Eligibility it toggles is opened by app/index.ts over the real state file, never by a sibling module',
+      from: { path: '^src/app/live\\.ts$' },
+      to: { pathNot: '^src/(render|probes)/index\\.ts$' }
+    },
+    {
       name: 'main-is-the-entry',
       severity: 'error',
       comment: 'main.ts is the process entry; nothing but its own test imports it',

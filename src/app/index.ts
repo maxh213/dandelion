@@ -20,16 +20,7 @@ import {
   type RpcSpawner,
   type RunFailure
 } from '../probes/index.ts';
-import {
-  eligibilityPath,
-  ineligibleIds,
-  parseEligibility,
-  renderDashboard,
-  renderRoute,
-  serializeEligibility,
-  type EligibilityState,
-  type RouteOutput
-} from '../render/index.ts';
+import { openEligibility, renderDashboard, renderRoute, type Eligibility, type RouteOutput, type StateFile } from '../render/index.ts';
 import { startLive, type Keyboard, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
@@ -205,10 +196,6 @@ function probeOnce(io: ProbeIo, env: Record<string, string | undefined>, now: st
   return Promise.all(providerProbes(io, env).map(({ probe }) => probe(now)));
 }
 
-function statePathOf(io: ProbeIo, env: Record<string, string | undefined>): string {
-  return eligibilityPath(env, io.reader.homeDir());
-}
-
 function readText(path: string): string | undefined {
   try {
     return readFileSync(path, 'utf8');
@@ -217,15 +204,7 @@ function readText(path: string): string | undefined {
   }
 }
 
-function readState(path: string): EligibilityState {
-  return parseEligibility(readText(path));
-}
-
-function ineligibleFor(io: ProbeIo, env: Record<string, string | undefined>): string[] {
-  return ineligibleIds(readState(statePathOf(io, env)));
-}
-
-function replaceFile(path: string, text: string): boolean {
+function renameOver(path: string, text: string): boolean {
   const temp = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`);
   try {
     writeFileSync(temp, text);
@@ -237,28 +216,32 @@ function replaceFile(path: string, text: string): boolean {
   }
 }
 
-function writeState(path: string, state: EligibilityState): boolean {
+function replaceFile(path: string, text: string): boolean {
   try {
     mkdirSync(dirname(path), { recursive: true });
   } catch {
     return false;
   }
-  return replaceFile(path, serializeEligibility(state));
+  return renameOver(path, text);
+}
+
+const realStateFile: StateFile = { read: readText, replace: replaceFile };
+
+function eligibilityOf(io: ProbeIo, env: Record<string, string | undefined>): Eligibility {
+  return openEligibility(env, io.reader.homeDir(), realStateFile);
 }
 
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
   const usages = await probeOnce(io, env, now);
   const noColor = env['NO_COLOR'] !== undefined;
-  return renderDashboard(usages, noColor, now, ineligibleFor(io, env));
+  return renderDashboard(usages, noColor, now, eligibilityOf(io, env).ineligible());
 }
 
 export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, now: string, zone: string): Promise<RouteOutput> {
-  return renderRoute(await probeOnce(io, env, now), now, zone, ineligibleFor(io, env));
+  return renderRoute(await probeOnce(io, env, now), now, zone, eligibilityOf(io, env).ineligible());
 }
 
 export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {
   registry.closed = false;
-  const path = statePathOf(io, env);
-  const saveState = (state: EligibilityState) => writeState(path, state);
-  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren, state: readState(path), saveState });
+  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren, eligibility: eligibilityOf(io, env) });
 }

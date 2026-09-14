@@ -13,14 +13,7 @@ export {
 
 export { NO_ROUTE, isRoutable, nextLocalMidnight, routeLine, type WindowKind } from './route.ts';
 
-export {
-  eligibilityPath,
-  ineligibleIds,
-  parseEligibility,
-  serializeEligibility,
-  withToggledEligibility,
-  type EligibilityState
-} from './eligibility.ts';
+export { openEligibility, type Eligibility, type StateFile } from './eligibility.ts';
 
 export type UsageWindow = {
   label: string;

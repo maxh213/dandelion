@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
+import { openEligibility } from '../render/index.ts';
 import { startLive } from './live.ts';
 
 type Usage = Awaited<ReturnType<ProviderProbe['probe']>>;
@@ -29,14 +30,16 @@ function startSession(env: Record<string, string | undefined> = { NO_COLOR: '1' 
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
-  const saveState = vi.fn<(state: Record<string, unknown>) => boolean>(() => true);
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen: { write: (text: string) => writes.push(text) }, stopChildren, state, saveState });
+  const replace = vi.fn<(path: string, text: string) => boolean>(() => true);
+  const eligibility = openEligibility({}, '/home/u', { read: () => JSON.stringify(state), replace });
+  const saved = () => replace.mock.calls.map(([, text]) => JSON.parse(text));
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen: { write: (text: string) => writes.push(text) }, stopChildren, eligibility });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { writes, probes, keyboard, finished, frames, stopChildren, saveState, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { writes, probes, keyboard, finished, frames, stopChildren, replace, saved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -262,7 +265,7 @@ describe('live session', () => {
     keys.forEach(session.press);
     expect(session.frames()).toHaveLength(count + keys.length);
     expect(markedHeaders(session.lastFrame())).toEqual([`▸ ${id}`]);
-    expect(session.saveState).not.toHaveBeenCalled();
+    expect(session.replace).not.toHaveBeenCalled();
     session.press('q');
     await session.finished;
   });
@@ -275,11 +278,11 @@ describe('live session', () => {
     const rows = lineAfter(session.lastFrame(), '▸ claude', 1);
     const count = session.frames().length;
     session.press(' ');
-    expect(session.saveState).toHaveBeenLastCalledWith({ nope: 1, agy: false, claude: false });
+    expect(session.saved().at(-1)).toEqual({ nope: 1, agy: false, claude: false });
     expect(session.frames()).toHaveLength(count + 1);
     expect(lineAfter(session.lastFrame(), TAG('▸ claude'), 1)).toBe(rows);
     session.press(' ');
-    expect(session.saveState).toHaveBeenLastCalledWith({ nope: 1, agy: false, claude: true });
+    expect(session.saved().at(-1)).toEqual({ nope: 1, agy: false, claude: true });
     expect(markedHeaders(session.lastFrame())).toEqual(['▸ claude']);
     session.press('q');
     await session.finished;
@@ -300,7 +303,7 @@ describe('live session', () => {
     expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('plan · kilo');
     ['k', 'k', 'k', 'k', 'k', 'k', ' '].forEach(session.press);
     expect(lineAfter(session.lastFrame(), '▸ claude', 2)).toBe('not routable (no usage windows)');
-    expect(session.saveState).not.toHaveBeenCalled();
+    expect(session.replace).not.toHaveBeenCalled();
     session.press('q');
     await session.finished;
     expect(vi.getTimerCount()).toBe(0);
@@ -337,7 +340,7 @@ describe('live session', () => {
     session.press(' ');
     await vi.advanceTimersByTimeAsync(1000);
     ['k', 'k', 'k', 'k', 'k', 'k', ' '].forEach(session.press);
-    expect(session.saveState).toHaveBeenLastCalledWith({ claude: false });
+    expect(session.saved().at(-1)).toEqual({ claude: false });
     expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('not routable (no usage windows)');
     await vi.advanceTimersByTimeAsync(1000);
     expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('plan · kilo');
@@ -354,7 +357,7 @@ describe('live session', () => {
     session.press(' ');
     expect(session.writes).toHaveLength(count + 1);
     expect(session.lastFrame()).toContain('\n▸ claude\n⠋ probing…\n');
-    expect(session.saveState).not.toHaveBeenCalled();
+    expect(session.replace).not.toHaveBeenCalled();
     session.press('q');
     await session.finished;
   });
@@ -362,13 +365,13 @@ describe('live session', () => {
   it('flashes routing state not saved and keeps the old state when saving fails', async () => {
     const session = startSession();
     await session.settleRound(0);
-    session.saveState.mockReturnValueOnce(false);
+    session.replace.mockReturnValueOnce(false);
     session.press('j');
     session.press(' ');
     expect(lineAfter(session.lastFrame(), '▸ claude', 2)).toBe('routing state not saved');
     expect(session.lastFrame()).not.toContain('routing off');
     session.press(' ');
-    expect(session.saveState.mock.calls).toEqual([[{ claude: false }], [{ claude: false }]]);
+    expect(session.saved()).toEqual([{ claude: false }, { claude: false }]);
     expect(session.lastFrame().split('\n')).toContain(TAG('▸ claude'));
     session.press('q');
     await session.finished;

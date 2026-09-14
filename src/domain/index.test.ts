@@ -1,15 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
-  eligibilityPath,
   formatCountdown,
-  ineligibleIds,
   nextLocalMidnight,
-  parseEligibility,
+  openEligibility,
   routeLine,
-  serializeEligibility,
   summariseFleet,
-  withToggledEligibility,
   type ProviderUsage,
+  type StateFile,
   type UsageWindow,
   type WindowKind
 } from './index.ts';
@@ -129,6 +126,22 @@ describe('routeLine', () => {
 });
 
 describe('eligibility state', () => {
+  function fileWith(text: string | undefined, saves: boolean[] = []) {
+    const reads: string[] = [];
+    const writes: [string, string][] = [];
+    const file: StateFile = {
+      read: (path) => {
+        reads.push(path);
+        return text;
+      },
+      replace: (path, bytes) => {
+        writes.push([path, bytes]);
+        return saves.shift() ?? true;
+      }
+    };
+    return { file, reads, writes, saved: () => writes.map(([, bytes]) => JSON.parse(bytes)) };
+  }
+
   it.each<[string, Record<string, string | undefined>, string]>([
     ['DANDELION_STATE_FILE wins', { DANDELION_STATE_FILE: '/s/e.json', XDG_STATE_HOME: '/xdg' }, '/s/e.json'],
     ['XDG_STATE_HOME when the file is unset', { XDG_STATE_HOME: '/xdg' }, '/xdg/dandelion/eligibility.json'],
@@ -136,7 +149,10 @@ describe('eligibility state', () => {
     ['home when both are unset', {}, '/home/u/.local/state/dandelion/eligibility.json'],
     ['home when XDG_STATE_HOME is empty', { XDG_STATE_HOME: '' }, '/home/u/.local/state/dandelion/eligibility.json']
   ])('resolves the state path: %s', (_case, env, path) => {
-    expect(eligibilityPath(env, '/home/u')).toBe(path);
+    const state = fileWith(undefined);
+    openEligibility(env, '/home/u', state.file).toggle('claude');
+    expect(state.reads).toEqual([path]);
+    expect(state.writes.map(([written]) => written)).toEqual([path]);
   });
 
   it.each<[string, string | undefined, string[]]>([
@@ -149,19 +165,34 @@ describe('eligibility state', () => {
     ['only exactly false', '{"claude": false, "agy": "no", "kimi": true, "grok": 0, "cursor": null}', ['claude']],
     ['a constructor key', '{"constructor": false}', ['constructor']]
   ])('reads %s as ineligible %j', (_case, text, ids) => {
-    expect(ineligibleIds(parseEligibility(text))).toEqual(ids);
+    expect(openEligibility({}, '/home/u', fileWith(text).file).ineligible()).toEqual(ids);
   });
 
   it('flips false to true and anything else to false, keeping unknown keys', () => {
-    const state = parseEligibility('{"nope": 1, "agy": false, "kimi": "x"}');
-    const off = withToggledEligibility(withToggledEligibility(state, 'claude'), 'kimi');
-    expect(off).toEqual({ nope: 1, agy: false, kimi: false, claude: false });
-    expect(withToggledEligibility(off, 'agy')).toEqual({ nope: 1, agy: true, kimi: false, claude: false });
-    expect(state).toEqual({ nope: 1, agy: false, kimi: 'x' });
+    const state = fileWith('{"nope": 1, "agy": false, "kimi": "x"}');
+    const eligibility = openEligibility({}, '/home/u', state.file);
+    expect([eligibility.toggle('claude'), eligibility.toggle('kimi')]).toEqual([true, true]);
+    expect(state.saved().at(-1)).toEqual({ nope: 1, agy: false, kimi: false, claude: false });
+    eligibility.toggle('agy');
+    expect(state.saved().at(-1)).toEqual({ nope: 1, agy: true, kimi: false, claude: false });
+    expect(eligibility.ineligible()).toEqual(['kimi', 'claude']);
+    expect(state.reads).toHaveLength(1);
+  });
+
+  it('keeps the state when a write fails, so the next write flips the old state once', () => {
+    const state = fileWith('{"agy": false}', [false]);
+    const eligibility = openEligibility({}, '/home/u', state.file);
+    expect(eligibility.toggle('claude')).toBe(false);
+    expect(eligibility.ineligible()).toEqual(['agy']);
+    expect(eligibility.toggle('claude')).toBe(true);
+    expect(state.saved()).toEqual([{ agy: false, claude: false }, { agy: false, claude: false }]);
+    expect(eligibility.ineligible()).toEqual(['agy', 'claude']);
   });
 
   it('serializes as two-space JSON with a trailing newline', () => {
-    expect(serializeEligibility({ claude: false })).toBe('{\n  "claude": false\n}\n');
+    const state = fileWith(undefined);
+    openEligibility({}, '/home/u', state.file).toggle('claude');
+    expect(state.writes).toEqual([['/home/u/.local/state/dandelion/eligibility.json', '{\n  "claude": false\n}\n']]);
   });
 });
 
