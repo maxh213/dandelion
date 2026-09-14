@@ -83,7 +83,7 @@ Feature: 009 - Rename the project to dandelion
       | ALLOWANCE_CLAUDE_WORK_CONFIG_DIR | an existing directory              | none                                             | `claude` is run only once, without CLAUDE_CONFIG_DIR, and the claude-work reason is "no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude" |
 
   Scenario: The cursor probe ignores the old cursor names, proven without network
-    Given the unit test "ignores the old ALLOWANCE_CURSOR_* names" in "src/probes/cursor.test.ts"
+    Given the unit test "ignores the old cursor names in OLD_ENV" in "src/probes/cursor.test.ts"
     And its env is the single line `const OLD_ENV = { ALLOWANCE_CURSOR_AUTH_FILE: '/auth.json', ALLOWANCE_CURSOR_API_BASE: 'http://127.0.0.1:48006' };`
     And its fake reader holds a token only at "/home/tester/.config/cursor/auth.json" and its fake fetcher records every POST and answers the 006 usage and plan
     When probeCursor runs with OLD_ENV
@@ -115,8 +115,10 @@ Feature: 009 - Rename the project to dandelion
     And it covers every row of "Old ALLOWANCE_* names are ignored" and "Live refresh ignores ALLOWANCE_REFRESH_SECONDS", removing every DANDELION_* name from the inherited env first
     And this command prints nothing:
       """
-      git grep -nI -e ALLOWANCE -e Allowance -e allowance- -e '"allowance"' -- src perf README.md package.json package-lock.json 'qa/*.mjs' ':!qa/009-rename-dandelion.e2e.mjs' | grep -v "^src/probes/cursor.test.ts:[0-9]*:const OLD_ENV = { ALLOWANCE_CURSOR_AUTH_FILE: '/auth.json', ALLOWANCE_CURSOR_API_BASE: 'http://127.0.0.1:48006' };$"
+      git grep -nI -e ALLOWANCE -e Allowance -e allowance- -e '"allowance"' -- src README.md package.json package-lock.json 'qa/*.mjs' ':!qa/009-rename-dandelion.e2e.mjs' | grep -v "^src/probes/cursor.test.ts:[0-9]*:const OLD_ENV = { ALLOWANCE_CURSOR_AUTH_FILE: '/auth.json', ALLOWANCE_CURSOR_API_BASE: 'http://127.0.0.1:48006' };$"
       """
     And so old names may be spelled, as plain string literals, only in "qa/009-rename-dandelion.e2e.mjs" and on that one OLD_ENV line of "src/probes/cursor.test.ts"; no other unit test sets ALLOWANCE_*
+    And perf/** is outside that check: the perf role owns it and may set both the old and the new names so the baseline tree gets the same config
     And the frozen qa/*.md and features/*.feature of 001 to 009 are outside that check
+    And the qa role, not the coder, writes the qa/*.mjs renames and "qa/009-rename-dandelion.e2e.mjs"
     And no e2e runs a real provider binary and every temp dir is removed
