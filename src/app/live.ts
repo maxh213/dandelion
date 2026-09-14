@@ -168,8 +168,9 @@ function toggleSettled(session: Session, index: number, usage: LiveSlot['usage']
 
 function toggleSelected(session: Session): void {
   const index = session.selected;
-  const usage = index === undefined ? undefined : session.results[index];
-  if (index !== undefined && usage !== undefined) toggleSettled(session, index, usage);
+  if (index === undefined) return;
+  const usage = session.results[index];
+  if (usage !== undefined) toggleSettled(session, index, usage);
 }
 
 async function quit(session: Session): Promise<void> {

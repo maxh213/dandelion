@@ -285,13 +285,13 @@ function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), caption };
 }
 
-function livePanel(view: LiveView, slot: LiveSlot, noColor: boolean, now: string, marks: PanelMarks): string {
-  return slot.usage === undefined ? pendingPanel(slot.id, view.spinner, noColor, marks) : renderPanel(slot.usage, noColor, now, marks);
+function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
+  return slot.usage === undefined ? pendingPanel(slot.id, spinner, noColor, marks) : renderPanel(slot.usage, noColor, now, marks);
 }
 
 export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
   const usages = settledUsages(view.slots);
-  const panels = view.slots.map((slot, index) => livePanel(view, slot, noColor, now, slotMarks(view, slot, index)));
+  const panels = view.slots.map((slot, index) => livePanel(slot, view.spinner, noColor, now, slotMarks(view, slot, index)));
   const footer = view.footer ? [dim(HELP_FOOTER, noColor)] : [];
   return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...panels, ...footer].join('\n');
 }

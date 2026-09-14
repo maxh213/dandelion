@@ -29,9 +29,13 @@ export function isRoutable(usage: RoutableUsage | undefined): usage is RoutableU
   return usage?.status === 'ok' && usage.windows.length > 0;
 }
 
-function candidatesOf(usages: RoutableUsage[], ineligible: string[]): Candidate[] {
+function eligibleUsages(usages: RoutableUsage[], ineligible: string[]): RoutableUsage[] {
+  return usages.filter((usage) => !ineligible.includes(usage.id));
+}
+
+function candidatesOf(usages: RoutableUsage[]): Candidate[] {
   return ROUTING_TABLE.flatMap((route) => {
-    const usage = usages.find((each) => each.id === route.id && !ineligible.includes(each.id));
+    const usage = usages.find((each) => each.id === route.id);
     return isRoutable(usage) ? [{ route, windows: usage.windows }] : [];
   });
 }
@@ -65,7 +69,7 @@ function highest(candidates: Candidate[], score: (windows: RoutableWindow[]) => 
 }
 
 export function routeLine(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
-  const candidates = candidatesOf(usages, ineligible);
+  const candidates = candidatesOf(eligibleUsages(usages, ineligible));
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
   const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight));
   if (evaporating.route !== undefined) return evaporating.route.max;

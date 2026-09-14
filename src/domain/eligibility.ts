@@ -9,7 +9,7 @@ export function eligibilityPath(env: Record<string, string | undefined>, homeDir
 
 function parsedJson(text: string | undefined): unknown {
   try {
-    return JSON.parse(String(text));
+    return JSON.parse(text ?? '');
   } catch {
     return undefined;
   }
