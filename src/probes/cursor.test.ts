@@ -95,7 +95,7 @@ describe('probeCursor', () => {
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'Ultra · $200/mo' });
   });
 
-  it(`ignores the old ${Object.keys(OLD_ENV)[0].replace(/_AUTH_FILE$/, '_*')} names`, async () => {
+  it('ignores the old cursor names in OLD_ENV', async () => {
     const { io, requests, reads } = ioOf({ '/auth.json': AUTH, '/home/tester/.config/cursor/auth.json': '{"accessToken":"home-token"}' });
     await probeCursor(io, OLD_ENV, NOW);
     expect(reads).toEqual(['/home/tester/.config/cursor/auth.json']);
