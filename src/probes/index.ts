@@ -1,7 +1,7 @@
 import type { Fetcher, FileReader, ProviderUsage } from '../domain/index.ts';
 import { agyProbe } from './agy.ts';
-import { claudeProbe, claudeWorkProbe, noWorkConfig } from './claude.ts';
-import { probeCli } from './cli.ts';
+import { claudeProbe, claudeWorkProbe } from './claude.ts';
+import { probeCli, type CliProbe } from './cli.ts';
 import { probeCodex, type CodexIo } from './codex.ts';
 import { probeCursor, type CursorIo } from './cursor.ts';
 import { probeGrok, type GrokIo } from './grok.ts';
@@ -17,21 +17,19 @@ export type ProbeIo = KimiIo & GrokIo & CodexIo & CursorIo & { fetcher: Fetcher;
 
 export type ProviderProbe = { id: string; probe(now: string): Promise<ProviderUsage> };
 
-async function probeClaudeWork(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
-  const probe = await claudeWorkProbe(io.reader, env);
-  return probe === undefined ? noWorkConfig(now) : probeCli(io.runner, probe, now);
+function cliProbe(io: ProbeIo, probe: CliProbe): ProviderProbe {
+  return { id: probe.id, probe: (now) => probeCli(io, probe, now) };
 }
 
 export function providerProbes(io: ProbeIo, env: Record<string, string | undefined>): ProviderProbe[] {
-  const kilo = kiloProbe(env);
   return [
-    { id: claudeProbe.id, probe: (now) => probeCli(io.runner, claudeProbe, now) },
-    { id: 'claude-work', probe: (now) => probeClaudeWork(io, env, now) },
-    { id: agyProbe.id, probe: (now) => probeCli(io.runner, agyProbe, now) },
+    cliProbe(io, claudeProbe),
+    cliProbe(io, claudeWorkProbe(env, io.reader.homeDir())),
+    cliProbe(io, agyProbe),
     { id: 'kimi', probe: (now) => probeKimi(io, env, now) },
     { id: 'grok', probe: (now) => probeGrok(io, env, now) },
     { id: 'codex', probe: (now) => probeCodex(io, now) },
     { id: 'cursor', probe: (now) => probeCursor(io, env, now) },
-    { id: kilo.id, probe: (now) => probeCli(io.runner, kilo, now) }
+    cliProbe(io, kiloProbe(env))
   ];
 }

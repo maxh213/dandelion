@@ -3,8 +3,9 @@ import { agyProbe } from './agy.ts';
 import { probeCli } from './cli.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
+const NO_DIRECTORIES = { homeDir: () => '/home/tester', read: async () => undefined, isDirectory: async () => false };
 async function windowsOf(stdout: string) {
-  const usage = await probeCli({ run: async () => ({ stdout, stderr: '' }) }, agyProbe, NOW);
+  const usage = await probeCli({ runner: { run: async () => ({ stdout, stderr: '' }) }, reader: NO_DIRECTORIES }, agyProbe, NOW);
   return usage.windows;
 }
 

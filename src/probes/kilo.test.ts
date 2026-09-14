@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { probeCli, type CommandRunner, type CommandRunnerResult } from './cli.ts';
 import { kiloProbe } from './kilo.ts';
 
+const NO_DIRECTORIES = { homeDir: () => '/home/tester', read: async () => undefined, isDirectory: async () => false };
+
 function probeKilo(runner: CommandRunner, now: string, env: Record<string, string | undefined>) {
-  return probeCli(runner, kiloProbe(env), now);
+  return probeCli({ runner, reader: NO_DIRECTORIES }, kiloProbe(env), now);
 }
 
 function mockRunner(result: CommandRunnerResult): CommandRunner {

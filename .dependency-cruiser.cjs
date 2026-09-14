@@ -59,6 +59,20 @@ module.exports = {
       to: { path: '^src/probes/cli\\.ts$', dependencyTypesNot: ['type-only'] }
     },
     {
+      name: 'probe-composition-only-wires',
+      severity: 'error',
+      comment: 'probes/index.ts lists the probes in panel order; it takes only types from domain and holds no probe rules of its own',
+      from: { path: '^src/probes/index\\.ts$' },
+      to: { path: '^src/domain/', dependencyTypesNot: ['type-only'] }
+    },
+    {
+      name: 'claude-accounts-are-declarations',
+      severity: 'error',
+      comment: 'claude.ts declares both accounts as CliProbe data (the work config dir is a requiresDirectory the cli skeleton checks); it reaches nothing in domain, so it cannot run IO checks itself',
+      from: { path: '^src/probes/claude\\.ts$' },
+      to: { path: '^src/domain/' }
+    },
+    {
       name: 'app-imported-only-by-main',
       severity: 'error',
       comment: 'The app composes probes, render and the real IO; only the main entry and tests reach it',

@@ -1,4 +1,4 @@
-import type { Balance, ProviderUsage, UsageWindow } from '../domain/index.ts';
+import type { Balance, FileReader, ProviderUsage, UsageWindow } from '../domain/index.ts';
 
 export type RunFailure = 'missing' | 'timeout' | 'exit';
 
@@ -12,14 +12,19 @@ export interface CommandRunner {
   run(command: string, args: string[], timeoutMs: number, env?: Record<string, string>): Promise<CommandRunnerResult>;
 }
 
+export type CliIo = { runner: CommandRunner; reader: FileReader };
+
 export type ReadWindow = { label: string; usedPct: number; resetsAt: string | undefined };
 
 export type Reading = { windows: ReadWindow[]; balance?: Balance };
+
+type RequiredDirectory = { path: string; missingReason: string };
 
 export type CliProbe = {
   id: string;
   command?: string;
   env?: Record<string, string>;
+  requiresDirectory?: RequiredDirectory;
   planLabel: string;
   args: string[];
   timeoutMs: number;
@@ -53,7 +58,7 @@ function isEmpty(reading: Reading): boolean {
   return reading.windows.length === 0 && reading.balance === undefined;
 }
 
-export async function probeCli(runner: CommandRunner, probe: CliProbe, now: string): Promise<ProviderUsage> {
+async function runProbe(runner: CommandRunner, probe: CliProbe, now: string): Promise<ProviderUsage> {
   const command = probe.command ?? probe.id;
   const result = await runner.run(command, probe.args, probe.timeoutMs, probe.env);
   const usage = { id: probe.id, displayName: probe.id, planLabel: probe.planLabel, windows: [], fetchedAt: now };
@@ -66,4 +71,10 @@ export async function probeCli(runner: CommandRunner, probe: CliProbe, now: stri
   if (isEmpty(reading)) return { ...usage, status: 'unavailable', reason: `Could not parse ${probe.reads} from output` };
 
   return { ...usage, ...reading, windows: reading.windows.map(usageWindow), status: 'ok' };
+}
+
+export async function probeCli({ runner, reader }: CliIo, probe: CliProbe, now: string): Promise<ProviderUsage> {
+  const required = probe.requiresDirectory;
+  if (required === undefined || (await reader.isDirectory(required.path))) return runProbe(runner, probe, now);
+  return { id: probe.id, displayName: probe.id, planLabel: probe.planLabel, windows: [], fetchedAt: now, status: 'unavailable', reason: required.missingReason };
 }
