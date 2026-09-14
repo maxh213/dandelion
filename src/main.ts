@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import { realPath, runApp, runLive, realIo, type Keyboard, type ProbeIo, type Screen } from './app/index.ts';
-import { fileURLToPath } from 'node:url';
+import { isEntryFile, runApp, runLive, realIo, type Keyboard, type ProbeIo, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -22,10 +21,6 @@ export async function main(
   stream.write(output + '\n');
 }
 
-function isEntry(metaUrl: string, argv1: string | undefined): boolean {
-  return argv1 !== undefined && realPath(argv1) === realPath(fileURLToPath(metaUrl));
-}
-
 function isLive(proc: Proc): boolean {
   return !proc.argv.includes('--once') && proc.stdin.isTTY === true && proc.stdout.isTTY === true;
 }
@@ -36,7 +31,7 @@ async function live(io: ProbeIo, proc: Proc): Promise<void> {
 }
 
 export function runIfMain(metaUrl: string, argv1: string | undefined, io: ProbeIo, proc: Proc): Promise<void> {
-  if (!isEntry(metaUrl, argv1)) return Promise.resolve();
+  if (!isEntryFile(metaUrl, argv1)) return Promise.resolve();
   if (isLive(proc)) return live(io, proc);
   return main(io, proc.env, proc.stdout, new Date().toISOString());
 }

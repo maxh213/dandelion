@@ -6,6 +6,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { PassThrough, pipeline, type Readable, type Writable } from 'node:stream';
+import { fileURLToPath } from 'node:url';
 import {
   providerProbes,
   type CommandRunner,
@@ -182,8 +183,12 @@ const realReader: FileReader = {
 
 export const realIo: ProbeIo = { runner: realCommandRunner, launcher: realLauncher, fetcher: realFetcher, reader: realReader, spawner: realSpawner };
 
-export function realPath(path: string): string | undefined {
+function realPath(path: string): string | undefined {
   return existsSync(path) ? realpathSync(path) : undefined;
+}
+
+export function isEntryFile(moduleUrl: string, argv1: string | undefined): boolean {
+  return argv1 !== undefined && realPath(argv1) === realPath(fileURLToPath(moduleUrl));
 }
 
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {

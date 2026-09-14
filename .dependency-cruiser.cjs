@@ -136,6 +136,13 @@ module.exports = {
       to: { path: '^src/', pathNot: '^src/app/' }
     },
     {
+      name: 'main-entry-no-node-modules',
+      severity: 'error',
+      comment: 'main.ts only dispatches; entry detection (real paths, file URLs) and all other Node APIs stay behind app/index.ts',
+      from: { path: '^src/main\\.ts$' },
+      to: { path: `^(node:)?(${builtinModules.join('|')})(/|$)` }
+    },
+    {
       name: 'module-entry-only',
       severity: 'error',
       comment: 'Another layer is reached only through its index.ts; files behind it are private',

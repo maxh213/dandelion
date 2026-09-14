@@ -5,7 +5,8 @@ import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
-import { realPath, runApp, runLive, realIo } from './index.ts';
+import { pathToFileURL } from 'node:url';
+import { isEntryFile, runApp, runLive, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
@@ -1510,15 +1511,20 @@ describe('quitting the live dashboard', () => {
   });
 });
 
-describe('realPath', () => {
-  it('resolves a symlink to its target and gives undefined for a missing path', () => {
+describe('isEntryFile', () => {
+  it('matches the module file itself or a symlink to it, and not a missing, absent or different file', () => {
     const dir = mkdtempSync(join(tmpdir(), 'dandelion-realpath-'));
     try {
       const target = join(dir, 'main.ts');
+      const url = pathToFileURL(target).href;
       writeFileSync(target, '');
+      writeFileSync(join(dir, 'other.ts'), '');
       symlinkSync(target, join(dir, 'dandelion'));
-      expect(realPath(join(dir, 'dandelion'))).toBe(realPath(target));
-      expect(realPath(join(dir, 'missing'))).toBeUndefined();
+      expect(isEntryFile(url, join(dir, 'dandelion'))).toBe(true);
+      expect(isEntryFile(url, target)).toBe(true);
+      expect(isEntryFile(url, join(dir, 'other.ts'))).toBe(false);
+      expect(isEntryFile(url, join(dir, 'missing'))).toBe(false);
+      expect(isEntryFile(url, undefined)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
