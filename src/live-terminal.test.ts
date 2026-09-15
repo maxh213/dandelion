@@ -144,7 +144,7 @@ function qaProcessesLeft(): string[] {
         return '';
       }
     })
-    .filter((cmdline) => cmdline.includes(PREFIX));
+    .filter((cmdline) => temps.some((dir) => cmdline.includes(dir)));
 }
 
 afterEach(() => {
