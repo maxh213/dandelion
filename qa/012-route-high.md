@@ -1,6 +1,6 @@
 # QA Procedure: 012 - dandelion route --high
 
-Earlier procedures are unchanged by 012, except that every `route` line now ends in a space and the provider id (for example `claude-opus-5 max claude`). `none` is unchanged.
+Earlier procedures are unchanged by 012, except that every `route` line now ends in a space and the provider id (for example `claude-opus-5 max claude`). `none` is unchanged. Because of the longer line, the `od -c` dumps in 010 and 011 now wrap onto a second `od` line. For example, 010 step 6 shows `c l a u d e - o p u s - 5   m a` on line `0000000` and `x   c l a u d e \n e x i t = 0 \n` on line `0000020`.
 
 Set up once in the repo root, in a real terminal. First run the set-up blocks of `qa/010-route-command.md` and `qa/011-route-eligibility-toggle.md`, so `$RX`, `$RH`, `$TZQ`, `$ST`, the `q` fixture and `rt` exist. Then add a claude fixture that reads `H_CLAUDE` (or `H_WORK` for the work account) as `session,allModels,fable`. A fable of `-` leaves out the Fable line, and an unset variable makes the account unavailable. `rh VAR=value…` runs `node src/main.ts route --high` with that fixture first on the PATH. Other providers use the `Q_*` variables of 010: `Q_CURSOR=pct,72`, `Q_GROK=pct,72`, `Q_AGY=rolling,weekly,72` and `Q_KIMI=rolling,weekly,72`.
 
@@ -41,7 +41,10 @@ rh() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX/h:$RX:$NODEBIN" DANDELION_KIMI_PORT
    - **Expected:** `kimi-k3-max cursor`, `exit=0`. Work is skipped and personal's Fable window is tripped.
 
 9. Run `rh H_CLAUDE=10,50,- Q_AGY=0,0,72 | od -c | head -3`, then `rh A=route H_CLAUDE=10,50,- Q_AGY=0,0,72`, then `rh A='route extra --high' H_CLAUDE=10,50,-`, then `rh NO_COLOR=1 A='--once route --high' H_CLAUDE=10,50,- | head -1`.
-   - **Expected:** `od` shows exactly `c l a u d e - f a b l e - 5 - 1   m a x   c l a u d e \n` then `e x i t = 0 \n`, with no `033`. Then `gemini-3.1-pro-high medium agy` (plain route still picks the most headroom). Then `claude-fable-5-1 max claude`. Then a line starting `DANDELION`.
+   - **Expected:** `od` shows exactly these three lines, with no `033`:
+     `0000000   c   l   a   u   d   e   -   f   a   b   l   e   -   5   -   1`
+     `0000020       m   a   x       c   l   a   u   d   e  \n   e   x   i   t`
+     `0000040   =   0  \n` Then `gemini-3.1-pro-high medium agy` (plain route still picks the most headroom). Then `claude-fable-5-1 max claude`. Then a line starting `DANDELION`.
 
 10. Run `rt Q_CLAUDE=0,86,2 Q_AGY=0,0,72`, then `rt Q_KIMI=10,10,72 Q_GROK=50,72`, then `rt Q_CLAUDE=20,30,72 Q_WORK=10,5,72 Q_AGY=15,20,72`.
     - **Expected:** `claude-opus-5 max claude`, then `kimi-code/kimi-for-coding-highspeed kimi`, then `claude-opus-5 high claude-work`, each with `exit=0`. The lines match 010 plus the token.
