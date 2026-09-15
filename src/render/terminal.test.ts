@@ -14,7 +14,7 @@ import {
   type LiveView,
   type PanelMarks
 } from './terminal.ts';
-import type { ProviderUsage, UsageWindow } from '../domain/index.ts';
+import { highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const RESET = '\x1b[0m';
@@ -287,6 +287,7 @@ describe('live frame', () => {
     refreshing: false,
     footer: false,
     ineligible: [],
+    zone: 'UTC',
     ...extra
   });
   const AGY_FIVE_HOUR = 'Claude and GPT models · Five Hour Limit';
@@ -366,10 +367,10 @@ describe('live frame', () => {
   });
 
   it('renders a pending panel as the rule, the id and the spinner frame for the tick', () => {
-    const plain = renderLiveFrame(viewOf([undefined], { spinner: 11 }), true, NOW).split('\n').slice(2);
+    const plain = renderLiveFrame(viewOf([undefined], { spinner: 11 }), true, NOW).split('\n').slice(6);
     expect(plain).toEqual(['='.repeat(72), 'p0', '⠙ probing…']);
     const coloured = renderLiveFrame({ ...viewOf([]), slots: [{ id: 'kimi', usage: undefined }] }, false, NOW);
-    expect(coloured.split('\n').slice(2).join('\n')).toBe(`\x1b[90m${'━'.repeat(72)}\nkimi\n⠋ probing…${RESET}`);
+    expect(coloured.split('\n').slice(6).join('\n')).toBe(`\x1b[90m${'━'.repeat(72)}\nkimi\n⠋ probing…${RESET}`);
     expect([...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'].map((frame, spinner) => renderLiveFrame(viewOf([undefined], { spinner }), true, NOW).endsWith(`${frame} probing…`))).toEqual(Array(10).fill(true));
   });
 
@@ -379,7 +380,7 @@ describe('live frame', () => {
     expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(24)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05Z${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
     expect(lines.at(-1)).toBe(`\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help${RESET}`);
-    expect(lines.slice(2, -1).join('\n')).toBe(renderDashboard(background(), false, frameNow, []).split('\n').slice(1).join('\n'));
+    expect(lines.slice(6, -1).join('\n')).toBe(renderDashboard(background(), false, frameNow, []).split('\n').slice(1).join('\n'));
   });
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
@@ -404,9 +405,10 @@ describe('panel marks', () => {
     refreshing: false,
     footer: false,
     ineligible: ['claude'],
+    zone: 'UTC',
     ...extra
   });
-  const panelOf = (view: LiveView, noColor = false) => renderLiveFrame(view, noColor, NOW).split('\n').slice(2).join('\n');
+  const panelOf = (view: LiveView, noColor = false) => renderLiveFrame(view, noColor, NOW).split('\n').slice(6).join('\n');
 
   it.each<[string, ProviderUsage | undefined, number | undefined, string]>([
     ['unavailable, not selected', unavailableClaude, undefined, `${DIM}${'━'.repeat(72)}\nclaude${' '.repeat(55)}routing off\n${REASON}\n${CAPTION}${RESET}`],
@@ -448,5 +450,130 @@ describe('panel marks', () => {
     const lines = renderDashboard([freshClaude, unavailableClaude, kilo], true, NOW, ['kilo']).split('\n');
     expect(lines.filter((line) => line.includes('routing off'))).toEqual([`kilo${' '.repeat(57)}routing off`]);
     expect(renderDashboard([freshClaude, kilo], true, NOW, [])).not.toContain('▸');
+  });
+});
+
+describe('route boxes', () => {
+  const DIM = '\x1b[90m';
+  const BOLD = '\x1b[1m';
+  const LATER = '2026-09-16T10:00:00.000Z';
+  const TOP = '+- route -------------------------+  +- route --high ------------------+';
+  const BOTTOM = '+---------------------------------+  +---------------------------------+';
+  const ok = (id: string, windows: UsageWindow[]): ProviderUsage => ({ id, displayName: id, planLabel: 'plan', windows, fetchedAt: NOW, status: 'ok' });
+  const down = (id: string): ProviderUsage => ({ id, displayName: id, windows: [], fetchedAt: NOW, status: 'unavailable', reason: 'gone' });
+  const boxView = (settled: ProviderUsage[] | undefined, extra: Partial<LiveView> = {}): LiveView => ({
+    slots: [],
+    spinner: 0,
+    refreshing: false,
+    footer: false,
+    ineligible: [],
+    zone: 'UTC',
+    settled,
+    ...extra
+  });
+  const boxLines = (view: LiveView, noColor: boolean, now: string): string[] => renderLiveFrame(view, noColor, now).split('\n').slice(2, 6);
+  const ROUTED: ProviderUsage[] = [
+    ok('claude', [
+      { label: 'session', kind: 'rolling', usedPct: 3, resetsAt: LATER },
+      { label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: LATER },
+      { label: 'weekly Fable', kind: 'weekly', usedPct: 100, resetsAt: LATER }
+    ]),
+    ok('claude-work', [
+      { label: 'session', kind: 'rolling', usedPct: 0, resetsAt: LATER },
+      { label: 'weekly', kind: 'weekly', usedPct: 12, resetsAt: LATER },
+      { label: 'weekly Fable', kind: 'weekly', usedPct: 23, resetsAt: LATER }
+    ]),
+    ok('agy', [
+      { label: 'weekly', kind: 'weekly', usedPct: 50, resetsAt: LATER },
+      { label: '5h', kind: 'rolling', usedPct: 50, resetsAt: LATER }
+    ]),
+    ok('kimi', [
+      { label: 'weekly', kind: 'weekly', usedPct: 85, resetsAt: LATER },
+      { label: '5h', kind: 'rolling', usedPct: 85, resetsAt: LATER }
+    ]),
+    ok('grok', [{ label: 'credits', kind: 'weekly', usedPct: 90, resetsAt: LATER }]),
+    ok('cursor', [{ label: 'total', kind: 'weekly', usedPct: 80, resetsAt: LATER }])
+  ];
+
+  it('draws the settled answers as two 35-cell boxes with a 2-cell gap under NO_COLOR', () => {
+    const lines = boxLines(boxView(ROUTED), true, NOW);
+    expect(lines).toEqual([
+      TOP,
+      '| claude-opus-5 high              |  | claude-fable-5-1 max            |',
+      '| claude-work                     |  | claude-work                     |',
+      BOTTOM
+    ]);
+    expect(lines.every((line) => [...line].length === 72)).toBe(true);
+  });
+
+  it('colours the borders dim, the model line bold and the account row plain', () => {
+    const lines = boxLines(boxView(ROUTED), false, NOW);
+    expect(lines[0]).toBe(`${DIM}┌─ route ${'─'.repeat(25)}┐${RESET}  ${DIM}┌─ route --high ${'─'.repeat(18)}┐${RESET}`);
+    expect(lines[1]).toBe(`${DIM}│${RESET}${BOLD} claude-opus-5 high${' '.repeat(14)}${RESET}${DIM}│${RESET}  ${DIM}│${RESET}${BOLD} claude-fable-5-1 max${' '.repeat(12)}${RESET}${DIM}│${RESET}`);
+    expect(lines[2]).toBe(`${DIM}│${RESET} claude-work${' '.repeat(21)}${DIM}│${RESET}  ${DIM}│${RESET} claude-work${' '.repeat(21)}${DIM}│${RESET}`);
+    expect(lines[3]).toBe(`${DIM}└${'─'.repeat(33)}┘${RESET}  ${DIM}└${'─'.repeat(33)}┘${RESET}`);
+  });
+
+  it('shows the spinner over an empty row until the first round settles', () => {
+    expect(boxLines(boxView(undefined), true, NOW)).toEqual([
+      TOP,
+      `| ${'⠋ probing…'.padEnd(31)} |  | ${'⠋ probing…'.padEnd(31)} |`,
+      `| ${''.padEnd(31)} |  | ${''.padEnd(31)} |`,
+      BOTTOM
+    ]);
+    expect(boxLines(boxView(undefined, { spinner: 3 }), true, NOW)[1]).toContain('| ⠸ probing…');
+    const coloured = boxLines(boxView(undefined), false, NOW);
+    expect(coloured[1]).toBe(`${DIM}│ ⠋ probing…${' '.repeat(22)}│${RESET}  ${DIM}│ ⠋ probing…${' '.repeat(22)}│${RESET}`);
+    expect(coloured[2]).toBe(`${DIM}│${' '.repeat(33)}│${RESET}  ${DIM}│${' '.repeat(33)}│${RESET}`);
+  });
+
+  it('shows none over no subscription available as one dim span per row', () => {
+    expect(boxLines(boxView([]), true, NOW)).toEqual([
+      TOP,
+      `| ${'none'.padEnd(31)} |  | ${'none'.padEnd(31)} |`,
+      `| ${'no subscription available'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`,
+      BOTTOM
+    ]);
+    const coloured = boxLines(boxView([]), false, NOW);
+    expect(coloured[1]).toBe(`${DIM}│ none${' '.repeat(28)}│${RESET}  ${DIM}│ none${' '.repeat(28)}│${RESET}`);
+    expect(coloured[2]).toBe(`${DIM}│ no subscription available${' '.repeat(7)}│${RESET}  ${DIM}│ no subscription available${' '.repeat(7)}│${RESET}`);
+  });
+
+  it('cuts a long model line with an ellipsis like a window label', () => {
+    const kimi = ok('kimi', [{ label: 'weekly', kind: 'weekly', usedPct: 10 }]);
+    expect(boxLines(boxView([kimi]), true, NOW)).toEqual([
+      TOP,
+      `| kimi-code/kimi-for-coding-high… |  | ${'none'.padEnd(31)} |`,
+      `| ${'kimi'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`,
+      BOTTOM
+    ]);
+  });
+
+  const weekly = (usedPct: number, resetsAt?: string): UsageWindow => ({ label: 'weekly', kind: 'weekly', usedPct, resetsAt });
+  const cut31 = (text: string): string => ([...text].length > 31 ? `${[...text].slice(0, 30).join('').trimEnd()}…` : text);
+  const rowText = (row: string, box: number): string => row.slice(box * 37 + 2, box * 37 + 33).trimEnd();
+  const splitLine = (line: string): string[] => (line === 'none' ? ['none', 'no subscription available'] : [line.slice(0, line.lastIndexOf(' ')), line.slice(line.lastIndexOf(' ') + 1)]);
+
+  it.each<[string, ProviderUsage[], string[], string, string]>([
+    ['evaporation near local midnight', [ok('claude', [weekly(86, '2026-09-13T22:30:00.000Z')])], [], 'UTC', NOW],
+    ['a zone whose midnight is earlier', [ok('claude', [weekly(86, '2026-09-13T22:30:00.000Z')])], [], 'Etc/GMT-2', NOW],
+    ['a reset that just passed', [ok('claude', [weekly(86, '2026-09-13T22:30:00.000Z')])], [], 'UTC', '2026-09-13T22:30:01.000Z'],
+    ['a headroom tie', [ok('claude', [weekly(10)]), ok('agy', [weekly(10)])], [], 'UTC', NOW],
+    ['chain rank 1', ROUTED, [], 'UTC', NOW],
+    ['chain rank 2', [ok('cursor', [weekly(10)])], [], 'UTC', NOW],
+    ['chain rank 3', [ok('claude', [{ label: 'session', kind: 'rolling', usedPct: 10 }, { label: 'weekly Fable', kind: 'weekly', usedPct: 95 }])], [], 'UTC', NOW],
+    ['chain rank 4', [ok('grok', [weekly(10)])], [], 'UTC', NOW],
+    ['chain rank 5', [ok('agy', [weekly(10)])], [], 'UTC', NOW],
+    ['no results at all', [], [], 'UTC', NOW],
+    ['everything ineligible', [ok('claude', [weekly(10)])], ['claude'], 'UTC', NOW],
+    ['unavailable results skipped', [down('claude'), ok('kimi', [weekly(10)])], [], 'UTC', NOW],
+    ['a model line longer than 31 cells', [ok('kimi', [weekly(10)])], [], 'UTC', NOW],
+    ['the named account toggled off', ROUTED, ['claude-work'], 'UTC', NOW]
+  ])('boxes equal routeLine and highRouteLine split at the last space: %s', (_case, usages, ineligible, zone, now) => {
+    const lines = boxLines(boxView(usages, { ineligible, zone }), true, now);
+    const midnight = nextLocalMidnight(zone, now);
+    const [route, high] = [routeLine(usages, now, midnight, ineligible), highRouteLine(usages, ineligible)].map(splitLine);
+    expect([rowText(lines[1], 0), rowText(lines[2], 0)]).toEqual([cut31(route[0]), route[1]]);
+    expect([rowText(lines[1], 1), rowText(lines[2], 1)]).toEqual([cut31(high[0]), high[1]]);
   });
 });

@@ -239,5 +239,6 @@ export async function runRoute(io: ProbeIo, env: Record<string, string | undefin
 
 export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {
   registry.closed = false;
-  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren, eligibility: eligibilityOf(io, env) });
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren, eligibility: eligibilityOf(io, env), zone });
 }

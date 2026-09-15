@@ -430,8 +430,9 @@ describe('claude-work panel', () => {
       expect(await Promise.all([scratch, file, join(scratch, 'no-such-dir')].map((path) => realIo.reader.isDirectory(path)))).toEqual([true, false, false]);
       const { io, configDirs } = recordingIo();
       const real = { ...io, reader: realIo.reader };
-      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: scratch, NO_COLOR: '1' }, NOW), 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
-      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: file, NO_COLOR: '1' }, NOW), 'claude-work')[1]).toBe(NO_WORK_CONFIG);
+      const stateFile = join(scratch, 'eligibility.json');
+      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: scratch, DANDELION_STATE_FILE: stateFile, NO_COLOR: '1' }, NOW), 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
+      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: file, DANDELION_STATE_FILE: stateFile, NO_COLOR: '1' }, NOW), 'claude-work')[1]).toBe(NO_WORK_CONFIG);
       expect(configDirs.sort()).toEqual(['-', '-', scratch]);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
@@ -1172,9 +1173,31 @@ describe('cursor panel', () => {
       expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
       expect(lines.at(-1)).toBe('\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
-      expect(lines.slice(2, -1).join('\n')).toBe(once.split('\n').slice(1).join('\n'));
+      expect(lines.slice(6, -1).join('\n')).toBe(once.split('\n').slice(1).join('\n'));
       dashboard.press('q');
       await dashboard.finished;
+    });
+
+    it('shows in the boxes what route and route --high print for the process zone at the frame time', async () => {
+      const scratch = mkdtempSync(join(tmpdir(), 'dandelion-boxes-'));
+      try {
+        const env = { ...LIVE_ENV, DANDELION_STATE_FILE: join(scratch, 'eligibility.json') };
+        const dashboard = startDashboard(cursorIo(), env);
+        await settleProbes();
+        const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const headroom = await runRoute(cursorIo(), env, { mode: 'headroom', now: NOW, zone });
+        const high = await runRoute(cursorIo(), env, { mode: 'high', now: NOW, zone });
+        const rowsOf = (line: string) => (line === 'none' ? ['none', 'no subscription available'] : [line.slice(0, line.lastIndexOf(' ')), line.slice(line.lastIndexOf(' ') + 1)]);
+        const [model, account] = rowsOf(headroom.line);
+        const [highModel, highAccount] = rowsOf(high.line);
+        const lines = dashboard.lastFrame().split('\n');
+        expect(lines[3]).toBe(`| ${model.padEnd(31)} |  | ${highModel.padEnd(31)} |`);
+        expect(lines[4]).toBe(`| ${account.padEnd(31)} |  | ${highAccount.padEnd(31)} |`);
+        dashboard.press('q');
+        await dashboard.finished;
+      } finally {
+        rmSync(scratch, { recursive: true, force: true });
+      }
     });
 
     it('draws eight pending panels first and reruns claude once per account on r', async () => {

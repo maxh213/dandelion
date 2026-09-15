@@ -19,7 +19,7 @@ All eight probes run in parallel. Window gauges are coloured by usage: below 50%
 
 ## Run Commands
 
-- `npm start` - Run the live dashboard: panels fill in as each probe settles, a fleet summary line shows how many windows are above 80% and the next reset, and everything is re-probed every `DANDELION_REFRESH_SECONDS`. Keys: `↑↓/jk select` a panel, `space routing on/off` for the selected provider, `r` refresh, `q` quit (or Ctrl-C), `?` help.
+- `npm start` - Run the live dashboard: panels fill in as each probe settles, a fleet summary line shows how many windows are above 80% and the next reset, and everything is re-probed every `DANDELION_REFRESH_SECONDS`. Two boxes at the top show the answers `dandelion route` and `dandelion route --high` would print; they update when a round settles or routing is toggled. Keys: `↑↓/jk select` a panel, `space routing on/off` for the selected provider, `r` refresh, `q` quit (or Ctrl-C), `?` help.
 - `npm start -- --once` - Run the dashboard once and exit
 - `dandelion` - Run the live dashboard from anywhere after `npm link`; `dandelion --once` runs it once and exits
 - `dandelion route` (or `npm start -- route`) - Run every probe once and print one line naming the subscription to use right now, such as `claude-opus-5 max claude`, then exit; it prints `none` and exits 1 when no provider can be routed. It never draws the dashboard, even on a terminal.

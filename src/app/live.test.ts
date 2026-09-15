@@ -26,14 +26,22 @@ function deferredProbe(id: string, writes: string[]) {
   return { probe, calls };
 }
 
-function startSession(env: Record<string, string | undefined> = { NO_COLOR: '1' }, stopChildren = vi.fn(async () => undefined), state: Record<string, unknown> = {}) {
+type SessionOverrides = {
+  env?: Record<string, string | undefined>;
+  stopChildren?: () => Promise<void>;
+  state?: Record<string, unknown>;
+  zone?: string;
+};
+
+function startSession(overrides: SessionOverrides = {}) {
+  const { env, stopChildren, state, zone } = { env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', ...overrides };
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
   const replace = vi.fn<(path: string, text: string) => boolean>(() => true);
   const eligibility = openEligibility({}, '/home/u', { read: () => JSON.stringify(state), replace });
   const saved = () => replace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen: { write: (text: string) => writes.push(text) }, stopChildren, eligibility });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen: { write: (text: string) => writes.push(text) }, stopChildren, eligibility, zone });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
@@ -72,7 +80,7 @@ describe('live session', () => {
     expect(session.probes.map(({ calls }) => calls.map((call) => [call.now, call.framesBefore]))).toEqual(IDS.map(() => [[START, 2]]));
     const lines = session.lastFrame().split('\n');
     expect(lines.slice(0, 2)).toEqual(['DANDELION'.padEnd(63) + '10:00:00Z', 'all windows below 80% · next reset: none']);
-    expect(lines.slice(2)).toEqual(IDS.flatMap((id) => ['='.repeat(72), id, '⠋ probing…']));
+    expect(lines.slice(6)).toEqual(IDS.flatMap((id) => ['='.repeat(72), id, '⠋ probing…']));
     session.press('q');
     await session.finished;
   });
@@ -97,7 +105,7 @@ describe('live session', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(session.frames()).toHaveLength(2);
     const lines = session.lastFrame().split('\n');
-    expect(lines.slice(6, 10)).toEqual(['agy', `${'weekly'.padEnd(35)} ##------------------  10%`, 'plan · agy', '='.repeat(72)]);
+    expect(lines.slice(10, 14)).toEqual(['agy', `${'weekly'.padEnd(35)} ##------------------  10%`, 'plan · agy', '='.repeat(72)]);
     expect(lines.filter((line) => line === '⠋ probing…')).toHaveLength(6);
     expect(lines[0]).toBe('DANDELION'.padEnd(47) + 'data 0h0m old · 10:00:00Z');
     session.press('q');
@@ -120,7 +128,7 @@ describe('live session', () => {
   });
 
   it('starts the next round after the interval, keeps the data and marks the banner until it settles', async () => {
-    const session = startSession({ NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' });
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
     await session.settleRound(0);
     expect(session.lastFrame().split('\n')[0]).not.toContain('refreshing…');
     await vi.advanceTimersByTimeAsync(999);
@@ -139,7 +147,7 @@ describe('live session', () => {
   });
 
   it('keeps counting the data age from the oldest result while a refresh is partly settled', async () => {
-    const session = startSession({ NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '60' });
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '60' } });
     await session.settleRound(0);
     await vi.advanceTimersByTimeAsync(60000);
     session.probes.slice(1).forEach(({ probe, calls }) => calls[1].resolve(usageOf(probe.id, calls[1].now)));
@@ -158,7 +166,7 @@ describe('live session', () => {
     ['abc', 300],
     ['7', 7]
   ])('starts the next automatic round %j seconds after the first settles -> %i', async (value, seconds) => {
-    const session = startSession({ NO_COLOR: '1', DANDELION_REFRESH_SECONDS: value });
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: value } });
     await session.settleRound(0);
     await vi.advanceTimersByTimeAsync(seconds * 1000 - 1);
     expect(session.probes[4].calls).toHaveLength(1);
@@ -169,7 +177,7 @@ describe('live session', () => {
   });
 
   it('ends a round even when a probe rejects', async () => {
-    const session = startSession({ NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' });
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
     session.probes[0].calls[0].reject(new Error('boom'));
     await session.settleRound(0);
     await vi.advanceTimersByTimeAsync(1000);
@@ -196,7 +204,7 @@ describe('live session', () => {
   });
 
   it('refreshes at once on r, ignores r while a round runs and restarts the interval after', async () => {
-    const session = startSession({ NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '10' });
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '10' } });
     session.press('r');
     expect(session.probes[0].calls).toHaveLength(1);
     await session.settleRound(0);
@@ -271,7 +279,7 @@ describe('live session', () => {
   });
 
   it('flips the selected routable provider on space, saves the whole state and tags its header at once', async () => {
-    const session = startSession({ NO_COLOR: '1' }, undefined, { nope: 1, agy: false });
+    const session = startSession({ state: { nope: 1, agy: false } });
     await session.settleRound(0);
     expect(session.lastFrame().split('\n')).toContain(TAG('agy'));
     session.press('j');
@@ -380,7 +388,7 @@ describe('live session', () => {
   it('finishes only after every child has been stopped', async () => {
     let release: () => void = () => undefined;
     const stopChildren = vi.fn(() => new Promise<undefined>((resolve) => (release = () => resolve(undefined))));
-    const session = startSession({ NO_COLOR: '1' }, stopChildren);
+    const session = startSession({ stopChildren });
     let finished = false;
     void session.finished.then(() => (finished = true));
     session.press('q');
@@ -390,5 +398,109 @@ describe('live session', () => {
     release();
     await session.finished;
     expect(finished).toBe(true);
+  });
+});
+
+const BOX_TOP = '+- route -------------------------+  +- route --high ------------------+';
+const BOX_BOTTOM = '+---------------------------------+  +---------------------------------+';
+
+function boxRowsOf(frame: string): string[] {
+  return frame.split('\n').slice(2, 6);
+}
+
+function boxBlock(model: string, account: string, highModel: string, highAccount: string): string[] {
+  return [
+    BOX_TOP,
+    `| ${model.padEnd(31)} |  | ${highModel.padEnd(31)} |`,
+    `| ${account.padEnd(31)} |  | ${highAccount.padEnd(31)} |`,
+    BOX_BOTTOM
+  ];
+}
+
+function evaporatingUsage(id: string, fetchedAt: string, resetsAt: string): Usage {
+  return { id, displayName: id, planLabel: 'plan', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt }], fetchedAt, status: 'ok' };
+}
+
+describe('route boxes', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date(START));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows animated probing boxes until every probe of the first round settles', async () => {
+    const session = startSession();
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('⠋ probing…', '', '⠋ probing…', ''));
+    session.probes.slice(0, 6).forEach(({ probe, calls }) => calls[0].resolve(usageOf(probe.id, calls[0].now)));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('⠋ probing…', '', '⠋ probing…', ''));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('⠙ probing…', '', '⠙ probing…', ''));
+    session.probes[6].calls[0].resolve(usageOf('kilo', session.probes[6].calls[0].now));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('claude-opus-5 high', 'claude', 'claude-fable-5-1 max', 'claude'));
+    session.press('q');
+    await session.finished;
+  });
+
+  it('keeps the previous round’s boxes while a refresh runs and recomputes them when it settles', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '100000' } });
+    await session.settleRound(0);
+    const settled = boxBlock('claude-opus-5 high', 'claude', 'claude-fable-5-1 max', 'claude');
+    expect(boxRowsOf(session.lastFrame())).toEqual(settled);
+    session.press('r');
+    expect(session.lastFrame().split('\n')[0]).toContain('refreshing…');
+    expect(boxRowsOf(session.lastFrame())).toEqual(settled);
+    const down: Usage = { id: 'claude', displayName: 'claude', windows: [], fetchedAt: START, status: 'unavailable', reason: 'gone' };
+    session.probes.slice(0, 6).forEach(({ probe, calls }) => calls[1].resolve(probe.id === 'claude' ? down : usageOf(probe.id, calls[1].now)));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(boxRowsOf(session.lastFrame())).toEqual(settled);
+    session.probes[6].calls[1].resolve(usageOf('kilo', session.probes[6].calls[1].now));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('gemini-3.1-pro-high medium', 'agy', 'kimi-k3-max', 'cursor'));
+    session.press('q');
+    await session.finished;
+  });
+
+  it('recomputes both boxes on the same frame when space toggles the selected provider', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press('j');
+    session.press(' ');
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('gemini-3.1-pro-high medium', 'agy', 'kimi-k3-max', 'cursor'));
+    expect(session.saved().at(-1)).toEqual({ claude: false });
+    session.press(' ');
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('claude-opus-5 high', 'claude', 'claude-fable-5-1 max', 'claude'));
+    expect(session.saved().at(-1)).toEqual({ claude: true });
+    session.press('q');
+    await session.finished;
+  });
+
+  it('routes by the session zone, so boxes in two zones can differ on the same results', async () => {
+    const resetsAt = '2026-09-13T22:30:00.000Z';
+    const overrides = () => Object.fromEntries(IDS.map((id) => [id, evaporatingUsage(id, START, resetsAt)]));
+    const utc = startSession();
+    await utc.settleRound(0, overrides());
+    expect(boxRowsOf(utc.lastFrame())[1]).toBe(`| ${'claude-opus-5 max'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    utc.press('q');
+    await utc.finished;
+    const plusTwo = startSession({ zone: 'Etc/GMT-2' });
+    await plusTwo.settleRound(0, overrides());
+    expect(boxRowsOf(plusTwo.lastFrame())[1]).toBe(`| ${'claude-opus-5 high'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    plusTwo.press('q');
+    await plusTwo.finished;
+  });
+
+  it('recomputes the boxes from the frame time, flipping when a reset passes between rounds', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '100000' } });
+    await session.settleRound(0, Object.fromEntries(IDS.map((id) => [id, evaporatingUsage(id, START, '2026-09-13T10:30:00.000Z')])));
+    expect(boxRowsOf(session.lastFrame())[1]).toBe(`| ${'claude-opus-5 max'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    await vi.advanceTimersByTimeAsync(31 * 60 * 1000);
+    expect(boxRowsOf(session.lastFrame())[1]).toBe(`| ${'claude-opus-5 high'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    session.press('q');
+    await session.finished;
   });
 });

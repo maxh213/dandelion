@@ -17,12 +17,16 @@ type LiveOptions = {
   keyboard: Keyboard;
   stopChildren(): Promise<void>;
   eligibility: Eligibility;
+  zone: string;
 };
 
 type Timer = ReturnType<typeof setTimeout>;
 
+type SettledRound = NonNullable<LiveSlot['usage']>[];
+
 type Session = LiveOptions & {
   results: LiveSlot['usage'][];
+  settled: SettledRound | undefined;
   noColor: boolean;
   refreshMs: number;
   spinner: number;
@@ -65,6 +69,8 @@ function viewOf(session: Session): LiveView {
     refreshing: session.running === true && session.rounds > 1,
     footer: session.footer,
     ineligible: session.eligibility.ineligible(),
+    zone: session.zone,
+    settled: session.settled,
     selected: session.selected,
     flash: session.flash
   };
@@ -97,6 +103,7 @@ function settle(session: Session, index: number, usage: LiveSlot['usage']): void
 
 function endRound(session: Session): void {
   session.running = false;
+  session.settled = session.results.filter((usage) => usage !== undefined);
   if (session.quitting) return;
   session.refreshTimer = setTimeout(() => refresh(session), session.refreshMs);
   draw(session);
@@ -198,6 +205,7 @@ export function startLive(options: LiveOptions): Promise<void> {
     const session: Session = {
       ...options,
       results: options.probes.map(() => undefined),
+      settled: undefined,
       noColor: options.env['NO_COLOR'] !== undefined,
       refreshMs: refreshMsOf(options.env),
       spinner: 0,

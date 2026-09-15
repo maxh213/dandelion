@@ -1,6 +1,10 @@
 import {
   HOT_PCT,
+  NO_ROUTE,
   formatCountdown,
+  highRouteLine,
+  nextLocalMidnight,
+  routeLine,
   summariseFleet,
   type Balance,
   type FleetReset,
@@ -23,6 +27,13 @@ const REFRESHING = 'refreshing…';
 const HELP_FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
 const ROUTING_OFF = 'routing off';
 const MARKER = '▸ ';
+const BOX_WIDTH = 35;
+const BOX_TEXT = 31;
+const BOX_GAP = '  ';
+const ROUTE_TITLE = 'route';
+const HIGH_TITLE = 'route --high';
+const NO_SUBSCRIPTION = 'no subscription available';
+const PROBING = 'probing…';
 
 export type PanelMarks = { selected: boolean; ineligible: boolean; caption?: string };
 
@@ -234,6 +245,8 @@ export type LiveView = {
   refreshing: boolean;
   footer: boolean;
   ineligible: string[];
+  zone: string;
+  settled?: ProviderUsage[];
   selected?: number;
   flash?: Flash;
 };
@@ -289,9 +302,76 @@ function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: strin
   return slot.usage === undefined ? pendingPanel(slot.id, spinner, noColor, marks) : renderPanel(slot.usage, noColor, now, marks);
 }
 
+type BoxAnswer = { model: string; account: string; dimmed: boolean };
+
+function boxTop(title: string, noColor: boolean): string {
+  const [corner, line] = noColor ? ['+', '-'] : ['┌', '─'];
+  const head = `${corner}${line} ${title} `;
+  return `${head}${repeatChar(line, BOX_WIDTH - cellCount(head) - 1)}${noColor ? '+' : '┐'}`;
+}
+
+function boxBottom(noColor: boolean): string {
+  return noColor ? `+${repeatChar('-', BOX_WIDTH - 2)}+` : `└${repeatChar('─', BOX_WIDTH - 2)}┘`;
+}
+
+function boxSide(noColor: boolean): string {
+  return noColor ? '|' : '│';
+}
+
+function boxText(text: string): string {
+  return ` ${cutCells(text, BOX_TEXT).padEnd(BOX_TEXT)} `;
+}
+
+function dimBoxRow(content: string, noColor: boolean): string {
+  return dim(`${boxSide(noColor)}${content}${boxSide(noColor)}`, noColor);
+}
+
+function modelBoxRow(content: string, noColor: boolean): string {
+  const side = dim(boxSide(noColor), noColor);
+  return `${side}${styled(content, BOLD, noColor)}${side}`;
+}
+
+function plainBoxRow(content: string, noColor: boolean): string {
+  const side = dim(boxSide(noColor), noColor);
+  return `${side}${content}${side}`;
+}
+
+function splitRouteLine(line: string): BoxAnswer {
+  if (line === NO_ROUTE) return { model: NO_ROUTE, account: NO_SUBSCRIPTION, dimmed: true };
+  const at = line.lastIndexOf(' ');
+  return { model: line.slice(0, at), account: line.slice(at + 1), dimmed: false };
+}
+
+function probingAnswer(spinner: number): BoxAnswer {
+  return { model: `${SPINNER_FRAMES[spinner % SPINNER_FRAMES.length]} ${PROBING}`, account: '', dimmed: true };
+}
+
+function boxAnswers(view: LiveView, now: string): [BoxAnswer, BoxAnswer] {
+  if (view.settled === undefined) return [probingAnswer(view.spinner), probingAnswer(view.spinner)];
+  const midnight = nextLocalMidnight(view.zone, now);
+  return [
+    splitRouteLine(routeLine(view.settled, now, midnight, view.ineligible)),
+    splitRouteLine(highRouteLine(view.settled, view.ineligible))
+  ];
+}
+
+function renderBox(title: string, answer: BoxAnswer, noColor: boolean): string[] {
+  const top = dim(boxTop(title, noColor), noColor);
+  const bottom = dim(boxBottom(noColor), noColor);
+  if (answer.dimmed) return [top, dimBoxRow(boxText(answer.model), noColor), dimBoxRow(boxText(answer.account), noColor), bottom];
+  return [top, modelBoxRow(boxText(answer.model), noColor), plainBoxRow(boxText(answer.account), noColor), bottom];
+}
+
+function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
+  const [headroom, high] = boxAnswers(view, now);
+  const left = renderBox(ROUTE_TITLE, headroom, noColor);
+  const right = renderBox(HIGH_TITLE, high, noColor);
+  return left.map((line, row) => `${line}${BOX_GAP}${right[row]}`);
+}
+
 export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
   const usages = settledUsages(view.slots);
   const panels = view.slots.map((slot, index) => livePanel(slot, view.spinner, noColor, now, slotMarks(view, slot, index)));
   const footer = view.footer ? [dim(HELP_FOOTER, noColor)] : [];
-  return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...panels, ...footer].join('\n');
+  return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...routeBoxes(view, noColor, now), ...panels, ...footer].join('\n');
 }
