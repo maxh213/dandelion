@@ -1701,10 +1701,11 @@ describe('route eligibility state file', () => {
     await quit(dashboard);
   });
 
-  it.each<[string, (root: string) => string, (root: string) => void, (root: string) => string]>([
-    ['a parent that is a file', (root) => join(root, 'blocked', 'eligibility.json'), (root) => writeFileSync(join(root, 'blocked'), ''), (root) => root],
-    ['a non-empty directory at the path', (root) => join(root, 'state', 'eligibility.json'), (root) => mkdirSync(join(root, 'state', 'eligibility.json', 'keep'), { recursive: true }), (root) => join(root, 'state')]
-  ])('flashes routing state not saved and leaves no temp file behind with %s', async (_case, pathOf, block, dirOf) => {
+  it.each<[string, (root: string) => string, (root: string) => void, (root: string) => string, (root: string) => void]>([
+    ['a parent that is a file', (root) => join(root, 'blocked', 'eligibility.json'), (root) => writeFileSync(join(root, 'blocked'), ''), (root) => root, (root) => rmSync(join(root, 'blocked'))],
+    ['a non-empty directory at the path', (root) => join(root, 'state', 'eligibility.json'), (root) => mkdirSync(join(root, 'state', 'eligibility.json', 'keep'), { recursive: true }), (root) => join(root, 'state'), (root) => rmSync(join(root, 'state', 'eligibility.json'), { recursive: true })],
+    ['a directory that cannot be written', (root) => join(root, 'locked', 'eligibility.json'), (root) => { mkdirSync(join(root, 'locked')); chmodSync(join(root, 'locked'), 0o555); }, (root) => join(root, 'locked'), (root) => chmodSync(join(root, 'locked'), 0o755)]
+  ])('flashes routing state not saved and leaves no temp file behind with %s', async (_case, pathOf, block, dirOf, unblock) => {
     block(scratch);
     const entries = readdirSync(dirOf(scratch)).sort();
     const dashboard = await settledDashboard(routedRunner(), { DANDELION_STATE_FILE: pathOf(scratch) });
@@ -1713,7 +1714,7 @@ describe('route eligibility state file', () => {
     expect(dashboard.lastFrame()).toContain('\nrouting state not saved\n');
     expect(dashboard.lastFrame()).not.toContain('routing off');
     expect(readdirSync(dirOf(scratch)).sort()).toEqual(entries);
-    rmSync(join(pathOf(scratch), '..', pathOf(scratch).endsWith(join('blocked', 'eligibility.json')) ? '' : 'eligibility.json'), { recursive: true });
+    unblock(scratch);
     dashboard.press(' ');
     expect(JSON.parse(readFileSync(pathOf(scratch), 'utf8'))).toEqual({ claude: false });
     expect(headerOf(dashboard.lastFrame(), 'claude')).toBe(`▸ claude${' '.repeat(53)}routing off`);

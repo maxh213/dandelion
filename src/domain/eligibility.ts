@@ -1,5 +1,5 @@
 export type StateFile = {
-  read(path: string): string | undefined;
+  read(path: string): string;
   replace(path: string, text: string): boolean;
 };
 
@@ -17,21 +17,17 @@ function statePath(env: Record<string, string | undefined>, homeDir: string): st
   return env['DANDELION_STATE_FILE'] || `${stateHome}/${STATE_FILE}`;
 }
 
-function parsedJson(text: string | undefined): unknown {
-  try {
-    return JSON.parse(text ?? '');
-  } catch {
-    return undefined;
-  }
-}
-
 function isPlainObject(value: unknown): value is State {
   return Object.prototype.toString.call(value) === '[object Object]';
 }
 
-function parsedState(text: string | undefined): State {
-  const value = parsedJson(text);
-  return isPlainObject(value) ? value : {};
+function readState(file: StateFile, path: string): State {
+  try {
+    const value: unknown = JSON.parse(file.read(path));
+    return isPlainObject(value) ? value : {};
+  } catch {
+    return {};
+  }
 }
 
 function serialized(state: State): string {
@@ -44,7 +40,7 @@ function toggled(state: State, id: string): State {
 
 export function openEligibility(env: Record<string, string | undefined>, homeDir: string, file: StateFile): Eligibility {
   const path = statePath(env, homeDir);
-  const held = { state: parsedState(file.read(path)) };
+  const held = { state: readState(file, path) };
   return {
     ineligible: () => Object.keys(held.state).filter((id) => held.state[id] === false),
     toggle(id) {

@@ -196,12 +196,8 @@ function probeOnce(io: ProbeIo, env: Record<string, string | undefined>, now: st
   return Promise.all(providerProbes(io, env).map(({ probe }) => probe(now)));
 }
 
-function readText(path: string): string | undefined {
-  try {
-    return readFileSync(path, 'utf8');
-  } catch {
-    return undefined;
-  }
+function readText(path: string): string {
+  return String(readFileSync(path));
 }
 
 function renameOver(path: string, text: string): boolean {

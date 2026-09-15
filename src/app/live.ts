@@ -30,7 +30,7 @@ type Session = LiveOptions & {
   running?: boolean;
   rounds: number;
   quitting: boolean;
-  selected?: number;
+  selected: number;
   flash?: Flash;
   frameTimer?: Timer;
   refreshTimer?: Timer;
@@ -122,10 +122,13 @@ function toggleFooter(session: Session): void {
   draw(session);
 }
 
-function move(session: Session, step: number): void {
-  const last = session.probes.length - 1;
-  const from = session.selected ?? (step > 0 ? -1 : last + 1);
-  session.selected = Math.min(last, Math.max(0, from + step));
+function moveDown(session: Session): void {
+  session.selected = Math.min(session.probes.length - 1, session.selected + 1);
+  draw(session);
+}
+
+function moveUp(session: Session): void {
+  session.selected = session.selected < 0 ? session.probes.length - 1 : Math.max(0, session.selected - 1);
   draw(session);
 }
 
@@ -152,10 +155,8 @@ function toggleSettled(session: Session, index: number, usage: LiveSlot['usage']
 }
 
 function toggleSelected(session: Session): void {
-  const index = session.selected;
-  if (index === undefined) return;
-  const usage = session.results[index];
-  if (usage !== undefined) toggleSettled(session, index, usage);
+  const usage = session.results[session.selected];
+  if (usage !== undefined) toggleSettled(session, session.selected, usage);
 }
 
 async function quit(session: Session): Promise<void> {
@@ -176,10 +177,10 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['?', toggleFooter],
   ['q', quit],
   ['\x03', quit],
-  ['j', (session) => move(session, 1)],
-  ['\x1b[B', (session) => move(session, 1)],
-  ['k', (session) => move(session, -1)],
-  ['\x1b[A', (session) => move(session, -1)],
+  ['j', moveDown],
+  ['\x1b[B', moveDown],
+  ['k', moveUp],
+  ['\x1b[A', moveUp],
   [' ', toggleSelected]
 ]);
 
@@ -202,6 +203,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       spinner: 0,
       footer: false,
       rounds: 0,
+      selected: -1,
       quitting: false,
       done
     };

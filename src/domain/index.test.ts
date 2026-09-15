@@ -132,6 +132,7 @@ describe('eligibility state', () => {
     const file: StateFile = {
       read: (path) => {
         reads.push(path);
+        if (text === undefined) throw new Error(`ENOENT: ${path}`);
         return text;
       },
       replace: (path, bytes) => {
