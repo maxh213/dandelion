@@ -46,7 +46,7 @@ Feature: 013 - Route boxes at the top of the live dashboard
       | model   | "\e[90m│\e[0m\e[1m claude-opus-5 high" + " " x14 + "\e[0m\e[90m│\e[0m"         |
       | account | "\e[90m│\e[0m claude-work" + " " x21 + "\e[90m│\e[0m"                          |
       | bottom  | "\e[90m└" + "─" x33 + "┘\e[0m"                                                 |
-    And the right box follows the same rules with title "route --high" and model line "\e[1m claude-fable-5-1 max" + " " x11 + "\e[0m"
+    And the right box follows the same rules with title "route --high" and model line "\e[1m claude-fable-5-1 max" + " " x12 + "\e[0m"
     And a "none" or "probing…" row is one dim span, borders included, such as "\e[90m│ none" + " " x28 + "│\e[0m"
     And the two boxes are joined by exactly two spaces
 

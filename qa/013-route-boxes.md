@@ -5,7 +5,7 @@ Earlier procedures are unchanged by 013. The live dashboard gains four lines bet
 Set up once in the repo root, in a real terminal (bash, util-linux `script`). First run the set-up blocks of `qa/010-route-command.md` and `qa/012-route-high.md`, so `$RX`, `$RH`, `$TZQ`, `$ST`, the `q` fixture, `rt`, `$RX/h` and `rh` exist and the cursor fixture still serves port 48010. Then add `bv`, which runs the live dashboard against the 012 claude fixture (`$RX/h` first on PATH), taking an optional override dir in `$PRE` and `NC=1` for NO_COLOR; `$SL` holds a kilo that waits 3 s; `$FIX` is the full healthy fixture (personal 3/86/100, work 0/12/23, the other providers healthy). `$CAP` is a capture file.
 
 ```bash
-export SL="$(mktemp -d)" CAP="$(mktemp)"; printf '#!/bin/sh\nsleep 3\necho "Balance: $14.15"\n' > "$SL/kilo"; chmod +x "$SL/kilo"
+export SL="$(mktemp -d)" CAP="$(mktemp)"; printf '#!/bin/sh\nsleep 3\necho '\''Balance: $14.15'\''\n' > "$SL/kilo"; chmod +x "$SL/kilo"
 FIX=(H_CLAUDE=3,86,100 H_WORK=0,12,23 Q_AGY=50,50,72 Q_KIMI=85,85,72 Q_GROK=90,72 Q_CURSOR=80,72)
 bv() { env -i HOME="$RH" TZ="$TZQ" PATH="${PRE:+$PRE:}$RX/h:$RX:$NODEBIN" TERM="$TERM" ${NC:+NO_COLOR=1} DANDELION_KIMI_PORT=$KQ DANDELION_CURSOR_API_BASE=http://127.0.0.1:48010 DANDELION_STATE_FILE="$ST" "$@" sh -c 'q prep && node "$1/src/main.ts"; echo "exit=$?"' - "$PWD"; }; export -f bv
 ```
