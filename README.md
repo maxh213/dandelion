@@ -2,6 +2,8 @@
 
 Dandelion is a terminal dashboard that shows how much of your AI allowances you have left: subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, and the API balance for `kilo`.
 
+Called dandelion because dandelion seeds can lay dormant for a period of time before bursting into life. It's why they're such a prolific weed. But anyway this fits the naming convention I started with marestail and also it's sort of similar to you'll use up a session window for an llm then it will come back lol.
+
 ## Providers
 
 Panels always appear in this order. A provider whose CLI is missing, fails, times out or prints unexpected output renders as a dim panel with the reason.
