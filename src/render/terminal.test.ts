@@ -577,6 +577,19 @@ describe('route boxes', () => {
     expect([rowText(lines[1], 1), rowText(lines[2], 1)]).toEqual([cut31(high[0]), high[1]]);
   });
 
+  it('recomputes the cached midnight once the frame time passes it', () => {
+    const view = boxView([ok('claude', [weekly(86, '2026-09-14T01:30:00.000Z')])], { zone: 'Etc/GMT-2' });
+    expect(rowText(boxLines(view, true, '2026-09-13T21:00:00.000Z')[1], 0)).toBe('claude-opus-5 high');
+    expect(rowText(boxLines(view, true, '2026-09-13T21:30:00.000Z')[1], 0)).toBe('claude-opus-5 high');
+    expect(rowText(boxLines(view, true, '2026-09-13T23:00:00.000Z')[1], 0)).toBe('claude-opus-5 max');
+  });
+
+  it('recomputes the cached midnight when the frame time moves backwards', () => {
+    boxLines(boxView([ok('claude', [weekly(10)])]), true, '2026-09-14T23:00:00.000Z');
+    const view = boxView([ok('claude', [weekly(86, '2026-09-14T10:00:00.000Z')])]);
+    expect(rowText(boxLines(view, true, '2026-09-13T09:00:00.000Z')[1], 0)).toBe('claude-opus-5 high');
+  });
+
   it('never marks a box line as selected', () => {
     const lines = renderLiveFrame(boxView(ROUTED, { selected: 0, slots: [{ id: 'claude', usage: ROUTED[0] }] }), true, NOW).split('\n');
     expect(lines.slice(2, 6).join('\n')).not.toContain('▸');

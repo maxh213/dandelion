@@ -348,9 +348,25 @@ function probingAnswer(spinner: number): BoxAnswer {
   return { model: probingLine(spinner), account: '', dimmed: true };
 }
 
+type MidnightCache = { zone: string; fromMs: number; midnightMs: number; midnight: string };
+
+let midnightCache: MidnightCache | undefined;
+
+function cacheHolds(cache: MidnightCache, zone: string, nowMs: number): boolean {
+  return cache.zone === zone && nowMs >= cache.fromMs && nowMs < cache.midnightMs;
+}
+
+function cachedMidnight(zone: string, now: string): string {
+  const nowMs = Date.parse(now);
+  if (midnightCache !== undefined && cacheHolds(midnightCache, zone, nowMs)) return midnightCache.midnight;
+  const midnight = nextLocalMidnight(zone, now);
+  midnightCache = { zone, fromMs: nowMs, midnightMs: Date.parse(midnight), midnight };
+  return midnight;
+}
+
 function boxAnswers(view: LiveView, now: string): [BoxAnswer, BoxAnswer] {
   if (view.settled === undefined) return [probingAnswer(view.spinner), probingAnswer(view.spinner)];
-  const midnight = nextLocalMidnight(view.zone, now);
+  const midnight = cachedMidnight(view.zone, now);
   return [
     splitRouteLine(routeLine(view.settled, now, midnight, view.ineligible)),
     splitRouteLine(highRouteLine(view.settled, view.ineligible))
