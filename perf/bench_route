@@ -24,7 +24,8 @@ const TARGETS = {
   routeHeadroom: 'routeLine eight providers headroom (in-process, per call)',
   routeNone: 'routeLine eight providers nothing to route (in-process, per call)',
   midnightUtc: 'nextLocalMidnight UTC (in-process, per call)',
-  midnightBerlinDst: 'nextLocalMidnight Europe/Berlin DST end (in-process, per call)'
+  midnightBerlinDst: 'nextLocalMidnight Europe/Berlin DST end (in-process, per call)',
+  processZone: 'processZone system zone (in-process, per call)'
 };
 
 const HIGH_TARGETS = {
@@ -139,6 +140,13 @@ try {
   emit(TARGETS.routeNone, perCallSync(ITERATIONS, () => domain.routeLine(nothing, NOW, MIDNIGHT, [])), 'us');
   emit(TARGETS.midnightUtc, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('UTC', NOW)), 'us');
   emit(TARGETS.midnightBerlinDst, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z')), 'us');
+
+  if (typeof app.processZone === 'function') {
+    app.processZone();
+    emit(TARGETS.processZone, perCallSync(ITERATIONS, () => app.processZone()), 'us');
+  } else {
+    absent(TARGETS.processZone);
+  }
 
   if (!hasHigh) {
     absent(...Object.values(HIGH_TARGETS));

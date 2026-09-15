@@ -61,7 +61,7 @@ async function session(startLive, probes) {
   const screen = { write: (text) => (bytes += text.length) };
   const settled = [];
   const tracked = probes.map(({ id, probe }) => ({ id, probe: (now) => { const p = probe(now); settled.push(p); return p; } }));
-  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true } });
+  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, zone: 'UTC' });
   await Promise.allSettled(settled);
   await new Promise((resolve) => setImmediate(resolve));
   keyboard.press('q');
@@ -84,7 +84,7 @@ try {
 
   const render = await import(pathToFileURL(renderEntry).href);
   if (render.renderLiveFrame) {
-    const settledView = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [] };
+    const settledView = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: 'UTC', settled: usages };
     const pendingView = { slots: usages.map(({ id }) => ({ id, usage: undefined })), spinner: 3, refreshing: false, footer: false, ineligible: [] };
     render.renderLiveFrame(settledView, false, NOW);
     render.renderLiveFrame(pendingView, false, NOW);

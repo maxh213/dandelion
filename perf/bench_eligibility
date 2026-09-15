@@ -113,7 +113,7 @@ const fleet = [
   { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
 ];
 const INELIGIBLE = ['claude', 'codex'];
-const frameView = { slots: fleet.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: INELIGIBLE, selected: 7, flash: { index: 7, message: 'not routable (no usage windows)' } };
+const frameView = { slots: fleet.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: INELIGIBLE, zone: 'Europe/London', settled: fleet, selected: 7, flash: { index: 7, message: 'not routable (no usage windows)' } };
 
 const memoryFile = { read: () => STATE_TEXT, replace: () => true };
 const held = domain.openEligibility({}, fixture, memoryFile);
