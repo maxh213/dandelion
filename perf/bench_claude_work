@@ -150,7 +150,8 @@ try {
   const terminal = existsSync(terminalEntry) ? await import(pathToFileURL(terminalEntry).href) : {};
   if (terminal.renderLiveFrame) {
     const view = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: 'UTC', settled: usages };
-    terminal.renderLiveFrame(view, false, NOW);
+    const settledOnce = terminal.renderLiveFrame(view, false, NOW);
+    if (terminal.renderLiveFrame(view, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
     emit(TARGETS.frame, perCallSync(ITERATIONS, () => terminal.renderLiveFrame(view, false, NOW)), 'us');
   } else {
     absent(TARGETS.frame);

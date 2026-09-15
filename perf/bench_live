@@ -86,7 +86,8 @@ try {
   if (render.renderLiveFrame) {
     const settledView = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: 'UTC', settled: usages };
     const pendingView = { slots: usages.map(({ id }) => ({ id, usage: undefined })), spinner: 3, refreshing: false, footer: false, ineligible: [] };
-    render.renderLiveFrame(settledView, false, NOW);
+    const settledOnce = render.renderLiveFrame(settledView, false, NOW);
+    if (render.renderLiveFrame(settledView, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
     render.renderLiveFrame(pendingView, false, NOW);
     emit(TARGETS.frameSettled, perCallSync(ITERATIONS, () => render.renderLiveFrame(settledView, false, NOW)), 'us');
     emit(TARGETS.framePending, perCallSync(ITERATIONS, () => render.renderLiveFrame(pendingView, false, NOW)), 'us');

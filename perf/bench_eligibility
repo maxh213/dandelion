@@ -161,6 +161,7 @@ try {
   expect((await app.runApp(stubIo, appEnv, NOW)).includes('routing off'), true, 'runApp tags claude');
   expect(render.renderDashboard(fleet, false, NOW, INELIGIBLE).split('routing off').length, 3, 'dashboard tags');
   expect(render.renderLiveFrame(frameView, false, NOW).includes('not routable'), true, 'frame flash');
+  expect(render.renderLiveFrame(frameView, false, NOW), render.renderLiveFrame(frameView, false, NOW), 'settled frame stable across identical renders');
   await liveSession();
   expect(readFileSync(liveStateFile, 'utf8'), `${JSON.stringify({ claude: true }, null, 2)}\n`, 'live state file');
 
