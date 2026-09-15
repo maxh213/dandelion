@@ -188,12 +188,25 @@ describe('main', () => {
     const before = new Date().toISOString();
     await runIfMain(MAIN_URL, MAIN, routeIo, proc);
     const after = new Date().toISOString();
-    expect(output()).toBe('claude-opus-5 high\n');
+    expect(output()).toBe('claude-opus-5 high claude\n');
     expect(keyboard.setRawMode).not.toHaveBeenCalled();
     expect(proc.exit).not.toHaveBeenCalled();
     const [io, env, now, zone] = vi.mocked(runRoute).mock.calls[0];
     expect([io, env, zone]).toEqual([routeIo, proc.env, Intl.DateTimeFormat().resolvedOptions().timeZone]);
     expect(now >= before && now <= after).toBe(true);
+  });
+
+  it.each<[string[], boolean, string]>([
+    [['route', '--high'], true, 'claude-fable-5-1 max claude\n'],
+    [['route', 'extra', '--high'], true, 'claude-fable-5-1 max claude\n'],
+    [['route'], false, 'claude-opus-5 high claude\n'],
+    [['route', '--High'], false, 'claude-opus-5 high claude\n']
+  ])('runIfMain %j uses the --high chain only when an exact --high follows route', async (args, high, line) => {
+    vi.mocked(runRoute).mockClear();
+    const { proc, output } = procOf(['node', MAIN, ...args], false, false);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(output()).toBe(line);
+    expect(vi.mocked(runRoute).mock.calls[0][4]).toBe(high);
   });
 
   it('runIfMain route prints none and exits 1 when nothing routes', async () => {
@@ -203,7 +216,7 @@ describe('main', () => {
     expect(proc.exit).toHaveBeenCalledWith(1);
   });
 
-  it.each([[['--once', 'route']], [['routes']]])('runIfMain keeps the dashboard for %j', async (args) => {
+  it.each([[['--once', 'route']], [['routes']], [['--once', 'route', '--high']]])('runIfMain keeps the dashboard for %j', async (args) => {
     vi.mocked(runRoute).mockClear();
     const { proc, output } = procOf(['node', MAIN, ...args], true, false);
     await runIfMain(MAIN_URL, MAIN, profileIo, proc);
@@ -221,7 +234,7 @@ describe('main', () => {
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
       const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const routed = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
-      expect([routed.stdout, routed.stderr, routed.status]).toEqual(['claude-opus-5 high\n', '', 0]);
+      expect([routed.stdout, routed.stderr, routed.status]).toEqual(['claude-opus-5 high claude\n', '', 0]);
       rmSync(join(dir, 'claude'));
       const none = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
       expect([none.stdout, none.stderr, none.status]).toEqual(['none\n', '', 1]);
@@ -400,6 +413,25 @@ describe('main', () => {
       '| grok | `grok-4.6` | `grok-4.6` |',
       '| cursor | `kimi-k3-max` | `kimi-k3-max` |'
     ]) expect(route).toContain(row);
+  });
+
+  it('README documents route --high and the account token', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const commands = readme.split('## Run Commands')[1].split('## ')[0];
+    expect(commands).toMatch(/^- `dandelion route --high` \(or `npm start -- route --high`\) - .*strongest model.*prints `none` and exits 1/m);
+    const route = readme.split('## Route')[1].split('## ')[0];
+    for (const row of [
+      '| 1 | claude, claude-work | `fable`: the Fable weekly window plus session | `claude-fable-5-1 max` |',
+      '| 2 | cursor | (all) | `kimi-k3-max` |',
+      '| 3 | claude, claude-work | (all) | `claude-opus-5 max` |',
+      '| 4 | grok | (all) | `grok-4.6 xhigh` |',
+      '| 5 | agy | (all) | `gemini-3.8-flash-high high` |'
+    ]) expect(route).toContain(row);
+    expect(route).toMatch(/except the windows another entry of the same provider matches/);
+    expect(route).toMatch(/every gating window is under 90% used; at 90% it pops down/);
+    expect(route).toMatch(/Ineligible, unavailable and failed providers are skipped/);
+    expect(route).toMatch(/both `route` and `route --high` print `<line> <provider id>`/);
+    expect(route).toMatch(/`claude-work` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_WORK_CONFIG_DIR` \(default `~\/\.claude-work`\)/);
   });
 
   it('README documents route eligibility', () => {

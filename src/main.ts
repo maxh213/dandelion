@@ -23,7 +23,7 @@ export async function main(
 
 async function route(io: ProbeIo, proc: Proc): Promise<void> {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const { line, routed } = await runRoute(io, proc.env, new Date().toISOString(), zone);
+  const { line, routed } = await runRoute(io, proc.env, new Date().toISOString(), zone, proc.argv.slice(3).includes('--high'));
   proc.stdout.write(`${line}\n`);
   if (!routed) proc.exit(1);
 }

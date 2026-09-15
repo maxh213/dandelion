@@ -22,7 +22,8 @@ All eight probes run in parallel. Window gauges are coloured by usage: below 50%
 - `npm start` - Run the live dashboard: panels fill in as each probe settles, a fleet summary line shows how many windows are above 80% and the next reset, and everything is re-probed every `DANDELION_REFRESH_SECONDS`. Keys: `↑↓/jk select` a panel, `space routing on/off` for the selected provider, `r` refresh, `q` quit (or Ctrl-C), `?` help.
 - `npm start -- --once` - Run the dashboard once and exit
 - `dandelion` - Run the live dashboard from anywhere after `npm link`; `dandelion --once` runs it once and exits
-- `dandelion route` (or `npm start -- route`) - Run every probe once and print one line naming the subscription to use right now, such as `claude-opus-5 max`, then exit; it prints `none` and exits 1 when no provider can be routed. It never draws the dashboard, even on a terminal.
+- `dandelion route` (or `npm start -- route`) - Run every probe once and print one line naming the subscription to use right now, such as `claude-opus-5 max claude`, then exit; it prints `none` and exits 1 when no provider can be routed. It never draws the dashboard, even on a terminal.
+- `dandelion route --high` (or `npm start -- route --high`) - Run every probe once and print one line naming the strongest model that still has quota, such as `claude-fable-5-1 max claude-work`, then exit; it prints `none` and exits 1 when no chain entry is available. It never draws the dashboard, even on a terminal.
 - `npm test` - Run unit tests
 - `npm run qa` - Run E2E tests
 
@@ -30,7 +31,7 @@ The app runs once when stdout or stdin is not a terminal, as if `--once` were gi
 
 ## Route
 
-`route` must be the first argument; later arguments are ignored. It routes among `claude`, `claude-work`, `agy`, `kimi`, `grok` and `cursor`, in dashboard order, taking each one that is ok and has at least one usage window. `kilo` is never routed, because it reports a balance rather than windows, and `codex` is never routed, because it has no subscription windows to route on.
+`route` must be the first argument; later arguments are ignored, except that `--high` anywhere after it switches to the quality chain below. It routes among `claude`, `claude-work`, `agy`, `kimi`, `grok` and `cursor`, in dashboard order, taking each one that is ok and has at least one usage window. `kilo` is never routed, because it reports a balance rather than windows, and `codex` is never routed, because it has no subscription windows to route on.
 
 Each window is rolling (claude session, kimi 5h, agy Five Hour Limit), weekly (any other label containing "week", grok credits, cursor total, auto and api) or other, which route ignores. A window's left is 100 minus its used percent, compared without rounding.
 
@@ -49,6 +50,20 @@ Eligibility: ineligible providers are dropped before both rules, so an ineligibl
 | kimi | `kimi-code/kimi-for-coding-highspeed` | `kimi-code/kimi-for-coding-highspeed` |
 | grok | `grok-4.6` | `grok-4.6` |
 | cursor | `kimi-k3-max` | `kimi-k3-max` |
+
+Account token: both `route` and `route --high` print `<line> <provider id>`, such as `claude-opus-5 high claude-work` or `kimi-k3-max cursor`, because several providers share a line and the account decides how to launch it; `none` stays alone. `claude` launches claude as usual, `claude-work` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_WORK_CONFIG_DIR` (default `~/.claude-work`), and every other id launches its own CLI.
+
+Route --high: quality first, with no evaporation rule and no headroom comparison. It walks this chain from rank 1 down and prints the line of the first available entry:
+
+| rank | providers | gating windows | line |
+|---|---|---|---|
+| 1 | claude, claude-work | `fable`: the Fable weekly window plus session | `claude-fable-5-1 max` |
+| 2 | cursor | (all) | `kimi-k3-max` |
+| 3 | claude, claude-work | (all) | `claude-opus-5 max` |
+| 4 | grok | (all) | `grok-4.6 xhigh` |
+| 5 | agy | (all) | `gemini-3.8-flash-high high` |
+
+An entry with a matcher is gated on the windows whose label contains the matcher in any case, plus every rolling window; a matched window the account does not report counts as 0% used. An (all) entry is gated on every window the provider reports, except the windows another entry of the same provider matches, so `claude-opus-5 max` ignores the Fable window. The 90% trip: an entry is available on an account only when the account is eligible, ok with at least one window, and every gating window is under 90% used; at 90% it pops down to the next entry. Ineligible, unavailable and failed providers are skipped, and `kimi`, `codex` and `kilo` are never in the chain. When both claude accounts are available at one rank, the one with more left (100 minus its highest gating used percent) wins, and a tie goes to `claude`. When no entry is available it prints `none` and exits 1.
 
 ## Env-var Ledger
 

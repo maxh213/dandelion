@@ -11,7 +11,7 @@ export {
   type FileReader
 } from './ports.ts';
 
-export { NO_ROUTE, isRoutable, nextLocalMidnight, routeLine, type WindowKind } from './route.ts';
+export { HIGH_CHAIN, NO_ROUTE, highRouteLine, isRoutable, nextLocalMidnight, routeLine, type WindowKind } from './route.ts';
 
 export { openEligibility, type Eligibility, type StateFile } from './eligibility.ts';
 

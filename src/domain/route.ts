@@ -1,6 +1,6 @@
 export type WindowKind = 'rolling' | 'weekly' | 'other';
 
-type RoutableWindow = { kind: WindowKind; usedPct: number; resetsAt?: string };
+type RoutableWindow = { label: string; kind: WindowKind; usedPct: number; resetsAt?: string };
 
 type RoutableUsage = { id: string; status: string; windows: RoutableWindow[] };
 
@@ -72,8 +72,58 @@ export function routeLine(usages: RoutableUsage[], now: string, midnight: string
   const candidates = candidatesOf(eligibleUsages(usages, ineligible));
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
   const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight));
-  if (evaporating.route !== undefined) return evaporating.route.max;
-  return highest(candidates, bindingLeft).route?.standard ?? NO_ROUTE;
+  if (evaporating.route !== undefined) return `${evaporating.route.max} ${evaporating.route.id}`;
+  const roomiest = highest(candidates, bindingLeft).route;
+  return roomiest === undefined ? NO_ROUTE : `${roomiest.standard} ${roomiest.id}`;
+}
+
+type ChainEntry = { rank: number; providers: readonly string[]; matcher?: string; line: string };
+
+export const HIGH_CHAIN: readonly ChainEntry[] = [
+  { rank: 1, providers: ['claude', 'claude-work'], matcher: 'fable', line: 'claude-fable-5-1 max' },
+  { rank: 2, providers: ['cursor'], line: 'kimi-k3-max' },
+  { rank: 3, providers: ['claude', 'claude-work'], line: 'claude-opus-5 max' },
+  { rank: 4, providers: ['grok'], line: 'grok-4.6 xhigh' },
+  { rank: 5, providers: ['agy'], line: 'gemini-3.8-flash-high high' }
+];
+const TRIP_PCT = 90;
+
+type Account = { id: string; used: number };
+
+function matches(window: RoutableWindow, matcher: string): boolean {
+  return window.label.toLowerCase().includes(matcher);
+}
+
+function chainMatchers(id: string): string[] {
+  return HIGH_CHAIN.filter((entry) => entry.providers.includes(id)).flatMap((entry) => entry.matcher ?? []);
+}
+
+function gatingWindows(entry: ChainEntry, usage: RoutableUsage): RoutableWindow[] {
+  const { matcher } = entry;
+  if (matcher !== undefined) return usage.windows.filter((window) => window.kind === 'rolling' || matches(window, matcher));
+  const others = chainMatchers(usage.id);
+  return usage.windows.filter((window) => !others.some((other) => matches(window, other)));
+}
+
+function highestUsed(windows: RoutableWindow[]): number {
+  return Math.max(0, ...windows.map((window) => window.usedPct));
+}
+
+function openAccounts(entry: ChainEntry, usages: RoutableUsage[]): Account[] {
+  return entry.providers.flatMap((id) => {
+    const usage = usages.find((each) => each.id === id);
+    return isRoutable(usage) ? [{ id, used: highestUsed(gatingWindows(entry, usage)) }] : [];
+  }).filter((account) => account.used < TRIP_PCT);
+}
+
+function strongestLine(entry: ChainEntry, usages: RoutableUsage[]): string | undefined {
+  const [best] = openAccounts(entry, usages).sort((a, b) => a.used - b.used);
+  return best === undefined ? undefined : `${entry.line} ${best.id}`;
+}
+
+export function highRouteLine(usages: RoutableUsage[], ineligible: string[]): string {
+  const eligible = eligibleUsages(usages, ineligible);
+  return HIGH_CHAIN.map((entry) => strongestLine(entry, eligible)).find((line) => line !== undefined) ?? NO_ROUTE;
 }
 
 const MIDNIGHT_SEARCH_MS = 48 * 60 * 60 * 1000;

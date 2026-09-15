@@ -33,15 +33,15 @@ process.exit(2);
 const BOTH = { claude: [0, 86, 2], agy: [0, 0, 72] };
 
 const ROUTE_ROWS = [
-  ['no file: 010 output', BOTH, { missing: true }, 'claude-opus-5 max', 0],
-  ['ineligible never wins by evaporation', BOTH, { text: '{"claude": false}' }, 'gemini-3.1-pro-high medium', 0],
-  ['ineligible never wins by headroom', { claude: [20, 30, 72], work: [10, 5, 72], agy: [15, 20, 72] }, { text: '{"claude-work": false, "nope": 1}' }, 'gemini-3.1-pro-high medium', 0],
-  ['true and other values mean eligible', BOTH, { text: '{"claude": true, "agy": "no"}' }, 'claude-opus-5 max', 0],
+  ['no file: 010 output', BOTH, { missing: true }, 'claude-opus-5 max claude', 0],
+  ['ineligible never wins by evaporation', BOTH, { text: '{"claude": false}' }, 'gemini-3.1-pro-high medium agy', 0],
+  ['ineligible never wins by headroom', { claude: [20, 30, 72], work: [10, 5, 72], agy: [15, 20, 72] }, { text: '{"claude-work": false, "nope": 1}' }, 'gemini-3.1-pro-high medium agy', 0],
+  ['true and other values mean eligible', BOTH, { text: '{"claude": true, "agy": "no"}' }, 'claude-opus-5 max claude', 0],
   ['every windowed provider ineligible', { claude: [0, 86, 2] }, { text: '{"claude": false}' }, 'none', 1],
-  ['corrupt file means all eligible', BOTH, { text: '{not json' }, 'claude-opus-5 max', 0],
-  ['JSON null means all eligible', BOTH, { text: 'null' }, 'claude-opus-5 max', 0],
-  ['a JSON array means all eligible', BOTH, { text: '[false]' }, 'claude-opus-5 max', 0],
-  ['unreadable file means all eligible', BOTH, { directory: true }, 'claude-opus-5 max', 0]
+  ['corrupt file means all eligible', BOTH, { text: '{not json' }, 'claude-opus-5 max claude', 0],
+  ['JSON null means all eligible', BOTH, { text: 'null' }, 'claude-opus-5 max claude', 0],
+  ['a JSON array means all eligible', BOTH, { text: '[false]' }, 'claude-opus-5 max claude', 0],
+  ['unreadable file means all eligible', BOTH, { directory: true }, 'claude-opus-5 max claude', 0]
 ];
 
 const temps = [];
@@ -152,7 +152,7 @@ async function defaultStateFilePath(ctx) {
     await writeFile(path, '{"claude": false}');
     if (decoy) assert.equal(await exists(decoy), false, `${label}: a file exists at the HOME default`);
     const result = await node(['route'], box.env);
-    assert.deepEqual(result, { stdout: 'gemini-3.1-pro-high medium\n', stderr: '', status: 0 }, describe(label, result));
+    assert.deepEqual(result, { stdout: 'gemini-3.1-pro-high medium agy\n', stderr: '', status: 0 }, describe(label, result));
   }
 }
 
@@ -282,7 +282,7 @@ async function toggleOffAndOn(ctx) {
     assert.deepEqual(await readdir(box.stateDir), ['eligibility.json']);
     assert.deepEqual(rows(lastFrame(run), 'claude'), claudeRows);
     const routed = await node(['route'], box.env);
-    assert.deepEqual(routed, { stdout: 'gemini-3.1-pro-high medium\n', stderr: '', status: 0 }, describe('route while live', routed));
+    assert.deepEqual(routed, { stdout: 'gemini-3.1-pro-high medium agy\n', stderr: '', status: 0 }, describe('route while live', routed));
     run.child.stdin.write(' ');
     await waitFor(run, () => panelLines(lastFrame(run), 'claude')[0] === '▸ claude', 10000, 'claude tag gone');
     assert.deepEqual(JSON.parse(await readFile(box.statePath, 'utf8')), { claude: true });

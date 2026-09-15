@@ -233,8 +233,8 @@ export async function runApp(io: ProbeIo, env: Record<string, string | undefined
   return renderDashboard(usages, noColor, now, eligibilityOf(io, env).ineligible());
 }
 
-export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, now: string, zone: string): Promise<RouteOutput> {
-  return renderRoute(await probeOnce(io, env, now), now, zone, eligibilityOf(io, env).ineligible());
+export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, now: string, zone: string, high: boolean): Promise<RouteOutput> {
+  return renderRoute(await probeOnce(io, env, now), now, zone, eligibilityOf(io, env).ineligible(), high);
 }
 
 export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {
