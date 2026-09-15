@@ -41,8 +41,12 @@ function candidatesOf(usages: RoutableUsage[]): Candidate[] {
   });
 }
 
+function trips(usedPct: number): boolean {
+  return usedPct >= TRIP_PCT;
+}
+
 function isUntripped({ windows }: Candidate): boolean {
-  return !windows.some((window) => window.kind === 'rolling' && window.usedPct >= TRIP_PCT);
+  return !windows.some((window) => window.kind === 'rolling' && trips(window.usedPct));
 }
 
 function leftOf(window: RoutableWindow): number {
@@ -95,6 +99,7 @@ export const HIGH_CHAIN: readonly ChainEntry[] = [
   { rank: 4, providers: ['grok'], line: 'grok-4.6 xhigh' },
   { rank: 5, providers: ['agy'], line: 'gemini-3.8-flash-high high' }
 ];
+
 type Account = { id: string; used: number };
 
 type MatcherEntry = ChainEntry & { matcher: string };
@@ -126,7 +131,7 @@ function openAccounts(entry: ChainEntry, usages: RoutableUsage[]): Account[] {
     .map((id) => usages.find((each) => each.id === id))
     .filter(isRoutable)
     .map((usage) => ({ id: usage.id, used: highestUsed(gatingWindows(entry, usage)) }))
-    .filter((account) => account.used < TRIP_PCT);
+    .filter((account) => !trips(account.used));
 }
 
 function entryLine(entry: ChainEntry, usages: RoutableUsage[]): string | undefined {

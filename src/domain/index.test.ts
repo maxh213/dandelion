@@ -210,7 +210,7 @@ describe('highRouteLine', () => {
     ['opus: higher left wins', 'claude: session rolling 10, weekly weekly 70, weekly Fable weekly 95; claude-work: session rolling 10, weekly weekly 40, weekly Fable weekly 90; cursor: total weekly 90', [], 'claude-opus-5 max claude-work'],
     ['an (all) entry of a provider with no matcher is gated on a Fable-named window', 'claude: session rolling 95; cursor: total weekly 10, Fable weekly 95; grok: credits weekly 50', [], 'grok-4.6 xhigh grok'],
     ['the 014 live case keeps Fable on the untripped personal account', 'claude: session rolling 2, weekly weekly 13, weekly Fable weekly 2; claude-work: session rolling 100, weekly weekly 72, weekly Fable weekly 52; agy: Weekly Limit weekly 17, Five Hour Limit rolling 0; kimi: weekly weekly 95, 5h rolling 0; grok: credits weekly 9; cursor: total weekly 36, auto weekly 36, api weekly 33', [], 'claude-fable-5-1 max claude'],
-    ['agy is the last entry','grok: credits weekly 90; agy: Five Hour Limit rolling 10, Weekly Limit weekly 20', [], 'gemini-3.8-flash-high high agy']
+    ['agy is the last entry', 'grok: credits weekly 90; agy: Five Hour Limit rolling 10, Weekly Limit weekly 20', [], 'gemini-3.8-flash-high high agy']
   ])('%s', (_case, candidates, ineligible, line) => {
     expect(highOf(candidates, ineligible)).toBe(line);
   });
