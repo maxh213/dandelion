@@ -237,8 +237,11 @@ export async function runRoute(io: ProbeIo, env: Record<string, string | undefin
   return renderRoute(await probeOnce(io, env, request.now), eligibilityOf(io, env).ineligible(), request);
 }
 
+export function processZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {
   registry.closed = false;
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren, eligibility: eligibilityOf(io, env), zone });
+  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren, eligibility: eligibilityOf(io, env), zone: processZone() });
 }

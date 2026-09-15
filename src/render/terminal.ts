@@ -28,7 +28,7 @@ const HELP_FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh
 const ROUTING_OFF = 'routing off';
 const MARKER = '▸ ';
 const BOX_WIDTH = 35;
-const BOX_TEXT = 31;
+const BOX_TEXT_CELLS = 31;
 const BOX_GAP = '  ';
 const ROUTE_TITLE = 'route';
 const HIGH_TITLE = 'route --high';
@@ -288,9 +288,12 @@ function summaryLine(usages: ProviderUsage[], now: string): string {
   return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now);
 }
 
+function probingLine(spinner: number): string {
+  return `${SPINNER_FRAMES[spinner % SPINNER_FRAMES.length]} ${PROBING}`;
+}
+
 function pendingPanel(id: string, spinner: number, noColor: boolean, marks: PanelMarks): string {
-  const frame = SPINNER_FRAMES[spinner % SPINNER_FRAMES.length];
-  return dimPanel([headerLine(id, marks, String), `${frame} probing…`], marks, noColor);
+  return dimPanel([headerLine(id, marks, String), probingLine(spinner)], marks, noColor);
 }
 
 function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
@@ -305,9 +308,9 @@ function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: strin
 type BoxAnswer = { model: string; account: string; dimmed: boolean };
 
 function boxTop(title: string, noColor: boolean): string {
-  const [corner, line] = noColor ? ['+', '-'] : ['┌', '─'];
-  const head = `${corner}${line} ${title} `;
-  return `${head}${repeatChar(line, BOX_WIDTH - cellCount(head) - 1)}${noColor ? '+' : '┐'}`;
+  const [left, line, right] = noColor ? ['+', '-', '+'] : ['┌', '─', '┐'];
+  const head = `${left}${line} ${title} `;
+  return `${head}${repeatChar(line, BOX_WIDTH - cellCount(head) - 1)}${right}`;
 }
 
 function boxBottom(noColor: boolean): string {
@@ -319,21 +322,20 @@ function boxSide(noColor: boolean): string {
 }
 
 function boxText(text: string): string {
-  return ` ${cutCells(text, BOX_TEXT).padEnd(BOX_TEXT)} `;
+  return ` ${cutCells(text, BOX_TEXT_CELLS).padEnd(BOX_TEXT_CELLS)} `;
 }
 
 function dimBoxRow(content: string, noColor: boolean): string {
   return dim(`${boxSide(noColor)}${content}${boxSide(noColor)}`, noColor);
 }
 
-function modelBoxRow(content: string, noColor: boolean): string {
-  const side = dim(boxSide(noColor), noColor);
-  return `${side}${styled(content, BOLD, noColor)}${side}`;
-}
-
-function plainBoxRow(content: string, noColor: boolean): string {
+function withSides(content: string, noColor: boolean): string {
   const side = dim(boxSide(noColor), noColor);
   return `${side}${content}${side}`;
+}
+
+function modelBoxRow(content: string, noColor: boolean): string {
+  return withSides(styled(content, BOLD, noColor), noColor);
 }
 
 function splitRouteLine(line: string): BoxAnswer {
@@ -343,7 +345,7 @@ function splitRouteLine(line: string): BoxAnswer {
 }
 
 function probingAnswer(spinner: number): BoxAnswer {
-  return { model: `${SPINNER_FRAMES[spinner % SPINNER_FRAMES.length]} ${PROBING}`, account: '', dimmed: true };
+  return { model: probingLine(spinner), account: '', dimmed: true };
 }
 
 function boxAnswers(view: LiveView, now: string): [BoxAnswer, BoxAnswer] {
@@ -359,12 +361,12 @@ function renderBox(title: string, answer: BoxAnswer, noColor: boolean): string[]
   const top = dim(boxTop(title, noColor), noColor);
   const bottom = dim(boxBottom(noColor), noColor);
   if (answer.dimmed) return [top, dimBoxRow(boxText(answer.model), noColor), dimBoxRow(boxText(answer.account), noColor), bottom];
-  return [top, modelBoxRow(boxText(answer.model), noColor), plainBoxRow(boxText(answer.account), noColor), bottom];
+  return [top, modelBoxRow(boxText(answer.model), noColor), withSides(boxText(answer.account), noColor), bottom];
 }
 
 function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
-  const [headroom, high] = boxAnswers(view, now);
-  const left = renderBox(ROUTE_TITLE, headroom, noColor);
+  const [route, high] = boxAnswers(view, now);
+  const left = renderBox(ROUTE_TITLE, route, noColor);
   const right = renderBox(HIGH_TITLE, high, noColor);
   return left.map((line, row) => `${line}${BOX_GAP}${right[row]}`);
 }

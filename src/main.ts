@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isEntryFile, runApp, runLive, runRoute, realIo, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
+import { isEntryFile, processZone, runApp, runLive, runRoute, realIo, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -26,8 +26,7 @@ function routeModeOf(argv: string[]): RouteMode {
 }
 
 async function route(io: ProbeIo, proc: Proc): Promise<void> {
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const { line, routed } = await runRoute(io, proc.env, { mode: routeModeOf(proc.argv), now: new Date().toISOString(), zone });
+  const { line, routed } = await runRoute(io, proc.env, { mode: routeModeOf(proc.argv), now: new Date().toISOString(), zone: processZone() });
   proc.stdout.write(`${line}\n`);
   if (!routed) proc.exit(1);
 }
