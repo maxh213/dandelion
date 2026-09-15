@@ -490,4 +490,10 @@ describe('main', () => {
     expect(commands).toContain('runs once when stdout or stdin is not a terminal');
     expect(readme).toMatch(/^- `DANDELION_REFRESH_SECONDS` - .*Defaults to `300`/m);
   });
+
+  it('README documents the route boxes', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const commands = readme.split('## Run Commands')[1].split('## ')[0];
+    expect(commands).toMatch(/^- `npm start` - .*Two boxes at the top show the answers `dandelion route` and `dandelion route --high` would print; they update when a round settles or routing is toggled/m);
+  });
 });

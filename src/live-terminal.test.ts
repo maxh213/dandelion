@@ -3,9 +3,11 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { mkdtempSync, writeFileSync, chmodSync, rmSync, readFileSync, readdirSync, symlinkSync } from 'node:fs';
 
 const NPM = join(dirname(process.execPath), 'npm');
+const MAIN = fileURLToPath(new URL('./main.ts', import.meta.url));
 const OUTER_TIMEOUT_MS = 60000;
 const PREFIX = 'dandelion-qa-007-';
 const ENTER = '\x1b[?1049h';
@@ -224,5 +226,41 @@ describe('route eligibility on a real terminal', () => {
     expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual({ claude: true });
     send(run, 'q');
     expect(await run.closed).toEqual([0, null]);
+  }, 60000);
+});
+
+const SCREEN_ESCAPES = ['\x1b[?1049h', '\x1b[?25l', '\x1b[H', '\x1b[2J', '\x1b[?25h', '\x1b[?1049l'];
+
+function splitRoute(line: string): string[] {
+  if (line === 'none') return ['none', 'no subscription available'];
+  return [line.slice(0, line.lastIndexOf(' ')), line.slice(line.lastIndexOf(' ') + 1)];
+}
+
+function boxText(frame: string, box: number): string[] {
+  const rows = frame.split('\n').slice(2, 6);
+  return [rows[1].slice(box * 37 + 2, box * 37 + 33).trimEnd(), rows[2].slice(box * 37 + 2, box * 37 + 33).trimEnd()];
+}
+
+async function cliLine(env: NodeJS.ProcessEnv, args: string[]): Promise<string> {
+  const run = launch(process.execPath, [MAIN, ...args], env);
+  await run.closed;
+  return run.output.trimEnd();
+}
+
+describe('route boxes on a real terminal', () => {
+  it('settledBoxesMatchTheCli: the settled boxes equal the route and route --high lines split, with only screen escapes', async () => {
+    const env = appEnv(fixtureDir(KIMI_EXITS));
+    const run = startLive(env);
+    await waitWithin(run, () => settledIndex(run) >= 0, 20000, 'frame with no probing…');
+    const frame = lastFrame(run);
+    send(run, 'q');
+    expect(await run.closed).toEqual([0, null]);
+    expect(frame.split('\n')[2]).toBe('+- route -------------------------+  +- route --high ------------------+');
+    expect(frame.split('\n')[5]).toBe('+---------------------------------+  +---------------------------------+');
+    expect(boxText(frame, 0)).toEqual(splitRoute(await cliLine(env, ['route'])));
+    expect(boxText(frame, 1)).toEqual(splitRoute(await cliLine(env, ['route', '--high'])));
+    let stripped = run.output;
+    for (const sequence of SCREEN_ESCAPES) stripped = stripped.split(sequence).join('');
+    expect(stripped).not.toContain(String.fromCharCode(27));
   }, 60000);
 });

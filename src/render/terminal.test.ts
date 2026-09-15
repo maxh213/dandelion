@@ -576,4 +576,15 @@ describe('route boxes', () => {
     expect([rowText(lines[1], 0), rowText(lines[2], 0)]).toEqual([cut31(route[0]), route[1]]);
     expect([rowText(lines[1], 1), rowText(lines[2], 1)]).toEqual([cut31(high[0]), high[1]]);
   });
+
+  it('never marks a box line as selected', () => {
+    const lines = renderLiveFrame(boxView(ROUTED, { selected: 0, slots: [{ id: 'claude', usage: ROUTED[0] }] }), true, NOW).split('\n');
+    expect(lines.slice(2, 6).join('\n')).not.toContain('▸');
+    expect(lines[7]).toBe('▸ claude');
+  });
+
+  it('never draws the boxes in the once dashboard', () => {
+    expect(renderDashboard(ROUTED, true, NOW, [])).not.toContain('+- route');
+    expect(renderDashboard(ROUTED, false, NOW, [])).not.toContain('┌─ route');
+  });
 });
