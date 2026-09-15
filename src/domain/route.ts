@@ -34,15 +34,19 @@ function eligibleUsages(usages: RoutableUsage[], ineligible: string[]): Routable
   return usages.filter((usage) => !ineligible.includes(usage.id));
 }
 
+function trips(usedPct: number): boolean {
+  return usedPct >= TRIP_PCT;
+}
+
+function onAccount(line: string, id: string): string {
+  return `${line} ${id}`;
+}
+
 function candidatesOf(usages: RoutableUsage[]): Candidate[] {
   return ROUTING_TABLE.flatMap((route) => {
     const usage = usages.find((each) => each.id === route.id);
     return isRoutable(usage) ? [{ route, windows: usage.windows }] : [];
   });
-}
-
-function trips(usedPct: number): boolean {
-  return usedPct >= TRIP_PCT;
 }
 
 function isUntripped({ windows }: Candidate): boolean {
@@ -75,10 +79,6 @@ function highest(candidates: Candidate[], score: (windows: RoutableWindow[]) => 
     const value = score(windows);
     return value > best.score ? { route, score: value } : best;
   }, { route: undefined, score: -Infinity });
-}
-
-function onAccount(line: string, id: string): string {
-  return `${line} ${id}`;
 }
 
 export function routeLine(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
@@ -142,26 +142,4 @@ function entryLine(entry: ChainEntry, usages: RoutableUsage[]): string | undefin
 export function highRouteLine(usages: RoutableUsage[], ineligible: string[]): string {
   const eligible = eligibleUsages(usages, ineligible);
   return HIGH_CHAIN.map((entry) => entryLine(entry, eligible)).find((line) => line !== undefined) ?? NO_ROUTE;
-}
-
-const MIDNIGHT_SEARCH_MS = 48 * 60 * 60 * 1000;
-const MIDNIGHT_SEARCH_STEPS = 28;
-
-type Bounds = { before: number; after: number };
-
-function localDateIn(zone: string): (ms: number) => string {
-  const format = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' });
-  return (ms) => format.format(new Date(ms));
-}
-
-export function nextLocalMidnight(zone: string, now: string): string {
-  const dateAt = localDateIn(zone);
-  const nowMs = Date.parse(now);
-  const today = dateAt(nowMs);
-  const start: Bounds = { before: nowMs, after: nowMs + MIDNIGHT_SEARCH_MS };
-  const { after } = Array.from({ length: MIDNIGHT_SEARCH_STEPS }).reduce<Bounds>((bounds) => {
-    const middle = Math.floor((bounds.before + bounds.after) / 2);
-    return dateAt(middle) === today ? { before: middle, after: bounds.after } : { before: bounds.before, after: middle };
-  }, start);
-  return new Date(after).toISOString();
 }
