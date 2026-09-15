@@ -68,13 +68,17 @@ function highest(candidates: Candidate[], score: (windows: RoutableWindow[]) => 
   }, { route: undefined, score: -Infinity });
 }
 
+function onAccount(line: string, id: string): string {
+  return `${line} ${id}`;
+}
+
 export function routeLine(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
   const candidates = candidatesOf(eligibleUsages(usages, ineligible));
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
-  const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight));
-  if (evaporating.route !== undefined) return `${evaporating.route.max} ${evaporating.route.id}`;
+  const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight)).route;
+  if (evaporating !== undefined) return onAccount(evaporating.max, evaporating.id);
   const roomiest = highest(candidates, bindingLeft).route;
-  return roomiest === undefined ? NO_ROUTE : `${roomiest.standard} ${roomiest.id}`;
+  return roomiest === undefined ? NO_ROUTE : onAccount(roomiest.standard, roomiest.id);
 }
 
 type ChainEntry = { rank: number; providers: readonly string[]; matcher?: string; line: string };
@@ -94,15 +98,15 @@ function matches(window: RoutableWindow, matcher: string): boolean {
   return window.label.toLowerCase().includes(matcher);
 }
 
-function chainMatchers(id: string): string[] {
+function matchersInChainFor(id: string): string[] {
   return HIGH_CHAIN.filter((entry) => entry.providers.includes(id)).flatMap((entry) => entry.matcher ?? []);
 }
 
 function gatingWindows(entry: ChainEntry, usage: RoutableUsage): RoutableWindow[] {
   const { matcher } = entry;
   if (matcher !== undefined) return usage.windows.filter((window) => window.kind === 'rolling' || matches(window, matcher));
-  const others = chainMatchers(usage.id);
-  return usage.windows.filter((window) => !others.some((other) => matches(window, other)));
+  const claimedByOtherEntries = matchersInChainFor(usage.id);
+  return usage.windows.filter((window) => !claimedByOtherEntries.some((other) => matches(window, other)));
 }
 
 function highestUsed(windows: RoutableWindow[]): number {
@@ -116,14 +120,14 @@ function openAccounts(entry: ChainEntry, usages: RoutableUsage[]): Account[] {
   }).filter((account) => account.used < TRIP_PCT);
 }
 
-function strongestLine(entry: ChainEntry, usages: RoutableUsage[]): string | undefined {
-  const [best] = openAccounts(entry, usages).sort((a, b) => a.used - b.used);
-  return best === undefined ? undefined : `${entry.line} ${best.id}`;
+function entryLine(entry: ChainEntry, usages: RoutableUsage[]): string | undefined {
+  const [leastUsed] = openAccounts(entry, usages).sort((a, b) => a.used - b.used);
+  return leastUsed === undefined ? undefined : onAccount(entry.line, leastUsed.id);
 }
 
 export function highRouteLine(usages: RoutableUsage[], ineligible: string[]): string {
   const eligible = eligibleUsages(usages, ineligible);
-  return HIGH_CHAIN.map((entry) => strongestLine(entry, eligible)).find((line) => line !== undefined) ?? NO_ROUTE;
+  return HIGH_CHAIN.map((entry) => entryLine(entry, eligible)).find((line) => line !== undefined) ?? NO_ROUTE;
 }
 
 const MIDNIGHT_SEARCH_MS = 48 * 60 * 60 * 1000;
