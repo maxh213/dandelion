@@ -40,6 +40,8 @@ Each window is rolling (claude session, kimi 5h, agy Five Hour Limit), weekly (a
 
 Ties go to the provider earlier in dashboard order.
 
+The trip: before both rules, route skips every tripped account. An account is tripped when any of its rolling windows (claude and claude-work session, kimi 5h, agy Five Hour Limit) is 90% used or more; 90% itself trips, and weekly and other windows never trip. A tripped account's evaporating weekly window is ignored by rule 1 and its binding is ignored by rule 2. It is the same 90% trip `route --high` uses. When no account is left once ineligible, unavailable and tripped accounts are skipped, route prints `none` and exits 1.
+
 Eligibility: ineligible providers are dropped before both rules, so an ineligible provider is never routed, not even by evaporation. In the live dashboard, select a panel with `↑↓/jk` and press space to toggle its routing on or off; an ineligible panel shows `routing off` and keeps showing its usage. Non-routable panels (no usage windows, unavailable or failed) cannot be toggled and flash `not routable (no usage windows)` instead. The choice is kept in the state file (`DANDELION_STATE_FILE`), a JSON object where `false` marks a provider ineligible; a missing, unreadable or corrupt file makes every provider eligible. `--once` and `route` read the state file and never write it.
 
 | provider | standard line | max line |

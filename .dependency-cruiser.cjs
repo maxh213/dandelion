@@ -52,6 +52,13 @@ module.exports = {
       to: {}
     },
     {
+      name: 'domain-entry-lists-its-files',
+      severity: 'error',
+      comment: 'domain/index.ts fronts exactly four leaves, each hiding one piece of knowledge: ports (IO contracts), route (both route policies and the one shared trip), midnight (local calendar search), eligibility (the state file toggle); a new domain file is a deliberate contract change',
+      from: { path: '^src/domain/index\\.ts$' },
+      to: { path: '^src/domain/', pathNot: '^src/domain/(index|ports|route|midnight|eligibility)\\.ts$' }
+    },
+    {
       name: 'cli-skeleton-run-only-by-index',
       severity: 'error',
       comment: 'Probe definitions and codex take only types from cli.ts (CliProbe, the CommandRunner port); only probes/index.ts runs probeCli',

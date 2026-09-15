@@ -18,6 +18,7 @@ const ROUTING_TABLE: Route[] = [
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
 const FULL_LEFT = 100;
+const TRIP_PCT = 90;
 
 type Candidate = { route: Route; windows: RoutableWindow[] };
 
@@ -33,11 +34,23 @@ function eligibleUsages(usages: RoutableUsage[], ineligible: string[]): Routable
   return usages.filter((usage) => !ineligible.includes(usage.id));
 }
 
+function trips(usedPct: number): boolean {
+  return usedPct >= TRIP_PCT;
+}
+
+function onAccount(line: string, id: string): string {
+  return `${line} ${id}`;
+}
+
 function candidatesOf(usages: RoutableUsage[]): Candidate[] {
   return ROUTING_TABLE.flatMap((route) => {
     const usage = usages.find((each) => each.id === route.id);
     return isRoutable(usage) ? [{ route, windows: usage.windows }] : [];
   });
+}
+
+function isUntripped({ windows }: Candidate): boolean {
+  return !windows.some((window) => window.kind === 'rolling' && trips(window.usedPct));
 }
 
 function leftOf(window: RoutableWindow): number {
@@ -68,12 +81,8 @@ function highest(candidates: Candidate[], score: (windows: RoutableWindow[]) => 
   }, { route: undefined, score: -Infinity });
 }
 
-function onAccount(line: string, id: string): string {
-  return `${line} ${id}`;
-}
-
 export function routeLine(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
-  const candidates = candidatesOf(eligibleUsages(usages, ineligible));
+  const candidates = candidatesOf(eligibleUsages(usages, ineligible)).filter(isUntripped);
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
   const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight)).route;
   if (evaporating !== undefined) return onAccount(evaporating.max, evaporating.id);
@@ -90,7 +99,6 @@ export const HIGH_CHAIN: readonly ChainEntry[] = [
   { rank: 4, providers: ['grok'], line: 'grok-4.6 xhigh' },
   { rank: 5, providers: ['agy'], line: 'gemini-3.8-flash-high high' }
 ];
-const TRIP_PCT = 90;
 
 type Account = { id: string; used: number };
 
@@ -123,7 +131,7 @@ function openAccounts(entry: ChainEntry, usages: RoutableUsage[]): Account[] {
     .map((id) => usages.find((each) => each.id === id))
     .filter(isRoutable)
     .map((usage) => ({ id: usage.id, used: highestUsed(gatingWindows(entry, usage)) }))
-    .filter((account) => account.used < TRIP_PCT);
+    .filter((account) => !trips(account.used));
 }
 
 function entryLine(entry: ChainEntry, usages: RoutableUsage[]): string | undefined {
@@ -134,26 +142,4 @@ function entryLine(entry: ChainEntry, usages: RoutableUsage[]): string | undefin
 export function highRouteLine(usages: RoutableUsage[], ineligible: string[]): string {
   const eligible = eligibleUsages(usages, ineligible);
   return HIGH_CHAIN.map((entry) => entryLine(entry, eligible)).find((line) => line !== undefined) ?? NO_ROUTE;
-}
-
-const MIDNIGHT_SEARCH_MS = 48 * 60 * 60 * 1000;
-const MIDNIGHT_SEARCH_STEPS = 28;
-
-type Bounds = { before: number; after: number };
-
-function localDateIn(zone: string): (ms: number) => string {
-  const format = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' });
-  return (ms) => format.format(new Date(ms));
-}
-
-export function nextLocalMidnight(zone: string, now: string): string {
-  const dateAt = localDateIn(zone);
-  const nowMs = Date.parse(now);
-  const today = dateAt(nowMs);
-  const start: Bounds = { before: nowMs, after: nowMs + MIDNIGHT_SEARCH_MS };
-  const { after } = Array.from({ length: MIDNIGHT_SEARCH_STEPS }).reduce<Bounds>((bounds) => {
-    const middle = Math.floor((bounds.before + bounds.after) / 2);
-    return dateAt(middle) === today ? { before: middle, after: bounds.after } : { before: bounds.before, after: middle };
-  }, start);
-  return new Date(after).toISOString();
 }
