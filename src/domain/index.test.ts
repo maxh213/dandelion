@@ -174,6 +174,7 @@ describe('highRouteLine', () => {
     ['higher left on gating windows wins', 'claude: session rolling 85, weekly weekly 10, weekly Fable weekly 40; claude-work: session rolling 10, weekly weekly 10, weekly Fable weekly 70', [], 'claude-fable-5-1 max claude-work'],
     ['equal left goes to personal', 'claude-work: session rolling 20, weekly weekly 60, weekly Fable weekly 0; claude: session rolling 20, weekly weekly 10, weekly Fable weekly 20', [], 'claude-fable-5-1 max claude'],
     ['opus: higher left wins', 'claude: session rolling 10, weekly weekly 70, weekly Fable weekly 95; claude-work: session rolling 10, weekly weekly 40, weekly Fable weekly 90; cursor: total weekly 90', [], 'claude-opus-5 max claude-work'],
+    ['an (all) entry of a provider with no matcher is gated on a Fable-named window', 'claude: session rolling 95; cursor: total weekly 10, Fable weekly 95; grok: credits weekly 50', [], 'grok-4.6 xhigh grok'],
     ['agy is the last entry', 'grok: credits weekly 90; agy: Five Hour Limit rolling 10, Weekly Limit weekly 20', [], 'gemini-3.8-flash-high high agy']
   ])('%s', (_case, candidates, ineligible, line) => {
     expect(highOf(candidates, ineligible)).toBe(line);

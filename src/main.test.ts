@@ -209,6 +209,17 @@ describe('main', () => {
     expect(vi.mocked(runRoute).mock.calls[0][2].mode).toBe(mode);
   });
 
+  it.each<[string[], string, string]>([
+    [['--high', MAIN, 'route'], 'headroom', 'claude-opus-5 high claude\n'],
+    [['node', '--high', 'route'], 'headroom', 'claude-opus-5 high claude\n']
+  ])('runIfMain %j ignores a --high that comes before route', async (argv, mode, line) => {
+    vi.mocked(runRoute).mockClear();
+    const { proc, output } = procOf(argv, false, false);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(output()).toBe(line);
+    expect(vi.mocked(runRoute).mock.calls[0][2].mode).toBe(mode);
+  });
+
   it('runIfMain route prints none and exits 1 when nothing routes', async () => {
     const { proc, output } = procOf(['node', MAIN, 'route'], undefined, undefined);
     await runIfMain(MAIN_URL, MAIN, profileIo, proc);

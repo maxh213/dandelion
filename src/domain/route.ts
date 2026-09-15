@@ -94,17 +94,22 @@ const TRIP_PCT = 90;
 
 type Account = { id: string; used: number };
 
+type MatcherEntry = ChainEntry & { matcher: string };
+
+function hasMatcher(entry: ChainEntry): entry is MatcherEntry {
+  return entry.matcher !== undefined;
+}
+
 function matches(window: RoutableWindow, matcher: string): boolean {
-  return window.label.toLowerCase().includes(matcher);
+  return window.label.toLowerCase().includes(matcher.toLowerCase());
 }
 
 function matchersInChainFor(id: string): string[] {
-  return HIGH_CHAIN.filter((entry) => entry.providers.includes(id)).flatMap((entry) => entry.matcher ?? []);
+  return HIGH_CHAIN.filter(hasMatcher).filter((entry) => entry.providers.includes(id)).map((entry) => entry.matcher);
 }
 
 function gatingWindows(entry: ChainEntry, usage: RoutableUsage): RoutableWindow[] {
-  const { matcher } = entry;
-  if (matcher !== undefined) return usage.windows.filter((window) => window.kind === 'rolling' || matches(window, matcher));
+  if (hasMatcher(entry)) return usage.windows.filter((window) => window.kind === 'rolling' || matches(window, entry.matcher));
   const claimedByOtherEntries = matchersInChainFor(usage.id);
   return usage.windows.filter((window) => !claimedByOtherEntries.some((other) => matches(window, other)));
 }
@@ -114,10 +119,11 @@ function highestUsed(windows: RoutableWindow[]): number {
 }
 
 function openAccounts(entry: ChainEntry, usages: RoutableUsage[]): Account[] {
-  return entry.providers.flatMap((id) => {
-    const usage = usages.find((each) => each.id === id);
-    return isRoutable(usage) ? [{ id, used: highestUsed(gatingWindows(entry, usage)) }] : [];
-  }).filter((account) => account.used < TRIP_PCT);
+  return entry.providers
+    .map((id) => usages.find((each) => each.id === id))
+    .filter(isRoutable)
+    .map((usage) => ({ id: usage.id, used: highestUsed(gatingWindows(entry, usage)) }))
+    .filter((account) => account.used < TRIP_PCT);
 }
 
 function entryLine(entry: ChainEntry, usages: RoutableUsage[]): string | undefined {
