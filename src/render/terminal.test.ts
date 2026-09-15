@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   renderBanner,
   renderRule,
@@ -15,6 +15,11 @@ import {
   type PanelMarks
 } from './terminal.ts';
 import { highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+
+vi.mock('../domain/index.ts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../domain/index.ts')>();
+  return { ...original, nextLocalMidnight: vi.fn(original.nextLocalMidnight) };
+});
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const RESET = '\x1b[0m';
@@ -588,6 +593,33 @@ describe('route boxes', () => {
     boxLines(boxView([ok('claude', [weekly(10)])]), true, '2026-09-14T23:00:00.000Z');
     const view = boxView([ok('claude', [weekly(86, '2026-09-14T10:00:00.000Z')])]);
     expect(rowText(boxLines(view, true, '2026-09-13T09:00:00.000Z')[1], 0)).toBe('claude-opus-5 high');
+  });
+
+  it('computes the midnight once for repeated settled frames in the same zone and day', () => {
+    const view = boxView(ROUTED, { zone: 'Etc/GMT-5' });
+    boxLines(view, true, '2026-09-13T10:00:00.000Z');
+    vi.mocked(nextLocalMidnight).mockClear();
+    boxLines(view, true, '2026-09-13T10:30:00.000Z');
+    boxLines(view, true, '2026-09-13T11:00:00.000Z');
+    boxLines(view, true, '2026-09-13T12:00:00.000Z');
+    expect(vi.mocked(nextLocalMidnight)).not.toHaveBeenCalled();
+  });
+
+  it('serves the cached midnight to a frame at the exact millisecond it was computed', () => {
+    const view = boxView(ROUTED, { zone: 'Etc/GMT-6' });
+    boxLines(view, true, '2026-09-13T10:00:00.000Z');
+    vi.mocked(nextLocalMidnight).mockClear();
+    boxLines(view, true, '2026-09-13T10:00:00.000Z');
+    expect(vi.mocked(nextLocalMidnight)).not.toHaveBeenCalled();
+  });
+
+  it('recomputes the midnight for a frame landing exactly on it', () => {
+    const view = boxView([ok('claude', [weekly(86, '2026-09-14T01:30:00.000Z')])], { zone: 'Etc/GMT-7' });
+    expect(rowText(boxLines(view, true, '2026-09-13T16:00:00.000Z')[1], 0)).toBe('claude-opus-5 high');
+    vi.mocked(nextLocalMidnight).mockClear();
+    const lines = boxLines(view, true, '2026-09-13T17:00:00.000Z');
+    expect(vi.mocked(nextLocalMidnight)).toHaveBeenCalledTimes(1);
+    expect(rowText(lines[1], 0)).toBe('claude-opus-5 max');
   });
 
   it('never marks a box line as selected', () => {
