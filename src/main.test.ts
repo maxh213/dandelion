@@ -476,10 +476,22 @@ describe('main', () => {
     const commands = readme.split('## Run Commands')[1].split('## ')[0];
     expect(commands).toMatch(/^- `npm start` - .*`↑↓\/jk select`.*`space routing on\/off`/m);
     const route = readme.split('## Route')[1].split('## ')[0];
-    const paragraphs = route.split('\n\n').filter((paragraph) => paragraph.includes('ineligible'));
+    const paragraphs = route.split('\n\n').filter((paragraph) => paragraph.startsWith('Eligibility:'));
     expect(paragraphs).toHaveLength(1);
     expect(paragraphs[0]).toMatch(/dropped before both rules.*press space.*cannot be toggled.*state file/);
     expect(readme).toMatch(/^- `DANDELION_STATE_FILE` - .*Defaults to `\$XDG_STATE_HOME\/dandelion\/eligibility\.json`, else `~\/\.local\/state\/dandelion\/eligibility\.json`/m);
+  });
+
+  it('README documents the route trip', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const route = readme.split('## Route')[1].split('## ')[0];
+    const [trip] = route.split('\n\n').filter((paragraph) => paragraph.startsWith('The trip:'));
+    expect(trip).toMatch(/before both rules, route skips every tripped account/);
+    expect(trip).toMatch(/rolling windows \(claude and claude-work session, kimi 5h, agy Five Hour Limit\) is 90% used or more; 90% itself trips/);
+    expect(trip).toMatch(/weekly and other windows never trip/);
+    expect(trip).toMatch(/ignored by rule 1 and its binding is ignored by rule 2/);
+    expect(trip).toMatch(/same 90% trip `route --high` uses/);
+    expect(trip).toMatch(/ineligible, unavailable and tripped accounts are skipped, route prints `none` and exits 1/);
   });
 
   it('README documents live mode', () => {

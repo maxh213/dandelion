@@ -121,6 +121,40 @@ describe('routeLine', () => {
     expect(routeOf(`${id}: weekly 50 @2026-09-14T20:00:00.000Z`)).toBe(`${max} ${id}`);
   });
 
+  const LIVE_NOW = '2026-09-14T12:39:00.000Z';
+
+  function liveCase(session: string): string {
+    return [
+      'claude: rolling 2 @-, weekly 13 @2026-09-19T22:39:00.000Z, weekly 2 @2026-09-19T22:39:00.000Z',
+      `claude-work: rolling ${session} @2026-09-14T15:50:00.000Z, weekly 72 @2026-09-14T18:00:00.000Z, weekly 52 @2026-09-14T17:59:00.000Z`,
+      'agy: weekly 17 @2026-09-19T18:39:00.000Z, rolling 0 @-',
+      'kimi: weekly 95 @2026-09-17T13:39:00.000Z, rolling 0 @-',
+      'grok: weekly 9 @2026-09-19T22:39:00.000Z',
+      'cursor: weekly 36 @2026-09-29T17:39:00.000Z, weekly 36 @2026-09-29T17:39:00.000Z, weekly 33 @2026-09-29T17:39:00.000Z'
+    ].join('; ');
+  }
+
+  it.each([
+    ['100', 'grok-4.6 grok'],
+    ['90', 'grok-4.6 grok'],
+    ['89.9', 'claude-opus-5 max claude-work'],
+    ['89', 'claude-opus-5 max claude-work']
+  ])('routes the live case with claude-work session at %s', (session, line) => {
+    expect(routeLine(liveCase(session).split('; ').map(usageOf), LIVE_NOW, MIDNIGHT, [])).toBe(line);
+  });
+
+  it.each([
+    ['a tripped account loses rule 2', 'claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 grok'],
+    ['just under the trip is not tripped', 'claude: rolling 89.9 @-; agy: rolling 89.95 @-', [], 'claude-opus-5 high claude'],
+    ['an untripped evaporator still wins', 'claude: rolling 89.9 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', [], 'claude-opus-5 max claude'],
+    ['a tripped evaporator is ignored', 'claude: rolling 90 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 80 @-', [], 'gemini-3.1-pro-high medium agy'],
+    ['an other window never trips', 'agy: other 99 @-, weekly 50 @2026-09-20T00:00:00.000Z', [], 'gemini-3.1-pro-high medium agy'],
+    ['ineligible and tripped leave nothing', 'claude: rolling 95 @-; claude-work: rolling 0 @-', ['claude-work'], 'none'],
+    ['tripped kimi and unroutable codex and kilo leave nothing', 'kimi: rolling 90 @-; codex: weekly 0 @-; kilo: no windows', [], 'none']
+  ])('trip: %s', (_case, candidates, ineligible, line) => {
+    expect(routeOf(candidates, ineligible)).toBe(line);
+  });
+
   it('breaks ties in dashboard order whatever order the usages come in', () => {
     expect(routeOf('kimi: rolling 20 @-; agy: rolling 20 @-')).toBe('gemini-3.1-pro-high medium agy');
     expect(routeOf('kimi: weekly 10 @2026-09-14T20:00:00.000Z; agy: weekly 10 @2026-09-14T20:00:00.000Z')).toBe('gemini-3.1-pro-high high agy');

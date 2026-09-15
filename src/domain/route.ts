@@ -18,6 +18,7 @@ const ROUTING_TABLE: Route[] = [
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
 const FULL_LEFT = 100;
+const TRIP_PCT = 90;
 
 type Candidate = { route: Route; windows: RoutableWindow[] };
 
@@ -38,6 +39,10 @@ function candidatesOf(usages: RoutableUsage[]): Candidate[] {
     const usage = usages.find((each) => each.id === route.id);
     return isRoutable(usage) ? [{ route, windows: usage.windows }] : [];
   });
+}
+
+function isUntripped({ windows }: Candidate): boolean {
+  return !windows.some((window) => window.kind === 'rolling' && window.usedPct >= TRIP_PCT);
 }
 
 function leftOf(window: RoutableWindow): number {
@@ -73,7 +78,7 @@ function onAccount(line: string, id: string): string {
 }
 
 export function routeLine(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
-  const candidates = candidatesOf(eligibleUsages(usages, ineligible));
+  const candidates = candidatesOf(eligibleUsages(usages, ineligible)).filter(isUntripped);
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
   const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight)).route;
   if (evaporating !== undefined) return onAccount(evaporating.max, evaporating.id);
@@ -90,8 +95,6 @@ export const HIGH_CHAIN: readonly ChainEntry[] = [
   { rank: 4, providers: ['grok'], line: 'grok-4.6 xhigh' },
   { rank: 5, providers: ['agy'], line: 'gemini-3.8-flash-high high' }
 ];
-const TRIP_PCT = 90;
-
 type Account = { id: string; used: number };
 
 type MatcherEntry = ChainEntry & { matcher: string };
