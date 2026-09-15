@@ -33,19 +33,19 @@ if (me === 'kimi') { const v = q('Q_KIMI'); if (!v) process.exit(1); const port 
 `;
 
 const ROUTE_ROWS = [
-  ['evaporation beats perfect headroom', 'route', { claude: [0, 86, 2], agy: [0, 0, 72] }, 'claude-opus-5 max claude'],
-  ['highest evaporation score wins', 'route', { claude: [0, 86, 2], cursor: [60, 2] }, 'kimi-k3-max cursor'],
-  ['evaporation tie goes to dashboard order', 'route', { agy: [0, 90, 2], kimi: [0, 90, 2] }, 'gemini-3.1-pro-high high agy'],
-  ['an untouched weekly (97 left) never evaporates', 'route', { claude: [0, 3, 2], agy: [10, 10, 72] }, 'claude-opus-5 high claude'],
-  ['a reset after local midnight never evaporates', 'route', { claude: [0, 86, 14], agy: [10, 10, 72] }, 'gemini-3.1-pro-high medium agy'],
-  ['most headroom, claude-work highest', 'route', { claude: [20, 30, 72], work: [10, 5, 72], agy: [15, 20, 72] }, 'claude-opus-5 high claude-work'],
-  ['most headroom, agy highest', 'route', { claude: [20, 30, 72], agy: [5, 5, 72] }, 'gemini-3.1-pro-high medium agy'],
-  ['kimi bound by its 5h window', 'route', { kimi: [90, 10, 72], agy: [50, 50, 72] }, 'gemini-3.1-pro-high medium agy'],
-  ['a missing rolling kind counts as 100', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.6 grok'],
-  ['kimi free on both', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/kimi-for-coding-highspeed kimi'],
-  ['headroom tie goes to dashboard order', 'route', { agy: [20, 20, 72], kimi: [20, 20, 72] }, 'gemini-3.1-pro-high medium agy'],
-  ['an unavailable candidate is skipped', 'route', { cursor: [40, 72] }, 'kimi-k3-max cursor'],
-  ['later arguments are ignored', 'route extra', { claude: [0, 86, 2] }, 'claude-opus-5 max claude']
+  ['evaporation beats perfect headroom', 'route', { claude: [0, 86, 2], agy: [0, 0, 72] }, 'claude-opus-5 max'],
+  ['highest evaporation score wins', 'route', { claude: [0, 86, 2], cursor: [60, 2] }, 'kimi-k3-max'],
+  ['evaporation tie goes to dashboard order', 'route', { agy: [0, 90, 2], kimi: [0, 90, 2] }, 'gemini-3.1-pro-high high'],
+  ['an untouched weekly (97 left) never evaporates', 'route', { claude: [0, 3, 2], agy: [10, 10, 72] }, 'claude-opus-5 high'],
+  ['a reset after local midnight never evaporates', 'route', { claude: [0, 86, 14], agy: [10, 10, 72] }, 'gemini-3.1-pro-high medium'],
+  ['most headroom, claude-work highest', 'route', { claude: [20, 30, 72], work: [10, 5, 72], agy: [15, 20, 72] }, 'claude-opus-5 high'],
+  ['most headroom, agy highest', 'route', { claude: [20, 30, 72], agy: [5, 5, 72] }, 'gemini-3.1-pro-high medium'],
+  ['kimi bound by its 5h window', 'route', { kimi: [90, 10, 72], agy: [50, 50, 72] }, 'gemini-3.1-pro-high medium'],
+  ['a missing rolling kind counts as 100', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.6'],
+  ['kimi free on both', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/kimi-for-coding-highspeed'],
+  ['headroom tie goes to dashboard order', 'route', { agy: [20, 20, 72], kimi: [20, 20, 72] }, 'gemini-3.1-pro-high medium'],
+  ['an unavailable candidate is skipped', 'route', { cursor: [40, 72] }, 'kimi-k3-max'],
+  ['later arguments are ignored', 'route extra', { claude: [0, 86, 2] }, 'claude-opus-5 max']
 ];
 
 const DASHBOARD_ARGS = ['--once route', 'routes'];

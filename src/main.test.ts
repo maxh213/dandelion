@@ -243,6 +243,32 @@ describe('main', () => {
     }
   });
 
+  it('runIfMain route --high prints one line on two terminals without live mode', async () => {
+    vi.mocked(runRoute).mockClear();
+    const { proc, output, keyboard } = procOf(['node', MAIN, 'route', '--high'], true, true);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(output()).toBe('claude-fable-5-1 max claude\n');
+    expect(keyboard.setRawMode).not.toHaveBeenCalled();
+    expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it('walks the chain past a tripped Fable window through node src/main.ts route --high, while plain route keeps 010 with the token', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dandelion-route-high-'));
+    try {
+      linkNodeAndShell(dir);
+      writeFixture(dir, 'claude', "[ -z \"$CLAUDE_CONFIG_DIR\" ] || exit 1\nprintf '%s\\n' 'Current session: 10% used' 'Current week (all models): 50% used' 'Current week (Fable): 100% used'");
+      writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
+      writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const high = spawnSync(process.execPath, ['src/main.ts', 'route', '--high'], { env, encoding: 'utf-8', timeout: 60000 });
+      expect([high.stdout, high.stderr, high.status]).toEqual(['claude-opus-5 max claude\n', '', 0]);
+      const plain = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
+      expect([plain.stdout, plain.stderr, plain.status]).toEqual(['claude-opus-5 high claude\n', '', 0]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('runIfMain does nothing for another entry file', async () => {
     const io = { runner: { run: vi.fn() }, launcher: { launch: vi.fn() }, fetcher: { get: vi.fn(), post: vi.fn() }, reader: { homeDir: vi.fn(), read: vi.fn(), isDirectory: vi.fn() }, spawner: { spawn: vi.fn() } };
     await runIfMain(MAIN_URL, 'other.ts', io, procOf(['node', 'other.ts'], true, true).proc);
