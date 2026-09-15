@@ -82,6 +82,7 @@ function runOnce(pathDir, bin, grokHome, workConfigDir) {
     DANDELION_GROK_HOME: grokHome,
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir,
+    DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'),
   };
   const result = spawnSync(NPM, ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   assert.equal(result.error, undefined, `spawn failed or hit the outer timeout: ${result.error}`);

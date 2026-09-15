@@ -36,7 +36,7 @@ async function emptyPathFixture() {
 function runApp(path, extraEnv) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
   const home = path.split(':')[0];
-  const env = { ...inherited, PATH: path, DANDELION_GROK_HOME: home, DANDELION_CURSOR_AUTH_FILE: join(home, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
+  const env = { ...inherited, PATH: path, DANDELION_GROK_HOME: home, DANDELION_CURSOR_AUTH_FILE: join(home, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);

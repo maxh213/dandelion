@@ -160,6 +160,7 @@ async function everyEntryRunsTheDashboard(bin) {
     DANDELION_KIMI_PORT: String(await freePort()),
     DANDELION_GROK_HOME: await tempDir(),
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
+    DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir()
   };
   const npm = await exec(NPM, ['start', '--silent', '--', '--once'], env);
@@ -186,6 +187,7 @@ async function newNamesWork(bin) {
     DANDELION_KIMI_PORT: 'abc',
     DANDELION_GROK_HOME: await tempDir(),
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
+    DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'no-such-dir')
   };
   const run = await exec(NPM, ['start', '--silent', '--', '--once'], env);
@@ -240,6 +242,7 @@ async function oldNamesAreIgnored(bin) {
       ALLOWANCE_KIMI_PORT: 'abc',
       ALLOWANCE_GROK_HOME: grokHome,
       ALLOWANCE_CURSOR_AUTH_FILE: authFile,
+      DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
       ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: await tempDir()
     };
     const run = await exec(NPM, ['start', '--silent', '--', '--once'], env);
@@ -268,6 +271,7 @@ async function liveIgnoresOldRefreshName(bin) {
     DANDELION_KIMI_PORT: String(await freePort()),
     DANDELION_GROK_HOME: await tempDir(),
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
+    DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir()
   };
   const run = startLive(env);

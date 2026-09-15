@@ -78,7 +78,7 @@ let workConfigDir = '';
 
 function startApp(pathDir, bin, grokHome, extraEnv) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CODEX_FIXTURE_MODE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${pathDir}:${bin}`, DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
+  const env = { ...inherited, PATH: `${pathDir}:${bin}`, DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
   const started = performance.now();
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   const elapsedMs = performance.now() - started;

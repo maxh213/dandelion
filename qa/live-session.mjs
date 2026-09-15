@@ -62,7 +62,8 @@ export async function appEnv(pathDir) {
     DANDELION_REFRESH_SECONDS: '1',
     DANDELION_GROK_HOME: grokHome,
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
-    DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir
+    DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir,
+    DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json')
   };
 }
 

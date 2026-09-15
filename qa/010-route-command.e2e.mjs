@@ -131,8 +131,10 @@ async function run(ctx, args, usages, extraEnv = {}) {
   const q = Object.fromEntries(['claude', 'work', 'agy', 'kimi']
     .filter((name) => usages[name])
     .map((name) => [`Q_${name.toUpperCase()}`, usages[name].join(',')]));
+  const home = await homeFor(usages);
   const env = {
-    HOME: await homeFor(usages),
+    HOME: home,
+    DANDELION_STATE_FILE: join(home, 'no-state', 'eligibility.json'),
     TZ: ctx.zone,
     PATH: ctx.bin,
     DANDELION_KIMI_PORT: String(await freePort()),

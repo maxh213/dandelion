@@ -58,7 +58,7 @@ async function fixtureDir(overrides) {
 
 function runApp(dir, extraEnv) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, ...extraEnv };
+  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);

@@ -57,7 +57,7 @@ async function snapshotTree(dir) {
 
 function runApp(binDir, grokHome) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${binDir}:${nodeBinDir}`, NO_COLOR: '1', DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(binDir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir };
+  const env = { ...inherited, PATH: `${binDir}:${nodeBinDir}`, NO_COLOR: '1', DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(binDir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json') };
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   assert.equal(result.error, undefined, `spawn failed or hit the outer timeout: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
