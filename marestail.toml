@@ -1,5 +1,5 @@
 [git]
-base = "origin/master"
+base = "origin/main"
 
 [agent]
 backend = "claude"
