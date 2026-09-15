@@ -1532,16 +1532,16 @@ describe('isEntryFile', () => {
 
 describe('runRoute', () => {
   it('probes every provider once and routes by the next local midnight of the given zone', async () => {
-    expect(await runRoute(routedRunner(), {}, NOW, 'UTC', false)).toEqual({ line: 'claude-opus-5 max claude', routed: true });
-    expect(await runRoute(routedRunner(), {}, NOW, 'Etc/GMT-2', false)).toEqual({ line: 'claude-opus-5 high claude-work', routed: true });
+    expect(await runRoute(routedRunner(), {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'claude-opus-5 max claude', routed: true });
+    expect(await runRoute(routedRunner(), {}, { mode: 'headroom', now: NOW, zone: 'Etc/GMT-2' })).toEqual({ line: 'claude-opus-5 high claude-work', routed: true });
   });
 
   it('walks the quality chain when high, skipping personal whose Fable window is tripped', async () => {
-    expect(await runRoute(routedRunner(), {}, NOW, 'UTC', true)).toEqual({ line: 'claude-fable-5-1 max claude-work', routed: true });
+    expect(await runRoute(routedRunner(), {}, { mode: 'high', now: NOW, zone: 'UTC' })).toEqual({ line: 'claude-fable-5-1 max claude-work', routed: true });
   });
 
   it('is none when every provider is unavailable', async () => {
-    expect(await runRoute(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW, 'UTC', false)).toEqual({ line: 'none', routed: false });
+    expect(await runRoute(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
   });
 });
 
@@ -1591,7 +1591,7 @@ describe('route eligibility state file', () => {
   }
 
   it('routes as the 010 rules say with no state file and never creates one', async () => {
-    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC', false)).toEqual({ line: 'claude-opus-5 max claude', routed: true });
+    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'claude-opus-5 max claude', routed: true });
     expect(readdirSync(scratch)).toEqual([]);
   });
 
@@ -1604,16 +1604,16 @@ describe('route eligibility state file', () => {
   ])('routes around ineligible providers and never writes: %s', async (_case, bytes, line) => {
     writeState(bytes);
     const before = statSync(statePath).mtimeMs;
-    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC', false)).toEqual({ line, routed: true });
+    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line, routed: true });
     expect([readFileSync(statePath, 'utf8'), statSync(statePath).mtimeMs]).toEqual([bytes, before]);
   });
 
   it('routes as if every provider is eligible when the state path is a directory, and is none when all are off', async () => {
     mkdirSync(statePath, { recursive: true });
-    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC', false)).toEqual({ line: 'claude-opus-5 max claude', routed: true });
+    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'claude-opus-5 max claude', routed: true });
     rmSync(statePath, { recursive: true });
     writeState('{"claude": false, "claude-work": false, "agy": false, "kimi": false}');
-    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC', false)).toEqual({ line: 'none', routed: false });
+    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
   });
 
   it.each<[string, (home: string) => Record<string, string>, (home: string) => string]>([
@@ -1623,10 +1623,10 @@ describe('route eligibility state file', () => {
   ])('reads the default state path under %s', async (_case, envOf, pathOf) => {
     const io = routedRunner();
     const homed = { ...io, reader: { ...io.reader, homeDir: () => scratch } };
-    expect((await runRoute(homed, envOf(scratch), NOW, 'UTC', false)).line).toBe('claude-opus-5 max claude');
+    expect((await runRoute(homed, envOf(scratch), { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('claude-opus-5 max claude');
     mkdirSync(join(pathOf(scratch), '..'), { recursive: true });
     writeFileSync(pathOf(scratch), '{"claude": false}');
-    expect((await runRoute(homed, envOf(scratch), NOW, 'UTC', false)).line).toBe('kimi-code/kimi-for-coding-highspeed kimi');
+    expect((await runRoute(homed, envOf(scratch), { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('kimi-code/kimi-for-coding-highspeed kimi');
   });
 
   it('tags ineligible panels in --once output, changes no other line and never writes', async () => {
@@ -1659,7 +1659,7 @@ describe('route eligibility state file', () => {
     expect(readdirSync(join(scratch, 'state'))).toEqual(['eligibility.json']);
     expect(headerOf(dashboard.lastFrame(), 'claude')).toBe(`▸ ${CLAUDE_TAG.slice(0, -13)}routing off`);
     expect(dashboard.lastFrame().split('\n').filter((line) => line.startsWith('session ') || line.startsWith('weekly '))).toEqual(rows);
-    expect((await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, NOW, 'UTC', false)).line).toBe('claude-opus-5 high claude-work');
+    expect((await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('claude-opus-5 high claude-work');
     dashboard.press(' ');
     expect(stateOf()).toEqual({ claude: true });
     expect(headerOf(dashboard.lastFrame(), 'claude')).toBe('▸ claude');

@@ -129,6 +129,13 @@ module.exports = {
       to: { path: '^src/render/' }
     },
     {
+      name: 'route-renderer-knows-domain-entry-only',
+      comment: 'render/route.ts picks the route policy (010 headroom or the --high chain) from one RouteRequest; it reaches the domain policies through domain/index.ts and nothing else, no Node built-ins, no probes, no render siblings',
+      severity: 'error',
+      from: { path: '^src/render/route\\.ts$' },
+      to: { pathNot: '^src/domain/index\\.ts$' }
+    },
+    {
       name: 'render-layer',
       severity: 'error',
       comment: 'Render depends on domain only, never on probes, and does no IO',

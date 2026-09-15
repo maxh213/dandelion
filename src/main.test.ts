@@ -191,22 +191,22 @@ describe('main', () => {
     expect(output()).toBe('claude-opus-5 high claude\n');
     expect(keyboard.setRawMode).not.toHaveBeenCalled();
     expect(proc.exit).not.toHaveBeenCalled();
-    const [io, env, now, zone] = vi.mocked(runRoute).mock.calls[0];
-    expect([io, env, zone]).toEqual([routeIo, proc.env, Intl.DateTimeFormat().resolvedOptions().timeZone]);
+    const [io, env, { mode, now, zone }] = vi.mocked(runRoute).mock.calls[0];
+    expect([io, env, mode, zone]).toEqual([routeIo, proc.env, 'headroom', Intl.DateTimeFormat().resolvedOptions().timeZone]);
     expect(now >= before && now <= after).toBe(true);
   });
 
-  it.each<[string[], boolean, string]>([
-    [['route', '--high'], true, 'claude-fable-5-1 max claude\n'],
-    [['route', 'extra', '--high'], true, 'claude-fable-5-1 max claude\n'],
-    [['route'], false, 'claude-opus-5 high claude\n'],
-    [['route', '--High'], false, 'claude-opus-5 high claude\n']
-  ])('runIfMain %j uses the --high chain only when an exact --high follows route', async (args, high, line) => {
+  it.each<[string[], string, string]>([
+    [['route', '--high'], 'high', 'claude-fable-5-1 max claude\n'],
+    [['route', 'extra', '--high'], 'high', 'claude-fable-5-1 max claude\n'],
+    [['route'], 'headroom', 'claude-opus-5 high claude\n'],
+    [['route', '--High'], 'headroom', 'claude-opus-5 high claude\n']
+  ])('runIfMain %j uses the --high chain only when an exact --high follows route', async (args, mode, line) => {
     vi.mocked(runRoute).mockClear();
     const { proc, output } = procOf(['node', MAIN, ...args], false, false);
     await runIfMain(MAIN_URL, MAIN, routeIo, proc);
     expect(output()).toBe(line);
-    expect(vi.mocked(runRoute).mock.calls[0][4]).toBe(high);
+    expect(vi.mocked(runRoute).mock.calls[0][2].mode).toBe(mode);
   });
 
   it('runIfMain route prints none and exits 1 when nothing routes', async () => {

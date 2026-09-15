@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isEntryFile, runApp, runLive, runRoute, realIo, type Keyboard, type ProbeIo, type Screen } from './app/index.ts';
+import { isEntryFile, runApp, runLive, runRoute, realIo, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -21,13 +21,13 @@ export async function main(
   stream.write(output + '\n');
 }
 
-function asksForHighChain(argv: string[]): boolean {
-  return argv.slice(3).includes('--high');
+function routeModeOf(argv: string[]): RouteMode {
+  return argv.slice(3).includes('--high') ? 'high' : 'headroom';
 }
 
 async function route(io: ProbeIo, proc: Proc): Promise<void> {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const { line, routed } = await runRoute(io, proc.env, new Date().toISOString(), zone, asksForHighChain(proc.argv));
+  const { line, routed } = await runRoute(io, proc.env, { mode: routeModeOf(proc.argv), now: new Date().toISOString(), zone });
   proc.stdout.write(`${line}\n`);
   if (!routed) proc.exit(1);
 }

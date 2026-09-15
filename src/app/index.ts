@@ -20,11 +20,11 @@ import {
   type RpcSpawner,
   type RunFailure
 } from '../probes/index.ts';
-import { openEligibility, renderDashboard, renderRoute, type Eligibility, type RouteOutput, type StateFile } from '../render/index.ts';
+import { openEligibility, renderDashboard, renderRoute, type Eligibility, type RouteOutput, type RouteRequest, type StateFile } from '../render/index.ts';
 import { startLive, type Keyboard, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
-export type { RouteOutput } from '../render/index.ts';
+export type { RouteMode, RouteOutput, RouteRequest } from '../render/index.ts';
 export type { Keyboard, Screen } from './live.ts';
 
 type Stop = () => Promise<void>;
@@ -233,8 +233,8 @@ export async function runApp(io: ProbeIo, env: Record<string, string | undefined
   return renderDashboard(usages, noColor, now, eligibilityOf(io, env).ineligible());
 }
 
-export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, now: string, zone: string, high: boolean): Promise<RouteOutput> {
-  return renderRoute(await probeOnce(io, env, now), now, zone, eligibilityOf(io, env).ineligible(), high);
+export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, request: RouteRequest): Promise<RouteOutput> {
+  return renderRoute(await probeOnce(io, env, request.now), eligibilityOf(io, env).ineligible(), request);
 }
 
 export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {
