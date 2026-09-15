@@ -68,7 +68,7 @@ const PLAIN_ROWS = [
   [{ qclaude: [20, 30, 72], qwork: [10, 5, 72], agy: [15, 20, 72] }, 'claude-opus-5 high claude-work'],
   [{ agy: [0, 90, 2], kimi: [0, 90, 2] }, 'gemini-3.1-pro-high high agy'],
   [{ kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/kimi-for-coding-highspeed kimi'],
-  [{ kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.6 grok'],
+  [{ kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.6 xhigh grok'],
   [{ qclaude: [0, 86, 2], cursor: [60, 60, 60, 2] }, 'kimi-k3-max cursor']
 ];
 

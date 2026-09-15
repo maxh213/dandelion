@@ -50,7 +50,7 @@ Eligibility: ineligible providers are dropped before both rules, so an ineligibl
 | claude-work | `claude-opus-5 high` | `claude-opus-5 max` |
 | agy | `gemini-3.1-pro-high medium` | `gemini-3.1-pro-high high` |
 | kimi | `kimi-code/kimi-for-coding-highspeed` | `kimi-code/kimi-for-coding-highspeed` |
-| grok | `grok-4.6` | `grok-4.6` |
+| grok | `grok-4.6 xhigh` | `grok-4.6 xhigh` |
 | cursor | `kimi-k3-max` | `kimi-k3-max` |
 
 Account token: both `route` and `route --high` print `<line> <provider id>`, such as `claude-opus-5 high claude-work` or `kimi-k3-max cursor`, because several providers share a line and the account decides how to launch it; `none` stays alone. `claude` launches claude as usual, `claude-work` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_WORK_CONFIG_DIR` (default `~/.claude-work`), and every other id launches its own CLI.

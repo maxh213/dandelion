@@ -25,7 +25,7 @@ Feature: 010 - dandelion route picks the subscription to burn
     | claude-work | claude-opus-5 high                  | claude-opus-5 max                   |
     | agy         | gemini-3.1-pro-high medium          | gemini-3.1-pro-high high            |
     | kimi        | kimi-code/kimi-for-coding-highspeed | kimi-code/kimi-for-coding-highspeed |
-    | grok        | grok-4.6                            | grok-4.6                            |
+    | grok        | grok-4.6 xhigh                            | grok-4.6 xhigh                            |
     | cursor      | kimi-k3-max                         | kimi-k3-max                         |
 
   Background:
@@ -52,7 +52,7 @@ Feature: 010 - dandelion route picks the subscription to burn
       | most headroom, claude-work highest             | route       | claude 20/30@72, claude-work 10/5@72, agy 15/20@72 | claude-opus-5 high                  |
       | most headroom, agy highest                     | route       | claude 20/30@72, agy 5/5@72                        | gemini-3.1-pro-high medium          |
       | kimi bound by its 5h window                    | route       | kimi 90/10@72, agy 50/50@72                        | gemini-3.1-pro-high medium          |
-      | a missing rolling kind counts as 100           | route       | kimi 90/10@72, grok 50@72                          | grok-4.6                            |
+      | a missing rolling kind counts as 100           | route       | kimi 90/10@72, grok 50@72                          | grok-4.6 xhigh                      |
       | kimi free on both                              | route       | kimi 10/10@72, grok 50@72                          | kimi-code/kimi-for-coding-highspeed |
       | headroom tie goes to dashboard order           | route       | agy 20/20@72, kimi 20/20@72                        | gemini-3.1-pro-high medium          |
       | an unavailable candidate is skipped            | route       | claude unavailable, cursor 40@72                   | kimi-k3-max                         |

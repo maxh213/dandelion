@@ -54,7 +54,7 @@ rt() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ D
    - **Expected:** `claude-opus-5 high`, then `gemini-3.1-pro-high medium`, each followed by `exit=0`.
 
 4. Run `rt Q_KIMI=90,10,72 Q_AGY=50,50,72`, then `rt Q_KIMI=90,10,72 Q_GROK=50,72`, then `rt Q_KIMI=10,10,72 Q_GROK=50,72`, then `rt Q_AGY=20,20,72 Q_KIMI=20,20,72`.
-   - **Expected:** `gemini-3.1-pro-high medium` (kimi is bound by its 5h window), then `grok-4.6` (grok has no rolling window, so 100 counts), then `kimi-code/kimi-for-coding-highspeed`, then `gemini-3.1-pro-high medium`, each followed by `exit=0`.
+   - **Expected:** `gemini-3.1-pro-high medium` (kimi is bound by its 5h window), then `grok-4.6 xhigh` (grok has no rolling window, so 100 counts), then `kimi-code/kimi-for-coding-highspeed`, then `gemini-3.1-pro-high medium`, each followed by `exit=0`.
 
 5. Run `rt Q_CURSOR=40,72`, then `rt 2>/tmp/010.err; wc -c < /tmp/010.err`.
    - **Expected:** `kimi-k3-max` and `exit=0`. Then `none`, `exit=1` and `0` (stderr is empty): codex and kilo are "ok" but never routed.

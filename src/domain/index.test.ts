@@ -93,7 +93,7 @@ describe('routeLine', () => {
     ['reset already past never evaporates', 'claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.1-pro-high medium agy'],
     ['reset exactly at now never evaporates', 'claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.1-pro-high medium agy'],
     ['reset 1 ms after now evaporates', 'claude: weekly 50 @2026-09-14T11:00:00.001Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'claude-opus-5 max claude'],
-    ['a past reset still binds (stale grok)', 'grok: weekly 10 @2026-09-14T10:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z', 'grok-4.6 grok'],
+    ['a past reset still binds (stale grok)', 'grok: weekly 10 @2026-09-14T10:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z', 'grok-4.6 xhigh grok'],
     ['weekly without resetsAt', 'claude: weekly 50 @-; agy: rolling 0 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.1-pro-high medium agy'],
     ['reset exactly at local midnight', 'claude: weekly 50 @2026-09-15T00:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.1-pro-high medium agy'],
     ['reset 1 ms before local midnight', 'claude: weekly 50 @2026-09-14T23:59:59.999Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'claude-opus-5 max claude'],
@@ -114,7 +114,7 @@ describe('routeLine', () => {
     ['claude-work', 'claude-opus-5 high', 'claude-opus-5 max'],
     ['agy', 'gemini-3.1-pro-high medium', 'gemini-3.1-pro-high high'],
     ['kimi', 'kimi-code/kimi-for-coding-highspeed', 'kimi-code/kimi-for-coding-highspeed'],
-    ['grok', 'grok-4.6', 'grok-4.6'],
+    ['grok', 'grok-4.6 xhigh', 'grok-4.6 xhigh'],
     ['cursor', 'kimi-k3-max', 'kimi-k3-max']
   ])('routes %s alone to its standard line, and to its max line when its weekly evaporates', (id, standard, max) => {
     expect(routeOf(`${id}: weekly 50 @2026-09-20T00:00:00.000Z`)).toBe(`${standard} ${id}`);
@@ -135,8 +135,8 @@ describe('routeLine', () => {
   }
 
   it.each([
-    ['100', 'grok-4.6 grok'],
-    ['90', 'grok-4.6 grok'],
+    ['100', 'grok-4.6 xhigh grok'],
+    ['90', 'grok-4.6 xhigh grok'],
     ['89.9', 'claude-opus-5 max claude-work'],
     ['89', 'claude-opus-5 max claude-work']
   ])('routes the live case with claude-work session at %s', (session, line) => {
@@ -144,7 +144,7 @@ describe('routeLine', () => {
   });
 
   it.each([
-    ['a tripped account loses rule 2', 'claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 grok'],
+    ['a tripped account loses rule 2', 'claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 xhigh grok'],
     ['just under the trip is not tripped', 'claude: rolling 89.9 @-; agy: rolling 89.95 @-', [], 'claude-opus-5 high claude'],
     ['an untripped evaporator still wins', 'claude: rolling 89.9 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', [], 'claude-opus-5 max claude'],
     ['a tripped evaporator is ignored', 'claude: rolling 90 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 80 @-', [], 'gemini-3.1-pro-high medium agy'],

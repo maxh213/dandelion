@@ -12,7 +12,7 @@ const ROUTING_TABLE: Route[] = [
   { id: 'claude-work', ...CLAUDE_LINES },
   { id: 'agy', standard: 'gemini-3.1-pro-high medium', max: 'gemini-3.1-pro-high high' },
   { id: 'kimi', standard: 'kimi-code/kimi-for-coding-highspeed', max: 'kimi-code/kimi-for-coding-highspeed' },
-  { id: 'grok', standard: 'grok-4.6', max: 'grok-4.6' },
+  { id: 'grok', standard: 'grok-4.6 xhigh', max: 'grok-4.6 xhigh' },
   { id: 'cursor', standard: 'kimi-k3-max', max: 'kimi-k3-max' }
 ];
 export const NO_ROUTE = 'none';

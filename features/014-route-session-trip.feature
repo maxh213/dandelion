@@ -22,13 +22,13 @@ Feature: 014 - dandelion route never picks an account whose rolling window is us
       | case                                          | usages                                               | state                  | line                            | code |
       | tripped evaporator loses to untripped one     | claude 10/80@2, claude-work 95/52@2                  | missing                | claude-opus-5 max claude        | 0    |
       | work session 89: under the trip               | claude 2/13@130, claude-work 89/72@5.35, grok 9@130  | missing                | claude-opus-5 max claude-work   | 0    |
-      | work session 90: the trip is inclusive        | claude 2/13@130, claude-work 90/72@5.35, grok 9@130  | missing                | grok-4.6 grok                   | 0    |
+      | work session 90: the trip is inclusive        | claude 2/13@130, claude-work 90/72@5.35, grok 9@130  | missing                | grok-4.6 xhigh grok                   | 0    |
       | tripped agy never evaporates                  | agy 95/50@2, claude 0/20@72                          | missing                | claude-opus-5 high claude       | 0    |
-      | kimi 5h at 95 loses rule 2 to a lower binding | kimi 95/0@72, grok 97@72                             | missing                | grok-4.6 grok                   | 0    |
+      | kimi 5h at 95 loses rule 2 to a lower binding | kimi 95/0@72, grok 97@72                             | missing                | grok-4.6 xhigh grok                   | 0    |
       | agy Five Hour at 90 loses rule 2              | agy 90/0@72, claude 10/92@72                         | missing                | claude-opus-5 high claude       | 0    |
-      | claude session at 90 loses rule 2             | claude 90/0@72, grok 95@72                           | missing                | grok-4.6 grok                   | 0    |
+      | claude session at 90 loses rule 2             | claude 90/0@72, grok 95@72                           | missing                | grok-4.6 xhigh grok                   | 0    |
       | a weekly at 95 does not trip (rule 1)         | kimi 0/95@2, agy 0/0@72                              | missing                | kimi-code/kimi-for-coding-highspeed kimi | 0 |
-      | a weekly at 92 does not trip (rule 2)         | grok 92@72                                           | missing                | grok-4.6 grok                   | 0    |
+      | a weekly at 92 does not trip (rule 2)         | grok 92@72                                           | missing                | grok-4.6 xhigh grok                   | 0    |
       | every routable account tripped                | claude 90/0@72, agy 99/0@72, kimi 100/0@72           | missing                | none                            | 1    |
       | ineligible work and tripped claude            | claude 95/80@2, claude-work 0/80@2, agy 10/10@72     | {"claude-work": false} | gemini-3.1-pro-high medium agy  | 0    |
       | only ineligible or tripped claude accounts    | claude 95/80@2, claude-work 0/80@2                   | {"claude-work": false} | none                            | 1    |
@@ -43,11 +43,11 @@ Feature: 014 - dandelion route never picks an account whose rolling window is us
       | grok        | credits 9% in 130h                                                                       |
       | cursor      | total 36%, auto 36%, api 33%, all in 365h                                                |
     When the user runs `node src/main.ts route`
-    Then stdout is exactly "grok-4.6 grok" and a newline, stderr is empty and the exit code is 0
+    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, stderr is empty and the exit code is 0
     When claude-work's session is 89% instead
     Then stdout is exactly "claude-opus-5 max claude-work" and a newline, exit 0
     When claude-work's session is 90% instead
-    Then stdout is exactly "grok-4.6 grok" and a newline, exit 0
+    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, exit 0
     When the user runs `node src/main.ts route --high` with the original usages
     Then stdout is exactly "claude-fable-5-1 max claude" and a newline, exit 0, as 012 gives
 
@@ -61,13 +61,13 @@ Feature: 014 - dandelion route never picks an account whose rolling window is us
       weekly 33 @2026-09-29T17:39:00.000Z
     Then it returns "<line>" for each <session>:
       | session | line                          |
-      | 100     | grok-4.6 grok                 |
-      | 90      | grok-4.6 grok                 |
+      | 100     | grok-4.6 xhigh grok                 |
+      | 90      | grok-4.6 xhigh grok                 |
       | 89.9    | claude-opus-5 max claude-work |
       | 89      | claude-opus-5 max claude-work |
     And unit rows pin, among others:
       | candidates                                                                                         | ineligible  | line                              |
-      | claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z                                   |             | grok-4.6 grok                     |
+      | claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z                                   |             | grok-4.6 xhigh grok                     |
       | claude: rolling 89.9 @-; agy: rolling 89.95 @-                                                     |             | claude-opus-5 high claude         |
       | claude: rolling 89.9 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-                    |             | claude-opus-5 max claude          |
       | claude: rolling 90 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 80 @-                     |             | gemini-3.1-pro-high medium agy    |

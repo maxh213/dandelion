@@ -11,10 +11,10 @@ live() { rq Q_CLAUDE=2,13,130 Q_AGY=0,17,126 Q_KIMI=0,95,73 Q_GROK=9,130 Q_CURSO
 ```
 
 1. Run `live Q_WORK=100,72,5.35 2>/tmp/014.err; wc -c < /tmp/014.err`.
-   - **Expected:** `grok-4.6 grok`, `exit=0`, then `0`. Before 014 this printed `claude-opus-5 max claude-work`.
+   - **Expected:** `grok-4.6 xhigh grok`, `exit=0`, then `0`. Before 014 this printed `claude-opus-5 max claude-work`.
 
 2. Run `live Q_WORK=89,72,5.35`, then `live Q_WORK=90,72,5.35`.
-   - **Expected:** `claude-opus-5 max claude-work` (89% is under the trip), then `grok-4.6 grok` (90% trips). Each is followed by `exit=0`.
+   - **Expected:** `claude-opus-5 max claude-work` (89% is under the trip), then `grok-4.6 xhigh grok` (90% trips). Each is followed by `exit=0`.
 
 3. Run `live A='route --high' Q_WORK=100,72,5.35`.
    - **Expected:** `claude-fable-5-1 max claude`, `exit=0`: `--high` is unchanged.
@@ -23,10 +23,10 @@ live() { rq Q_CLAUDE=2,13,130 Q_AGY=0,17,126 Q_KIMI=0,95,73 Q_GROK=9,130 Q_CURSO
    - **Expected:** `claude-opus-5 max claude` (work would evaporate with 48 left but is tripped), then `claude-opus-5 high claude` (a tripped agy never evaporates). Each is followed by `exit=0`.
 
 5. Run `rq Q_KIMI=95,0,72 Q_GROK=97,72`, then `rq Q_AGY=90,0,72 Q_CLAUDE=10,92,72`, then `rq Q_CLAUDE=90,0,72 Q_GROK=95,72`.
-   - **Expected:** `grok-4.6 grok`, then `claude-opus-5 high claude`, then `grok-4.6 grok`, each with `exit=0`. The tripped account had the highest binding each time.
+   - **Expected:** `grok-4.6 xhigh grok`, then `claude-opus-5 high claude`, then `grok-4.6 xhigh grok`, each with `exit=0`. The tripped account had the highest binding each time.
 
 6. Run `rq Q_KIMI=0,95,2 Q_AGY=0,0,72`, then `rq Q_GROK=92,72`.
-   - **Expected:** `kimi-code/kimi-for-coding-highspeed kimi`, then `grok-4.6 grok`, each with `exit=0`. Weekly windows at 95% and 92% do not trip.
+   - **Expected:** `kimi-code/kimi-for-coding-highspeed kimi`, then `grok-4.6 xhigh grok`, each with `exit=0`. Weekly windows at 95% and 92% do not trip.
 
 7. Run `rq Q_CLAUDE=90,0,72 Q_AGY=99,0,72 Q_KIMI=100,0,72 2>/tmp/014.err; wc -c < /tmp/014.err`.
    - **Expected:** `none`, `exit=1`, then `0`.

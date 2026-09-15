@@ -40,13 +40,13 @@ const WORK_OFF = '{"claude-work": false}';
 const TRIP_ROWS = [
   ['tripped evaporator loses to untripped one', { claude: [10, 80, 2], work: [95, 52, 2] }, undefined, 'claude-opus-5 max claude', 0],
   ['work session 89: under the trip', { claude: [2, 13, 130], work: [89, 72, 5.35], grok: [9, 130] }, undefined, 'claude-opus-5 max claude-work', 0],
-  ['work session 90: the trip is inclusive', { claude: [2, 13, 130], work: [90, 72, 5.35], grok: [9, 130] }, undefined, 'grok-4.6 grok', 0],
+  ['work session 90: the trip is inclusive', { claude: [2, 13, 130], work: [90, 72, 5.35], grok: [9, 130] }, undefined, 'grok-4.6 xhigh grok', 0],
   ['tripped agy never evaporates', { agy: [95, 50, 2], claude: [0, 20, 72] }, undefined, 'claude-opus-5 high claude', 0],
-  ['kimi 5h at 95 loses rule 2 to a lower binding', { kimi: [95, 0, 72], grok: [97, 72] }, undefined, 'grok-4.6 grok', 0],
+  ['kimi 5h at 95 loses rule 2 to a lower binding', { kimi: [95, 0, 72], grok: [97, 72] }, undefined, 'grok-4.6 xhigh grok', 0],
   ['agy Five Hour at 90 loses rule 2', { agy: [90, 0, 72], claude: [10, 92, 72] }, undefined, 'claude-opus-5 high claude', 0],
-  ['claude session at 90 loses rule 2', { claude: [90, 0, 72], grok: [95, 72] }, undefined, 'grok-4.6 grok', 0],
+  ['claude session at 90 loses rule 2', { claude: [90, 0, 72], grok: [95, 72] }, undefined, 'grok-4.6 xhigh grok', 0],
   ['a weekly at 95 does not trip (rule 1)', { kimi: [0, 95, 2], agy: [0, 0, 72] }, undefined, 'kimi-code/kimi-for-coding-highspeed kimi', 0],
-  ['a weekly at 92 does not trip (rule 2)', { grok: [92, 72] }, undefined, 'grok-4.6 grok', 0],
+  ['a weekly at 92 does not trip (rule 2)', { grok: [92, 72] }, undefined, 'grok-4.6 xhigh grok', 0],
   ['every routable account tripped', { claude: [90, 0, 72], agy: [99, 0, 72], kimi: [100, 0, 72] }, undefined, 'none', 1],
   ['ineligible work and tripped claude', { claude: [95, 80, 2], work: [0, 80, 2], agy: [10, 10, 72] }, WORK_OFF, 'gemini-3.1-pro-high medium agy', 0],
   ['only ineligible or tripped claude accounts', { claude: [95, 80, 2], work: [0, 80, 2] }, WORK_OFF, 'none', 1]
@@ -64,9 +64,9 @@ function liveCase(session) {
 }
 
 const LIVE_ROWS = [
-  ['live case, work session 100%', 'route', 100, 'grok-4.6 grok'],
+  ['live case, work session 100%', 'route', 100, 'grok-4.6 xhigh grok'],
   ['live case, work session 89%', 'route', 89, 'claude-opus-5 max claude-work'],
-  ['live case, work session 90%', 'route', 90, 'grok-4.6 grok'],
+  ['live case, work session 90%', 'route', 90, 'grok-4.6 xhigh grok'],
   ['live case, route --high', 'route --high', 100, 'claude-fable-5-1 max claude']
 ];
 
