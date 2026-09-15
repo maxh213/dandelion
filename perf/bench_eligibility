@@ -28,15 +28,22 @@ const TARGETS = {
   live: 'runLive eight providers j space space real state file (in-process, per session)'
 };
 
+const HIGH_TARGETS = {
+  runRouteHigh: 'runRoute --high eight providers claude ineligible state file (in-process, per call)',
+  highRouteLine: 'highRouteLine eight providers claude-work ineligible (in-process, per call)'
+};
+
 const domain = existsSync(domainEntry) ? await import(pathToFileURL(domainEntry).href) : {};
 
 if (typeof domain.openEligibility !== 'function') {
-  absent(...Object.values(TARGETS));
+  absent(...Object.values(TARGETS), ...Object.values(HIGH_TARGETS));
   process.exit(0);
 }
 
 const app = await import(pathToFileURL(appEntry).href);
 const render = await import(pathToFileURL(renderEntry).href);
+const hasHigh = typeof domain.highRouteLine === 'function';
+const runRoute = (io, env, mode) => (hasHigh ? app.runRoute(io, env, { mode, now: NOW, zone: 'Europe/London' }) : app.runRoute(io, env, NOW, 'Europe/London'));
 
 const PERSONAL_OUT = [
   'Current session: 3% used · resets Sep 14, 7:40pm (Europe/London)',
@@ -148,9 +155,9 @@ async function liveSession() {
 }
 
 try {
-  expect(domain.routeLine(fleet, NOW, MIDNIGHT, ['claude']), 'kimi-code/kimi-for-coding-highspeed', 'routeLine without claude');
+  expect(domain.routeLine(fleet, NOW, MIDNIGHT, ['claude']), hasHigh ? 'kimi-code/kimi-for-coding-highspeed kimi' : 'kimi-code/kimi-for-coding-highspeed', 'routeLine without claude');
   expect(held.ineligible().join(), 'claude', 'ineligible');
-  expect((await app.runRoute(stubIo, appEnv, NOW, 'Europe/London')).line.startsWith('claude-opus'), false, 'runRoute skips claude');
+  expect((await runRoute(stubIo, appEnv, 'headroom')).line.startsWith('claude-opus'), false, 'runRoute skips claude');
   expect((await app.runApp(stubIo, appEnv, NOW)).includes('routing off'), true, 'runApp tags claude');
   expect(render.renderDashboard(fleet, false, NOW, INELIGIBLE).split('routing off').length, 3, 'dashboard tags');
   expect(render.renderLiveFrame(frameView, false, NOW).includes('not routable'), true, 'frame flash');
@@ -159,7 +166,7 @@ try {
 
   timeCli();
   emit(TARGETS.cliRoute, await repeat(VALUES, timeCli), 'ms');
-  emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, NOW, 'Europe/London')), 'us');
+  emit(TARGETS.runRoute, await perCall(ITERATIONS, () => runRoute(stubIo, appEnv, 'headroom')), 'us');
   emit(TARGETS.runApp, await perCall(ITERATIONS, () => app.runApp(stubIo, appEnv, NOW)), 'us');
   emit(TARGETS.routeLine, perCallSync(ITERATIONS, () => domain.routeLine(fleet, NOW, MIDNIGHT, ['claude'])), 'us');
   emit(TARGETS.open, perCallSync(ITERATIONS, () => domain.openEligibility({}, fixture, memoryFile).ineligible()), 'us');
@@ -167,6 +174,15 @@ try {
   emit(TARGETS.dashboard, perCallSync(ITERATIONS, () => render.renderDashboard(fleet, false, NOW, INELIGIBLE)), 'us');
   emit(TARGETS.frame, perCallSync(ITERATIONS, () => render.renderLiveFrame(frameView, false, NOW)), 'us');
   emit(TARGETS.live, await perCall(SESSIONS, liveSession), 'us');
+
+  if (!hasHigh) {
+    absent(...Object.values(HIGH_TARGETS));
+  } else {
+    expect((await runRoute(stubIo, appEnv, 'high')).line, 'claude-fable-5-1 max claude-work', 'runRoute high skips claude');
+    expect(domain.highRouteLine(fleet, ['claude-work']), 'kimi-k3-max cursor', 'highRouteLine without claude-work');
+    emit(HIGH_TARGETS.runRouteHigh, await perCall(ITERATIONS, () => runRoute(stubIo, appEnv, 'high')), 'us');
+    emit(HIGH_TARGETS.highRouteLine, perCallSync(ITERATIONS, () => domain.highRouteLine(fleet, ['claude-work'])), 'us');
+  }
 } finally {
   rmSync(fixture, { recursive: true, force: true });
 }

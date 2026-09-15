@@ -13,6 +13,7 @@ const renderEntry = join(tree, 'src', 'render', 'index.ts');
 const domainEntry = join(tree, 'src', 'domain', 'index.ts');
 const NOW = '2026-09-14T11:00:00.000Z';
 const MIDNIGHT = '2026-09-15T00:00:00.000Z';
+const ZONE = 'Europe/London';
 const ITERATIONS = 2000;
 
 const TARGETS = {
@@ -26,14 +27,29 @@ const TARGETS = {
   midnightBerlinDst: 'nextLocalMidnight Europe/Berlin DST end (in-process, per call)'
 };
 
+const HIGH_TARGETS = {
+  cliRouteHigh: 'cli route --high eight providers personal Fable tripped',
+  runRouteHigh: 'runRoute --high eight providers both claude accounts stub (in-process, per call)',
+  renderRouteHigh: 'renderRoute --high eight providers (in-process, per call)',
+  highRank1: 'highRouteLine eight providers fable on claude-work (in-process, per call)',
+  highRank5: 'highRouteLine eight providers walks to agy (in-process, per call)',
+  highNone: 'highRouteLine eight providers nothing to route (in-process, per call)'
+};
+
 const domain = existsSync(domainEntry) ? await import(pathToFileURL(domainEntry).href) : {};
 const render = existsSync(renderEntry) ? await import(pathToFileURL(renderEntry).href) : {};
 const app = existsSync(appEntry) ? await import(pathToFileURL(appEntry).href) : {};
 
 if (typeof domain.routeLine !== 'function' || typeof render.renderRoute !== 'function' || typeof app.runRoute !== 'function') {
-  absent(...Object.values(TARGETS));
+  absent(...Object.values(TARGETS), ...Object.values(HIGH_TARGETS));
   process.exit(0);
 }
+
+const hasHigh = typeof domain.highRouteLine === 'function';
+const request = (mode) => ({ mode, now: NOW, zone: ZONE });
+const runRoute = (io, env, mode) => (hasHigh ? app.runRoute(io, env, request(mode)) : app.runRoute(io, env, NOW, ZONE));
+const renderRoute = (usages, mode) => (hasHigh ? render.renderRoute(usages, [], request(mode)) : render.renderRoute(usages, NOW, ZONE, []));
+const onAccount = (line, id) => (hasHigh ? `${line} ${id}` : line);
 
 const PERSONAL_OUT = [
   'Current session: 3% used · resets Sep 14, 7:40pm (Europe/London)',
@@ -58,16 +74,17 @@ writeFileSync(join(bin, 'agy'), `#!/bin/sh\ncat <<'OUT'\n${AGY_OUT}OUT\n`);
 writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
 for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
 
-function timeCli() {
+function timeCli(args, wanted) {
   const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
   delete env.DANDELION_CURSOR_API_BASE;
   const start = process.hrtime.bigint();
-  const result = spawnSync(process.execPath, [main, 'route'], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [main, ...args], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
   const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
   if (result.status !== 0 || result.stdout.split('\n').length !== 2) throw new Error(`route printed no single line (exit ${result.status}):\n${result.stdout}${result.stderr}`);
+  if (wanted !== undefined && result.stdout !== `${wanted}\n`) throw new Error(`${args.join(' ')} printed ${JSON.stringify(result.stdout)}, wanted ${JSON.stringify(wanted)}`);
   return elapsed;
 }
 
@@ -98,29 +115,49 @@ function fleet(claudeWeeklyReset) {
 const evaporating = fleet('2026-09-14T22:00:00.000Z');
 const headroom = fleet('2026-09-19T22:00:00.000Z');
 const nothing = headroom.map((usage) => ({ ...usage, status: 'unavailable', windows: [], reason: 'not found' }));
+const onlyAgyOpen = headroom.map((usage) => (usage.id === 'agy' ? usage : { ...usage, windows: usage.windows.map((window) => ({ ...window, usedPct: 95 })) }));
 
 function expect(actual, wanted, what) {
   if (actual !== wanted) throw new Error(`${what}: got ${JSON.stringify(actual)}, wanted ${JSON.stringify(wanted)}`);
 }
 
 try {
-  expect(domain.routeLine(evaporating, NOW, MIDNIGHT, []), 'claude-opus-5 max', 'evaporation');
-  expect(domain.routeLine(headroom, NOW, MIDNIGHT, []), 'kimi-code/kimi-for-coding-highspeed', 'headroom');
+  expect(domain.routeLine(evaporating, NOW, MIDNIGHT, []), onAccount('claude-opus-5 max', 'claude'), 'evaporation');
+  expect(domain.routeLine(headroom, NOW, MIDNIGHT, []), onAccount('kimi-code/kimi-for-coding-highspeed', 'kimi'), 'headroom');
   expect(domain.routeLine(nothing, NOW, MIDNIGHT, []), 'none', 'nothing');
   expect(domain.nextLocalMidnight('UTC', NOW), MIDNIGHT, 'utc midnight');
   expect(domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z'), '2026-10-25T23:00:00.000Z', 'berlin midnight');
-  expect(render.renderRoute(evaporating, NOW, 'Europe/London', []).routed, true, 'renderRoute');
-  expect((await app.runRoute(stubIo, appEnv, NOW, 'Europe/London')).routed, true, 'runRoute');
+  expect(renderRoute(evaporating, 'headroom').routed, true, 'renderRoute');
+  expect((await runRoute(stubIo, appEnv, 'headroom')).routed, true, 'runRoute');
 
-  timeCli();
-  emit(TARGETS.cliRoute, await repeat(VALUES, timeCli), 'ms');
-  emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, NOW, 'Europe/London')), 'us');
-  emit(TARGETS.renderRoute, perCallSync(ITERATIONS, () => render.renderRoute(evaporating, NOW, 'Europe/London', [])), 'us');
+  timeCli(['route']);
+  emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(['route'])), 'ms');
+  emit(TARGETS.runRoute, await perCall(ITERATIONS, () => runRoute(stubIo, appEnv, 'headroom')), 'us');
+  emit(TARGETS.renderRoute, perCallSync(ITERATIONS, () => renderRoute(evaporating, 'headroom')), 'us');
   emit(TARGETS.routeEvaporation, perCallSync(ITERATIONS, () => domain.routeLine(evaporating, NOW, MIDNIGHT, [])), 'us');
   emit(TARGETS.routeHeadroom, perCallSync(ITERATIONS, () => domain.routeLine(headroom, NOW, MIDNIGHT, [])), 'us');
   emit(TARGETS.routeNone, perCallSync(ITERATIONS, () => domain.routeLine(nothing, NOW, MIDNIGHT, [])), 'us');
   emit(TARGETS.midnightUtc, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('UTC', NOW)), 'us');
   emit(TARGETS.midnightBerlinDst, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z')), 'us');
+
+  if (!hasHigh) {
+    absent(...Object.values(HIGH_TARGETS));
+  } else {
+    const FABLE_WORK = 'claude-fable-5-1 max claude-work';
+    expect(domain.highRouteLine(evaporating, []), FABLE_WORK, 'high rank 1');
+    expect(domain.highRouteLine(onlyAgyOpen, []), 'gemini-3.8-flash-high high agy', 'high rank 5');
+    expect(domain.highRouteLine(nothing, []), 'none', 'high nothing');
+    expect(renderRoute(evaporating, 'high').line, FABLE_WORK, 'renderRoute high');
+    expect((await runRoute(stubIo, appEnv, 'high')).line, FABLE_WORK, 'runRoute high');
+
+    timeCli(['route', '--high'], FABLE_WORK);
+    emit(HIGH_TARGETS.cliRouteHigh, await repeat(VALUES, () => timeCli(['route', '--high'], FABLE_WORK)), 'ms');
+    emit(HIGH_TARGETS.runRouteHigh, await perCall(ITERATIONS, () => runRoute(stubIo, appEnv, 'high')), 'us');
+    emit(HIGH_TARGETS.renderRouteHigh, perCallSync(ITERATIONS, () => renderRoute(evaporating, 'high')), 'us');
+    emit(HIGH_TARGETS.highRank1, perCallSync(ITERATIONS, () => domain.highRouteLine(evaporating, [])), 'us');
+    emit(HIGH_TARGETS.highRank5, perCallSync(ITERATIONS, () => domain.highRouteLine(onlyAgyOpen, [])), 'us');
+    emit(HIGH_TARGETS.highNone, perCallSync(ITERATIONS, () => domain.highRouteLine(nothing, [])), 'us');
+  }
 } finally {
   rmSync(fixture, { recursive: true, force: true });
 }
