@@ -6,8 +6,8 @@ backend = "claude"
 model = "claude-opus-5"
 effort = "high"
 
-# [practices]
-# enabled = true
+[practices]
+enabled = true
 
 [perf]
 setup = "npm ci --silent"
