@@ -5,7 +5,7 @@ import { probeCli, type CliProbe } from './cli.ts';
 import { probeCodex, type CodexIo } from './codex.ts';
 import { probeCursor, type CursorIo } from './cursor.ts';
 import { probeGrok, type GrokIo } from './grok.ts';
-import { probeJunie } from './junie.ts';
+import { probeJunie, type JunieIo } from './junie.ts';
 import { kiloProbe } from './kilo.ts';
 import { probeKimi, type KimiIo } from './kimi.ts';
 
@@ -14,7 +14,7 @@ export type { RpcChild, RpcSpawner } from './codex.ts';
 export type { LaunchedProcess, Launcher } from './kimi.ts';
 export type { Fetcher, FileReader };
 
-export type ProbeIo = KimiIo & GrokIo & CodexIo & CursorIo & { fetcher: Fetcher; reader: FileReader };
+export type ProbeIo = KimiIo & GrokIo & JunieIo & CodexIo & CursorIo & { fetcher: Fetcher; reader: FileReader };
 
 export type ProviderProbe = { id: string; probe(now: string): Promise<ProviderUsage> };
 
