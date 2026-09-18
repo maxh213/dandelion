@@ -51,7 +51,7 @@ const TRIP_ROWS = [
   ['a weekly at 95 does not trip (rule 1)', { kimi: [0, 95, 2], agy: [0, 0, 72] }, undefined, 'kimi-code/kimi-for-coding-highspeed kimi', 0],
   ['a weekly at 92 does not trip (rule 2)', { grok: [92, 72] }, undefined, 'grok-4.6 xhigh grok', 0],
   ['every routable account tripped', { claude: [90, 0, 72], agy: [99, 0, 72], kimi: [100, 0, 72] }, undefined, 'none', 1],
-  ['ineligible work and tripped claude', { claude: [95, 80, 2], work: [0, 80, 2], agy: [10, 10, 72] }, WORK_OFF, 'gemini-3.1-pro-high medium agy', 0],
+  ['ineligible work and tripped claude', { claude: [95, 80, 2], work: [0, 80, 2], agy: [10, 10, 72] }, WORK_OFF, 'gemini-3.8-flash-high high agy', 0],
   ['only ineligible or tripped claude accounts', { claude: [95, 80, 2], work: [0, 80, 2] }, WORK_OFF, 'none', 1]
 ];
 

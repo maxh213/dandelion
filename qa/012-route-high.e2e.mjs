@@ -62,8 +62,8 @@ const ARGUMENT_USAGES = { claude: [10, 50, '-'], agy: [0, 0, 72] };
 const ARGUMENT_ROWS = [
   ['route --high', 'claude-fable-5-1 max claude'],
   ['route extra --high', 'claude-fable-5-1 max claude'],
-  ['route', 'gemini-3.1-pro-high medium agy'],
-  ['route --High', 'gemini-3.1-pro-high medium agy']
+  ['route', 'gemini-3.8-flash-high high agy'],
+  ['route --High', 'gemini-3.8-flash-high high agy']
 ];
 
 const PLAIN_ROWS = [

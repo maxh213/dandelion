@@ -500,7 +500,7 @@ describe('main', () => {
     for (const row of [
       '| claude | `claude-opus-5 high` | `claude-opus-5 max` |',
       '| claude-work | `claude-opus-5 high` | `claude-opus-5 max` |',
-      '| agy | `gemini-3.1-pro-high medium` | `gemini-3.1-pro-high high` |',
+      '| agy | `gemini-3.8-flash-high high` | `gemini-3.1-pro-high high` |',
       '| kimi | `kimi-code/kimi-for-coding-highspeed` | `kimi-code/kimi-for-coding-highspeed` |',
       '| grok | `grok-4.6 xhigh` | `grok-4.6 xhigh` |',
       '| cursor | `kimi-k3-max` | `kimi-k3-max` |'

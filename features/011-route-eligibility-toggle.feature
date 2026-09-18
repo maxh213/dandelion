@@ -37,8 +37,8 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
     Examples:
       | case                                    | usages                                             | state                               | line                       | code |
       | no file: 010 output                     | claude 0/86@2, agy 0/0@72                          | missing                             | claude-opus-5 max          | 0    |
-      | ineligible never wins by evaporation    | claude 0/86@2, agy 0/0@72                          | {"claude": false}                   | gemini-3.1-pro-high medium | 0    |
-      | ineligible never wins by headroom       | claude 20/30@72, claude-work 10/5@72, agy 15/20@72 | {"claude-work": false, "nope": 1}   | gemini-3.1-pro-high medium | 0    |
+      | ineligible never wins by evaporation    | claude 0/86@2, agy 0/0@72                          | {"claude": false}                   | gemini-3.8-flash-high high | 0    |
+      | ineligible never wins by headroom       | claude 20/30@72, claude-work 10/5@72, agy 15/20@72 | {"claude-work": false, "nope": 1}   | gemini-3.8-flash-high high | 0    |
       | true and other values mean eligible     | claude 0/86@2, agy 0/0@72                          | {"claude": true, "agy": "no"}       | claude-opus-5 max          | 0    |
       | every windowed provider ineligible      | claude 0/86@2                                      | {"claude": false}                   | none                       | 1    |
       | corrupt file means all eligible         | claude 0/86@2, agy 0/0@72                          | the bytes "{not json"               | claude-opus-5 max          | 0    |
@@ -49,7 +49,7 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
   Scenario Outline: The default state file path
     Given DANDELION_STATE_FILE <var>, the usages claude 0/86@2, agy 0/0@72, and {"claude": false} written only at <path>
     When the user runs `node src/main.ts route`
-    Then stdout is "gemini-3.1-pro-high medium" and the exit code is 0
+    Then stdout is "gemini-3.8-flash-high high" and the exit code is 0
 
     Examples:
       | var       | path                                                                      |
@@ -89,7 +89,7 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
     When the user presses space
     Then the state file parses to {"claude": false}, "<tmp>/state" holds only "eligibility.json", and the next frame's claude header line
       is "▸ claude" then spaces then "routing off" ending at column 72, with the claude rows unchanged
-    And `node src/main.ts route` run meanwhile prints "gemini-3.1-pro-high medium"
+    And `node src/main.ts route` run meanwhile prints "gemini-3.8-flash-high high"
     When the user presses space again
     Then the state file parses to {"claude": true} and the next frame's claude header line is "▸ claude"
     When the user presses space, then "q", and runs `node src/main.ts` on a terminal again
@@ -166,7 +166,7 @@ Feature: 011 - Toggle route eligibility per provider in the live dashboard
   Scenario: The route decision with eligibility, unit level
     Given the unit tests of the route decision in "src/domain/index.test.ts", with the now and midnight of 010
     When the decision gets claude: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @- and claude is ineligible
-    Then it returns "gemini-3.1-pro-high medium", and with nothing ineligible every 010 unit row returns its 010 line
+    Then it returns "gemini-3.8-flash-high high", and with nothing ineligible every 010 unit row returns its 010 line
     And unit tests pin the state-file path rules, every "means eligible" case above including null, [false], 5 and "x", and the
       temp-file-then-rename write in the same directory, with the temp file removed when the rename fails
 

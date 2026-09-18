@@ -51,7 +51,7 @@ const SETTLED_BLOCK = [
   '| claude-work                     |  | claude-work                     |',
   BOX_BOTTOM
 ].join('\n');
-const TOGGLED_BLOCK = block('gemini-3.1-pro-high medium', 'agy', 'kimi-k3-max', 'cursor');
+const TOGGLED_BLOCK = block('gemini-3.8-flash-high high', 'agy', 'kimi-k3-max', 'cursor');
 const NONE_BLOCK = block('none', 'no subscription available', 'none', 'no subscription available');
 const KIMI_BLOCK = block('kimi-code/kimi-for-coding-high…', 'kimi', 'none', 'no subscription available');
 const probingBlock = (spinner) => block(`${spinner} probing…`, '', `${spinner} probing…`, '');

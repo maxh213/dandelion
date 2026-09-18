@@ -77,7 +77,7 @@ Feature: 013 - Route boxes at the top of the live dashboard
     Then that frame's claude-work header shows "routing off", and lines 3 to 6 are exactly
       """
       +- route -------------------------+  +- route --high ------------------+
-      | gemini-3.1-pro-high medium      |  | kimi-k3-max                     |
+      | gemini-3.8-flash-high high      |  | kimi-k3-max                     |
       | agy                             |  | cursor                          |
       +---------------------------------+  +---------------------------------+
       """

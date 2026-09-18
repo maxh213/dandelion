@@ -40,13 +40,13 @@ const ROUTE_ROWS = [
   ['highest evaporation score wins', 'route', { claude: [0, 86, 2], cursor: [60, 2] }, 'kimi-k3-max cursor'],
   ['evaporation tie goes to dashboard order', 'route', { agy: [0, 90, 2], kimi: [0, 90, 2] }, 'gemini-3.1-pro-high high agy'],
   ['an untouched weekly (97 left) never evaporates', 'route', { claude: [0, 3, 2], agy: [10, 10, 72] }, 'claude-opus-5 high claude'],
-  ['a reset after local midnight never evaporates', 'route', { claude: [0, 86, 14], agy: [10, 10, 72] }, 'gemini-3.1-pro-high medium agy'],
+  ['a reset after local midnight never evaporates', 'route', { claude: [0, 86, 14], agy: [10, 10, 72] }, 'gemini-3.8-flash-high high agy'],
   ['most headroom, claude-work highest', 'route', { claude: [20, 30, 72], work: [10, 5, 72], agy: [15, 20, 72] }, 'claude-opus-5 high claude-work'],
-  ['most headroom, agy highest', 'route', { claude: [20, 30, 72], agy: [5, 5, 72] }, 'gemini-3.1-pro-high medium agy'],
-  ['kimi bound by its 5h window', 'route', { kimi: [90, 10, 72], agy: [50, 50, 72] }, 'gemini-3.1-pro-high medium agy'],
+  ['most headroom, agy highest', 'route', { claude: [20, 30, 72], agy: [5, 5, 72] }, 'gemini-3.8-flash-high high agy'],
+  ['kimi bound by its 5h window', 'route', { kimi: [90, 10, 72], agy: [50, 50, 72] }, 'gemini-3.8-flash-high high agy'],
   ['a missing rolling kind counts as 100', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.6 xhigh grok'],
   ['kimi free on both', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/kimi-for-coding-highspeed kimi'],
-  ['headroom tie goes to dashboard order', 'route', { agy: [20, 20, 72], kimi: [20, 20, 72] }, 'gemini-3.1-pro-high medium agy'],
+  ['headroom tie goes to dashboard order', 'route', { agy: [20, 20, 72], kimi: [20, 20, 72] }, 'gemini-3.8-flash-high high agy'],
   ['an unavailable candidate is skipped', 'route', { cursor: [40, 72] }, 'kimi-k3-max cursor'],
   ['later arguments are ignored', 'route extra', { claude: [0, 86, 2] }, 'claude-opus-5 max claude']
 ];

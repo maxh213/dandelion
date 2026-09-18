@@ -87,11 +87,11 @@ describe('routeLine', () => {
   }
 
   it('drops an ineligible provider before the evaporation rule', () => {
-    expect(routeOf('claude: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', ['claude'])).toBe('gemini-3.1-pro-high medium agy');
+    expect(routeOf('claude: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', ['claude'])).toBe('gemini-3.8-flash-high high agy');
   });
 
   it.each([
-    ['before the headroom rule', 'claude: rolling 20 @-, weekly 30 @-; claude-work: rolling 10 @-, weekly 5 @-; agy: rolling 15 @-, weekly 20 @-', ['claude-work', 'nope'], 'gemini-3.1-pro-high medium agy'],
+    ['before the headroom rule', 'claude: rolling 20 @-, weekly 30 @-; claude-work: rolling 10 @-, weekly 5 @-; agy: rolling 15 @-, weekly 20 @-', ['claude-work', 'nope'], 'gemini-3.8-flash-high high agy'],
     ['leaving nothing to route', 'claude: weekly 50 @2026-09-14T20:00:00.000Z', ['claude'], 'none'],
     ['only when named', 'claude: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', ['agy'], 'claude-opus-5 max claude']
   ])('drops ineligible providers %s', (_case, candidates, ineligible, line) => {
@@ -99,22 +99,22 @@ describe('routeLine', () => {
   });
 
   it.each([
-    ['raw floats, headroom', 'claude: rolling 50.4 @-; agy: rolling 50.2 @-', 'gemini-3.1-pro-high medium agy'],
+    ['raw floats, headroom', 'claude: rolling 50.4 @-; agy: rolling 50.2 @-', 'gemini-3.8-flash-high high agy'],
     ['96.9 left evaporates', 'claude: weekly 3.1 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'claude-opus-5 max claude'],
-    ['97 left does not evaporate', 'claude: weekly 3 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'gemini-3.1-pro-high medium agy'],
-    ['reset already past never evaporates', 'claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.1-pro-high medium agy'],
-    ['reset exactly at now never evaporates', 'claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.1-pro-high medium agy'],
+    ['97 left does not evaporate', 'claude: weekly 3 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'gemini-3.8-flash-high high agy'],
+    ['reset already past never evaporates', 'claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.8-flash-high high agy'],
+    ['reset exactly at now never evaporates', 'claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.8-flash-high high agy'],
     ['reset 1 ms after now evaporates', 'claude: weekly 50 @2026-09-14T11:00:00.001Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'claude-opus-5 max claude'],
     ['a past reset still binds (stale grok)', 'grok: weekly 10 @2026-09-14T10:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z', 'grok-4.6 xhigh grok'],
-    ['weekly without resetsAt', 'claude: weekly 50 @-; agy: rolling 0 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.1-pro-high medium agy'],
-    ['reset exactly at local midnight', 'claude: weekly 50 @2026-09-15T00:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.1-pro-high medium agy'],
+    ['weekly without resetsAt', 'claude: weekly 50 @-; agy: rolling 0 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.8-flash-high high agy'],
+    ['reset exactly at local midnight', 'claude: weekly 50 @2026-09-15T00:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.8-flash-high high agy'],
     ['reset 1 ms before local midnight', 'claude: weekly 50 @2026-09-14T23:59:59.999Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'claude-opus-5 max claude'],
     ['other windows neither bind nor evaporate', 'claude: rolling 10 @-, weekly 10 @2026-09-20T00:00:00.000Z, other 99 @2026-09-14T14:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z', 'claude-opus-5 high claude'],
     ['ok with zero windows is excluded', 'claude: no windows; cursor: weekly 60 @2026-09-20T00:00:00.000Z', 'kimi-k3-max cursor'],
     ['only ok with zero windows', 'claude: no windows', 'none'],
     ['only other windows bind at 100', 'claude-work: other 99 @-; agy: rolling 1 @-', 'claude-opus-5 high claude-work'],
     ['unavailable and error are excluded', 'claude: unavailable; claude-work: error; kimi: weekly 90 @2026-09-20T00:00:00.000Z', 'kimi-code/kimi-for-coding-highspeed kimi'],
-    ['codex never routes, even evaporating', 'codex: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', 'gemini-3.1-pro-high medium agy'],
+    ['codex never routes, even evaporating', 'codex: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', 'gemini-3.8-flash-high high agy'],
     ['codex as the only ok provider', 'codex: weekly 10 @2026-09-20T00:00:00.000Z', 'none'],
     ['kilo as the only ok provider', 'kilo: no windows', 'none']
   ])('%s', (_case, candidates, line) => {
@@ -124,7 +124,7 @@ describe('routeLine', () => {
   it.each([
     ['claude', 'claude-opus-5 high', 'claude-opus-5 max'],
     ['claude-work', 'claude-opus-5 high', 'claude-opus-5 max'],
-    ['agy', 'gemini-3.1-pro-high medium', 'gemini-3.1-pro-high high'],
+    ['agy', 'gemini-3.8-flash-high high', 'gemini-3.1-pro-high high'],
     ['kimi', 'kimi-code/kimi-for-coding-highspeed', 'kimi-code/kimi-for-coding-highspeed'],
     ['grok', 'grok-4.6 xhigh', 'grok-4.6 xhigh'],
     ['cursor', 'kimi-k3-max', 'kimi-k3-max'],
@@ -161,8 +161,8 @@ describe('routeLine', () => {
     ['a tripped account loses rule 2', 'claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 xhigh grok'],
     ['just under the trip is not tripped', 'claude: rolling 89.9 @-; agy: rolling 89.95 @-', [], 'claude-opus-5 high claude'],
     ['an untripped evaporator still wins', 'claude: rolling 89.9 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', [], 'claude-opus-5 max claude'],
-    ['a tripped evaporator is ignored', 'claude: rolling 90 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 80 @-', [], 'gemini-3.1-pro-high medium agy'],
-    ['an other window never trips', 'agy: other 99 @-, weekly 50 @2026-09-20T00:00:00.000Z', [], 'gemini-3.1-pro-high medium agy'],
+    ['a tripped evaporator is ignored', 'claude: rolling 90 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 80 @-', [], 'gemini-3.8-flash-high high agy'],
+    ['an other window never trips', 'agy: other 99 @-, weekly 50 @2026-09-20T00:00:00.000Z', [], 'gemini-3.8-flash-high high agy'],
     ['ineligible and tripped leave nothing', 'claude: rolling 95 @-; claude-work: rolling 0 @-', ['claude-work'], 'none'],
     ['tripped kimi and unroutable codex and kilo leave nothing', 'kimi: rolling 90 @-; codex: weekly 0 @-; kilo: no windows', [], 'none']
   ])('trip: %s', (_case, candidates, ineligible, line) => {
@@ -229,7 +229,7 @@ describe('routeLine', () => {
   });
 
   it('breaks ties in dashboard order whatever order the usages come in', () => {
-    expect(routeOf('kimi: rolling 20 @-; agy: rolling 20 @-')).toBe('gemini-3.1-pro-high medium agy');
+    expect(routeOf('kimi: rolling 20 @-; agy: rolling 20 @-')).toBe('gemini-3.8-flash-high high agy');
     expect(routeOf('kimi: weekly 10 @2026-09-14T20:00:00.000Z; agy: weekly 10 @2026-09-14T20:00:00.000Z')).toBe('gemini-3.1-pro-high high agy');
   });
 });

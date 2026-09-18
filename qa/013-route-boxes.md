@@ -30,7 +30,7 @@ bv() { env -i HOME="$RH" TZ="$TZQ" PATH="${PRE:+$PRE:}$RX/h:$RX:$NODEBIN" TERM="
    - **Expected:** after space, on the same frame, the claude-work header shows `routing off` and the boxes are exactly:
      ```
      +- route -------------------------+  +- route --high ------------------+
-     | gemini-3.1-pro-high medium      |  | kimi-k3-max                     |
+     | gemini-3.8-flash-high high      |  | kimi-k3-max                     |
      | agy                             |  | cursor                          |
      +---------------------------------+  +---------------------------------+
      ```

@@ -44,7 +44,7 @@ rh() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX/h:$RX:$NODEBIN" DANDELION_KIMI_PORT
    - **Expected:** `od` shows exactly these three lines, with no `033`:
      `0000000   c   l   a   u   d   e   -   f   a   b   l   e   -   5   -   1`
      `0000020       m   a   x       c   l   a   u   d   e  \n   e   x   i   t`
-     `0000040   =   0  \n` Then `gemini-3.1-pro-high medium agy` (plain route still picks the most headroom). Then `claude-fable-5-1 max claude`. Then a line starting `DANDELION`.
+     `0000040   =   0  \n` Then `gemini-3.8-flash-high high agy` (plain route still picks the most headroom). Then `claude-fable-5-1 max claude`. Then a line starting `DANDELION`.
 
 10. Run `rt Q_CLAUDE=0,86,2 Q_AGY=0,0,72`, then `rt Q_KIMI=10,10,72 Q_GROK=50,72`, then `rt Q_CLAUDE=20,30,72 Q_WORK=10,5,72 Q_AGY=15,20,72`.
     - **Expected:** `claude-opus-5 max claude`, then `kimi-code/kimi-for-coding-highspeed kimi`, then `claude-opus-5 high claude-work`, each with `exit=0`. The lines match 010 plus the token.

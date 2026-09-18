@@ -23,7 +23,7 @@ Feature: 010 - dandelion route picks the subscription to burn
     | candidate   | standard line                       | max line                            |
     | claude      | claude-opus-5 high                  | claude-opus-5 max                   |
     | claude-work | claude-opus-5 high                  | claude-opus-5 max                   |
-    | agy         | gemini-3.1-pro-high medium          | gemini-3.1-pro-high high            |
+    | agy         | gemini-3.8-flash-high high          | gemini-3.1-pro-high high            |
     | kimi        | kimi-code/kimi-for-coding-highspeed | kimi-code/kimi-for-coding-highspeed |
     | grok        | grok-4.6 xhigh                            | grok-4.6 xhigh                            |
     | cursor      | kimi-k3-max                         | kimi-k3-max                         |
@@ -48,13 +48,13 @@ Feature: 010 - dandelion route picks the subscription to burn
       | highest evaporation score wins                 | route       | claude 0/86@2, cursor 60@2                         | kimi-k3-max                         |
       | evaporation tie goes to dashboard order        | route       | agy 0/90@2, kimi 0/90@2                            | gemini-3.1-pro-high high            |
       | an untouched weekly (97 left) never evaporates | route       | claude 0/3@2, agy 10/10@72                         | claude-opus-5 high                  |
-      | a reset after local midnight never evaporates  | route       | claude 0/86@14, agy 10/10@72                       | gemini-3.1-pro-high medium          |
+      | a reset after local midnight never evaporates  | route       | claude 0/86@14, agy 10/10@72                       | gemini-3.8-flash-high high          |
       | most headroom, claude-work highest             | route       | claude 20/30@72, claude-work 10/5@72, agy 15/20@72 | claude-opus-5 high                  |
-      | most headroom, agy highest                     | route       | claude 20/30@72, agy 5/5@72                        | gemini-3.1-pro-high medium          |
-      | kimi bound by its 5h window                    | route       | kimi 90/10@72, agy 50/50@72                        | gemini-3.1-pro-high medium          |
+      | most headroom, agy highest                     | route       | claude 20/30@72, agy 5/5@72                        | gemini-3.8-flash-high high          |
+      | kimi bound by its 5h window                    | route       | kimi 90/10@72, agy 50/50@72                        | gemini-3.8-flash-high high          |
       | a missing rolling kind counts as 100           | route       | kimi 90/10@72, grok 50@72                          | grok-4.6 xhigh                      |
       | kimi free on both                              | route       | kimi 10/10@72, grok 50@72                          | kimi-code/kimi-for-coding-highspeed |
-      | headroom tie goes to dashboard order           | route       | agy 20/20@72, kimi 20/20@72                        | gemini-3.1-pro-high medium          |
+      | headroom tie goes to dashboard order           | route       | agy 20/20@72, kimi 20/20@72                        | gemini-3.8-flash-high high          |
       | an unavailable candidate is skipped            | route       | claude unavailable, cursor 40@72                   | kimi-k3-max                         |
       | later arguments are ignored                    | route extra | claude 0/86@2                                      | claude-opus-5 max                   |
 
@@ -86,22 +86,22 @@ Feature: 010 - dandelion route picks the subscription to burn
 
     Examples:
       | case                                    | candidates                                                                                                                  | line                                |
-      | raw floats, headroom                    | claude: rolling 50.4 @-; agy: rolling 50.2 @-                                                                               | gemini-3.1-pro-high medium          |
+      | raw floats, headroom                    | claude: rolling 50.4 @-; agy: rolling 50.2 @-                                                                               | gemini-3.8-flash-high high          |
       | 96.9 left evaporates                    | claude: weekly 3.1 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-                                                             | claude-opus-5 max                   |
-      | 97 left does not evaporate              | claude: weekly 3 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-                                                               | gemini-3.1-pro-high medium          |
-      | reset already past never evaporates     | claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.1-pro-high medium          |
-      | reset exactly at now never evaporates   | claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.1-pro-high medium          |
+      | 97 left does not evaporate              | claude: weekly 3 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-                                                               | gemini-3.8-flash-high high          |
+      | reset already past never evaporates     | claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.8-flash-high high          |
+      | reset exactly at now never evaporates   | claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.8-flash-high high          |
       | reset 1 ms after now evaporates         | claude: weekly 50 @2026-09-14T11:00:00.001Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | claude-opus-5 max                   |
       | a past reset still binds (stale grok)   | grok: weekly 10 @2026-09-14T10:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z                          | grok-4.6                            |
-      | weekly without resetsAt                 | claude: weekly 50 @-; agy: rolling 0 @-, weekly 40 @2026-09-20T00:00:00.000Z                                                | gemini-3.1-pro-high medium          |
-      | reset exactly at local midnight         | claude: weekly 50 @2026-09-15T00:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.1-pro-high medium          |
+      | weekly without resetsAt                 | claude: weekly 50 @-; agy: rolling 0 @-, weekly 40 @2026-09-20T00:00:00.000Z                                                | gemini-3.8-flash-high high          |
+      | reset exactly at local midnight         | claude: weekly 50 @2026-09-15T00:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.8-flash-high high          |
       | reset 1 ms before local midnight        | claude: weekly 50 @2026-09-14T23:59:59.999Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | claude-opus-5 max                   |
       | other windows neither bind nor evaporate | claude: rolling 10 @-, weekly 10 @2026-09-20T00:00:00.000Z, other 99 @2026-09-14T14:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z | claude-opus-5 high                  |
       | ok with zero windows is excluded        | claude: no windows; cursor: weekly 60 @2026-09-20T00:00:00.000Z                                                             | kimi-k3-max                         |
       | only ok with zero windows               | claude: no windows                                                                                                          | none                                |
       | only other windows bind at 100          | claude-work: other 99 @-; agy: rolling 1 @-                                                                                 | claude-opus-5 high                  |
       | unavailable and error are excluded      | claude: unavailable; claude-work: error; kimi: weekly 90 @2026-09-20T00:00:00.000Z                                          | kimi-code/kimi-for-coding-highspeed |
-      | codex never routes, even evaporating    | codex: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-                                                              | gemini-3.1-pro-high medium          |
+      | codex never routes, even evaporating    | codex: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-                                                              | gemini-3.8-flash-high high          |
       | codex as the only ok provider           | codex: weekly 10 @2026-09-20T00:00:00.000Z                                                                                  | none                                |
       | kilo as the only ok provider            | kilo: no windows                                                                                                            | none                                |
     And every line of the routing table, standard and max, is pinned by a test

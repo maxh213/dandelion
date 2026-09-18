@@ -46,15 +46,15 @@ rt() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ D
    rt Q_CLAUDE=0,86,2 Q_CURSOR=60,2                       # kimi-k3-max
    rt Q_AGY=0,90,2 Q_KIMI=0,90,2                          # gemini-3.1-pro-high high
    rt Q_CLAUDE=0,3,2 Q_AGY=10,10,72                       # claude-opus-5 high
-   rt Q_CLAUDE=0,86,14 Q_AGY=10,10,72                     # gemini-3.1-pro-high medium
+   rt Q_CLAUDE=0,86,14 Q_AGY=10,10,72                     # gemini-3.8-flash-high high
    ```
    - **Expected:** each prints the line in its comment. The last two prove that a weekly with 97% left, or one resetting after local midnight, does not evaporate.
 
 3. Run `rt Q_CLAUDE=20,30,72 Q_WORK=10,5,72 Q_AGY=15,20,72`, then `rt Q_CLAUDE=20,30,72 Q_AGY=5,5,72`.
-   - **Expected:** `claude-opus-5 high`, then `gemini-3.1-pro-high medium`, each followed by `exit=0`.
+   - **Expected:** `claude-opus-5 high`, then `gemini-3.8-flash-high high`, each followed by `exit=0`.
 
 4. Run `rt Q_KIMI=90,10,72 Q_AGY=50,50,72`, then `rt Q_KIMI=90,10,72 Q_GROK=50,72`, then `rt Q_KIMI=10,10,72 Q_GROK=50,72`, then `rt Q_AGY=20,20,72 Q_KIMI=20,20,72`.
-   - **Expected:** `gemini-3.1-pro-high medium` (kimi is bound by its 5h window), then `grok-4.6 xhigh` (grok has no rolling window, so 100 counts), then `kimi-code/kimi-for-coding-highspeed`, then `gemini-3.1-pro-high medium`, each followed by `exit=0`.
+   - **Expected:** `gemini-3.8-flash-high high` (kimi is bound by its 5h window), then `grok-4.6 xhigh` (grok has no rolling window, so 100 counts), then `kimi-code/kimi-for-coding-highspeed`, then `gemini-3.8-flash-high high`, each followed by `exit=0`.
 
 5. Run `rt Q_CURSOR=40,72`, then `rt 2>/tmp/010.err; wc -c < /tmp/010.err`.
    - **Expected:** `kimi-k3-max` and `exit=0`. Then `none`, `exit=1` and `0` (stderr is empty): codex and kilo are "ok" but never routed.

@@ -460,7 +460,7 @@ describe('route boxes', () => {
     expect(boxRowsOf(session.lastFrame())).toEqual(settled);
     session.probes[6].calls[1].resolve(usageOf('kilo', session.probes[6].calls[1].now));
     await vi.advanceTimersByTimeAsync(0);
-    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('gemini-3.1-pro-high medium', 'agy', 'kimi-k3-max', 'cursor'));
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('gemini-3.8-flash-high high', 'agy', 'kimi-k3-max', 'cursor'));
     session.press('q');
     await session.finished;
   });
@@ -470,7 +470,7 @@ describe('route boxes', () => {
     await session.settleRound(0);
     session.press('j');
     session.press(' ');
-    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('gemini-3.1-pro-high medium', 'agy', 'kimi-k3-max', 'cursor'));
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('gemini-3.8-flash-high high', 'agy', 'kimi-k3-max', 'cursor'));
     expect(session.saved().at(-1)).toEqual({ claude: false });
     session.press(' ');
     expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('claude-opus-5 high', 'claude', 'claude-fable-5-1 max', 'claude'));

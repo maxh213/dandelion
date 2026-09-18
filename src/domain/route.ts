@@ -10,7 +10,7 @@ const CLAUDE_LINES = { standard: 'claude-opus-5 high', max: 'claude-opus-5 max' 
 const ROUTING_TABLE = [
   { id: 'claude', ...CLAUDE_LINES },
   { id: 'claude-work', ...CLAUDE_LINES },
-  { id: 'agy', standard: 'gemini-3.1-pro-high medium', max: 'gemini-3.1-pro-high high' },
+  { id: 'agy', standard: 'gemini-3.8-flash-high high', max: 'gemini-3.1-pro-high high' },
   { id: 'kimi', standard: 'kimi-code/kimi-for-coding-highspeed', max: 'kimi-code/kimi-for-coding-highspeed' },
   { id: 'grok', standard: 'grok-4.6 xhigh', max: 'grok-4.6 xhigh' },
   { id: 'cursor', standard: 'kimi-k3-max', max: 'kimi-k3-max' },
