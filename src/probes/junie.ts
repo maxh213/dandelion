@@ -55,7 +55,11 @@ function snapshotOn(line: string): Snapshot | undefined {
 
 function newestSnapshot(log: string): Snapshot | undefined {
   const candidates = log.split('\n').filter((line) => line.includes(SNAPSHOT_TYPE));
-  return candidates.reverse().map(snapshotOn).find((snapshot) => snapshot !== undefined);
+  for (let at = candidates.length - 1; at >= 0; at--) {
+    const snapshot = snapshotOn(candidates[at]);
+    if (snapshot !== undefined) return snapshot;
+  }
+  return undefined;
 }
 
 async function newestSessionSnapshot(reader: FileReader, home: string, sessions: Session[]): Promise<Snapshot | undefined> {
