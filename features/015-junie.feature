@@ -90,7 +90,14 @@ Feature: 015 - Junie credits from its session log, routed as gemini-3.8-flash hi
     Then the junie panel shows "routing off" and the state file holds {"junie": false}
     When DANDELION_JUNIE_REFERENCE is "" and the user selects junie and presses space
     Then the junie caption line reads "not routable (no usage windows)" for 2 seconds and the state file is not written
-    And the fleet summary counts junie's "credits" window among its windows
+
+  Scenario: Fleet summary counts junie's credits window and never takes a reset from it
+    Given junie home is the Background tree with the newest snapshot at balanceLeft 150000, and no other provider is available
+    When the user runs `npm start` in a terminal with NO_COLOR set
+    Then the junie panel shows "credits" at 85%
+    And the fleet summary line reads exactly "1/1 windows above 80% · next reset: none"
+    When DANDELION_JUNIE_REFERENCE is "" and the user runs `npm start` again
+    Then the fleet summary line reads exactly "all windows below 80% · next reset: none"
 
   Scenario Outline: route with junie
     Given the usages <usages>, junie <junie> and the state file <state>

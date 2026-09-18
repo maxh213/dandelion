@@ -48,10 +48,13 @@ jh "$JH" 701512.73275
     - **Expected:** `grok-4.6 xhigh grok` with `exit=0` (junie skipped), then `claude-fable-5-1 max claude` with `exit=0`, then `none` with `exit=1`: `--high` never uses junie.
 
 11. Run `mkdir -p "$RX/state"; rq A= DANDELION_JUNIE_HOME="$JH" Q_GROK=9,130`. Select the junie panel with `j`, press space, then `q`. Run `cat "$ST"`. Run it again with `DANDELION_JUNIE_REFERENCE=` added, select junie, press space, `q`, then `rm -r "$RX/state"`.
-    - **Expected:** first the junie panel shows `routing off`, the route box shows `grok-4.6 xhigh grok`, and the file holds `"junie": false`. The second time the junie caption flashes `not routable (no usage windows)` for about 2s and the route box does not change. The fleet summary's window count includes junie's `credits` in the first run.
+    - **Expected:** first the junie panel shows `routing off`, the route box shows `grok-4.6 xhigh grok`, and the file holds `"junie": false`. The second time the junie caption flashes `not routable (no usage windows)` for about 2s and the route box does not change.
 
-12. Run `node qa/e2e.mjs; pgrep -fa dandelion-qa; grep -n 'junie\|JUNIE' README.md`.
+12. Run `jh "$JH" 150000; rq A= NO_COLOR=1 DANDELION_JUNIE_HOME="$JH"`, look at the fleet summary line, press `q`. Run it again with `DANDELION_JUNIE_REFERENCE=` added, then `jh "$JH" 701512.73275`.
+    - **Expected:** only junie is available. First junie shows `credits` at `85%` and the summary line reads exactly `1/1 windows above 80% · next reset: none`. The second time it reads exactly `all windows below 80% · next reset: none`.
+
+13. Run `node qa/e2e.mjs; pgrep -fa dandelion-qa; grep -n 'junie\|JUNIE' README.md`.
     - **Expected:** exits 0 and every `*.e2e.mjs` prints PASS, including the 015 junie e2es. `pgrep` prints nothing. README has the junie provider bullet, "All nine probes run in parallel", both ledger entries, the route table row `gemini-3.8-flash high`, `junie credits` among weekly windows, and says `--high` does not use junie.
 
-13. Run `rm -f /tmp/j1 /tmp/j2`, then the clean-up of `qa/014-route-session-trip.md`.
+14. Run `rm -f /tmp/j1 /tmp/j2`, then the clean-up of `qa/014-route-session-trip.md`.
     - **Expected:** nothing is left in `/tmp` from this procedure.
