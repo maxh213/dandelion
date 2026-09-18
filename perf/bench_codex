@@ -148,8 +148,9 @@ try {
     emit(TARGETS.probeApiKey, await perCall(ITERATIONS, () => probeCodex(apiIo, NOW)), 'us');
     emit(TARGETS.probeChatGpt, await perCall(ITERATIONS, () => probeCodex(chatIo, NOW)), 'us');
     emit(TARGETS.probeRealSpawn, await perCall(SPAWN_ITERATIONS, () => probeCodex(realSpawnIo, NOW)), 'us');
-    await runApp(chatIo, {}, NOW);
-    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(chatIo, {}, NOW)), 'us');
+    const appEnv = bothNames({ ALLOWANCE_JUNIE_HOME: fixture });
+    await runApp(chatIo, appEnv, NOW);
+    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(chatIo, appEnv, NOW)), 'us');
   }
 
   renderDashboard(apiKeyUsages, false, NOW, []);

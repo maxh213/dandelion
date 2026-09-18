@@ -106,12 +106,13 @@ try {
     const { probeKimi } = await import(pathToFileURL(kimiEntry).href);
     await timeCli(okFixture);
     await timeCli(noTokenFixture);
+    const appEnv = bothNames({ ALLOWANCE_JUNIE_HOME: okFixture });
     await probeKimi(io, {}, NOW);
-    await runApp(io, {}, NOW);
+    await runApp(io, appEnv, NOW);
     emit(TARGETS.cliOk, await repeat(VALUES, () => timeCli(okFixture)), 'ms');
     emit(TARGETS.cliNoToken, await repeat(VALUES, () => timeCli(noTokenFixture)), 'ms');
     emit(TARGETS.probe, await perCall(ITERATIONS, () => probeKimi(io, {}, NOW)), 'us');
-    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(io, {}, NOW)), 'us');
+    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(io, appEnv, NOW)), 'us');
   } else {
     absent(TARGETS.cliOk, TARGETS.cliNoToken, TARGETS.probe, TARGETS.runApp);
   }

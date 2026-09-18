@@ -76,7 +76,7 @@ writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
 for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
 
 function timeCli(args, wanted) {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
@@ -98,7 +98,7 @@ const stubIo = {
   fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
   reader: { homeDir: () => fixture, read: async () => undefined, isDirectory: async (path) => path === workDir }
 };
-const appEnv = bothNames({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+const appEnv = bothNames({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
 
 const win = (label, kind, usedPct, resetsAt) => ({ label, kind, usedPct, resetsAt });
 function fleet(claudeWeeklyReset) {

@@ -64,7 +64,7 @@ writeFileSync(envScript, '#!/bin/sh\nprintf "%s\\n" "$CLAUDE_CONFIG_DIR"\n');
 chmodSync(envScript, 0o755);
 
 function timeCli(workConfigDir) {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workConfigDir });
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
@@ -84,7 +84,7 @@ const stubIo = {
   fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
   reader: stubReader
 };
-const appEnv = bothNames({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+const appEnv = bothNames({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
 
 const win = (label, usedPct, resetsAt) => ({ label, usedPct, resetsAt });
 const usages = [

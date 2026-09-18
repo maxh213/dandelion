@@ -56,7 +56,7 @@ writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
 for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
 
 function timeCli() {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
@@ -77,7 +77,7 @@ const stubIo = {
   fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
   reader: { homeDir: () => fixture, read: async () => undefined, isDirectory: async (path) => path === workDir }
 };
-const appEnv = bothNames({ ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+const appEnv = bothNames({ ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
 const request = { mode: 'headroom', now: NOW, zone: ZONE };
 
 const HOUR = 60 * 60 * 1000;
@@ -109,7 +109,7 @@ function expectOneOf(actual, wanted, what) {
 
 try {
   const WORK_EVAPORATES = 'claude-opus-5 max claude-work';
-  expectOneOf(domain.routeLine(live100, NOW, MIDNIGHT, []), ['grok-4.6 grok', WORK_EVAPORATES], 'live 100');
+  expectOneOf(domain.routeLine(live100, NOW, MIDNIGHT, []), ['grok-4.6 xhigh grok', 'grok-4.6 grok', WORK_EVAPORATES], 'live 100');
   expectOneOf(domain.routeLine(live89, NOW, MIDNIGHT, []), [WORK_EVAPORATES], 'live 89');
   expectOneOf(domain.routeLine(allTripped, NOW, MIDNIGHT, []), ['none', WORK_EVAPORATES], 'all tripped');
   expectOneOf(domain.highRouteLine(live100, []), ['claude-fable-5-1 max claude'], 'high live 100');
