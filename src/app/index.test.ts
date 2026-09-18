@@ -163,12 +163,12 @@ function panelOf(output: string, name: string): string[] {
 }
 
 describe('claude and agy windows', () => {
-  it('renders claude, agy, kimi, grok, codex, cursor and kilo panels in fixed order with captions', async () => {
+  it('renders claude, agy, kimi, grok, codex, cursor, junie and kilo panels in fixed order with captions', async () => {
     const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const lines = plain(output).split('\n');
     expect(lines[0]).toMatch(/^DANDELION +10:00:00Z$/);
-    expect(lines.filter((line) => line === RULE)).toHaveLength(8);
-    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40]);
+    expect(lines.filter((line) => line === RULE)).toHaveLength(9);
+    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40, 44]);
     expect(lines[1]).toBe(RULE);
     expect(panelOf(output, 'claude').at(-1)).toBe('claude · personal · claude');
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
@@ -302,12 +302,13 @@ describe('claude and agy windows', () => {
         'grok\nno grok billing snapshot — run grok once\ngrok · grok',
         'codex\nCommand timed out after 15s\ncodex · codex',
         'cursor\nno cursor auth — run cursor-agent login\ncursor · cursor',
+        'junie\nno junie quota snapshot — run junie once\njunie · junie',
         'kilo\nCommand timed out after 20s\napi balance · kilo'
       ].join(`\n${RULE}\n`)
     );
   });
 
-  it('renders eight unavailable panels when no CLI is on the PATH, grok home is empty and cursor has no auth', async () => {
+  it('renders nine unavailable panels when no CLI is on the PATH, grok and junie homes are empty and cursor has no auth', async () => {
     const output = await runApp(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW);
     expect(output).toContain(
       [
@@ -318,6 +319,7 @@ describe('claude and agy windows', () => {
         `${DIM}${RULE}\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m`,
         `${DIM}${RULE}\ncodex\ncodex CLI not found in PATH\ncodex · codex\x1b[0m`,
         `${DIM}${RULE}\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor\x1b[0m`,
+        `${DIM}${RULE}\njunie\nno junie quota snapshot — run junie once\njunie · junie\x1b[0m`,
         `${DIM}${RULE}\nkilo\nkilo CLI not found in PATH\napi balance · kilo\x1b[0m`
       ].join('\n')
     );
@@ -670,7 +672,7 @@ describe('codex panel', () => {
     const spawned: string[][] = [];
     const output = await runApp(codexIo(CODEX_CHATGPT, codexSpawner(codexLines(), spawned)), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
     const lines = output.split('\n');
-    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40]);
+    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40, 44]);
     expect(lines.slice(30, 36)).toEqual([
       '='.repeat(72),
       'codex',
@@ -954,13 +956,13 @@ describe('cursor panel', () => {
     return { ...routedRunner({ codex: CODEX_API_KEY }, HAPPY_KIMI, reader), fetcher };
   }
 
-  it('renders the total, auto and api windows between codex and kilo', async () => {
+  it('renders the total, auto and api windows between codex and junie', async () => {
     const output = await runApp(cursorIo(), { ...CURSOR_ENV, NO_COLOR: '1' }, NOW);
     const lines = output.split('\n');
-    expect(plain(output).split('\n').filter((line) => /^(claude|agy|kimi|grok|codex|cursor|kilo)$/.test(line))).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
+    expect(plain(output).split('\n').filter((line) => /^(claude|agy|kimi|grok|codex|cursor|junie|kilo)$/.test(line))).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo']);
     const cursor = lines.indexOf('cursor');
     expect(lines.slice(cursor - 1, cursor + 6)).toEqual(['='.repeat(72), 'cursor', ...ROWS, 'Ultra · $200/mo · cursor', '='.repeat(72)]);
-    expect(lines[cursor + 6]).toBe('kilo');
+    expect(lines[cursor + 6]).toBe('junie');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
     expect(output).not.toContain(TOKEN);
   });
@@ -1021,7 +1023,7 @@ describe('cursor panel', () => {
     expect(output).toContain(`${DIM}${RULE}\ncursor\n${reason}\ncursor · cursor\x1b[0m\n`);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
-    expect(plain(output).split('\n').filter((line) => /^(claude|agy|kimi|grok|codex|cursor|kilo)$/.test(line))).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
+    expect(plain(output).split('\n').filter((line) => /^(claude|agy|kimi|grok|codex|cursor|junie|kilo)$/.test(line))).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo']);
     expect(output).not.toContain(TOKEN);
   });
 
@@ -1089,7 +1091,7 @@ describe('cursor panel', () => {
       return { env, names: () => [...names].sort() };
     }
 
-    const SETTINGS = ['DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_KILO_REFERENCE', 'DANDELION_KIMI_PORT', 'DANDELION_STATE_FILE', 'NO_COLOR', 'XDG_STATE_HOME'];
+    const SETTINGS = ['DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_JUNIE_HOME', 'DANDELION_KILO_REFERENCE', 'DANDELION_KIMI_PORT', 'DANDELION_STATE_FILE', 'NO_COLOR', 'XDG_STATE_HOME'];
 
     it('applies every setting under its DANDELION_* name', async () => {
       const launch = vi.fn(HAPPY_KIMI.launch);
@@ -1746,5 +1748,237 @@ describe('route eligibility state file', () => {
     expect(JSON.parse(readFileSync(pathOf(scratch), 'utf8'))).toEqual({ claude: false });
     expect(headerOf(dashboard.lastFrame(), 'claude')).toBe(`▸ claude${' '.repeat(53)}routing off`);
     await quit(dashboard);
+  });
+});
+
+describe('junie panel', () => {
+  const JUNIE_NOW = '2026-09-18T19:00:00Z';
+  const JETBRAINS = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot.JetBrains';
+  const UNKNOWN_LINE = '{"kind":"SessionA2uxEvent","completion":{"endedAtMs":1789735700000,"quota":{"type":"com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot.Unknown"}}}';
+  const NOISE = ['{"kind":"SessionA2uxEvent","event":{"state":"IN_PROGRESS"},"timestampMs":1789735600000}', '{"kind":"UserPromptEvent","prompt":"ping"}'];
+  const INDEX = [
+    '{"sessionId":"session-old","createdAt":1789735398143,"updatedAt":1789735405438,"projectDir":"/w","taskName":"Old","status":"Sending LLM request"}',
+    'not json at all',
+    '{"sessionId":"session-new","createdAt":1789735553568,"updatedAt":1789735558242,"projectDir":"/w/d","taskName":"Respond with Pong Only"}'
+  ].join('\n');
+  const JUNIE_ENV = { ...GROK_ENV, DANDELION_JUNIE_HOME: '/junie' };
+  const ROW_30 = 'credits                             ######--------------  30%';
+
+  function snapshotLine(endedAtMs: number, balanceLeft: unknown): string {
+    const completion = { endedAtMs, taskCostUsd: 0.0334116, quota: { type: JETBRAINS, balanceUnit: 'CREDITS', balanceLeft } };
+    return JSON.stringify({ kind: 'SessionA2uxEvent', event: { state: 'IN_PROGRESS' }, completion, timestampMs: endedAtMs + 4 });
+  }
+
+  function newEvents(newest: unknown = 701512.73275): string {
+    return [...NOISE, snapshotLine(1789735651253, 704863.73775), UNKNOWN_LINE, 'not json at all', snapshotLine(1789736030118, newest)].join('\n');
+  }
+
+  function junieTree(events = newEvents()): Record<string, string> {
+    return { 'sessions/index.jsonl': INDEX, 'sessions/session-old/events.jsonl': snapshotLine(1789730000000, 900000), 'sessions/session-new/events.jsonl': events };
+  }
+
+  function withFiles(runner: ProbeIo, files: Record<string, string>): ProbeIo {
+    return { ...runner, reader: { homeDir: () => '/home/tester', read: async (path) => files[path], isDirectory: hasWorkConfig } };
+  }
+
+  function junieFiles(tree: Record<string, string>, root: string): Record<string, string> {
+    return Object.fromEntries(Object.entries(tree).map(([path, body]) => [`${root}/${path}`, body]));
+  }
+
+  function junieIo(tree = junieTree(), root = '/junie'): ProbeIo {
+    return withFiles(routedRunner(), { '/grok/logs/unified.jsonl': grokLog(), ...junieFiles(tree, root) });
+  }
+
+  async function junieLines(io: ProbeIo, env: Record<string, string>, now = JUNIE_NOW): Promise<string[]> {
+    return panelOf(await runApp(io, { ...JUNIE_ENV, NO_COLOR: '1', ...env }, now), 'junie').slice(1);
+  }
+
+  it('renders the newest session snapshot between cursor and kilo, leaving the other panels unchanged', async () => {
+    const output = await runApp(junieIo(), { ...JUNIE_ENV, NO_COLOR: '1' }, JUNIE_NOW);
+    const lines = output.split('\n');
+    const names = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo'];
+    expect(lines.filter((line) => names.includes(line))).toEqual(names);
+    const junie = lines.indexOf('junie');
+    expect(lines.slice(junie - 1, junie + 5)).toEqual(['='.repeat(72), 'junie', ROW_30, 'snapshot 6h6m old', '701513 credits · junie', '='.repeat(72)]);
+    expect(lines[junie + 5]).toBe('kilo');
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+    const without = await runApp(junieIo({}), { ...JUNIE_ENV, NO_COLOR: '1' }, JUNIE_NOW);
+    for (const name of names.filter((each) => each !== 'junie')) expect(panelOf(output, name)).toEqual(panelOf(without, name));
+  });
+
+  it.each<[string, Record<string, string>, Record<string, string>, string, string[]]>([
+    ['reference 2000000', { DANDELION_JUNIE_REFERENCE: '2000000' }, junieTree(), JUNIE_NOW, ['credits                             #############-------  65%', 'snapshot 6h6m old', '701513 credits · junie']],
+    ['reference 500000', { DANDELION_JUNIE_REFERENCE: '500000' }, junieTree(), JUNIE_NOW, ['credits                             --------------------   0%', 'snapshot 6h6m old', '701513 credits · junie']],
+    ['reference abc', { DANDELION_JUNIE_REFERENCE: 'abc' }, junieTree(), JUNIE_NOW, [ROW_30, 'snapshot 6h6m old', '701513 credits · junie']],
+    ['reference 0', { DANDELION_JUNIE_REFERENCE: '0' }, junieTree(), JUNIE_NOW, [ROW_30, 'snapshot 6h6m old', '701513 credits · junie']],
+    ['reference -5', { DANDELION_JUNIE_REFERENCE: '-5' }, junieTree(), JUNIE_NOW, [ROW_30, 'snapshot 6h6m old', '701513 credits · junie']],
+    ['an empty reference', { DANDELION_JUNIE_REFERENCE: '' }, junieTree(), JUNIE_NOW, ['balance without a reference', 'snapshot 6h6m old', '701513 credits · junie']],
+    ['a balance of 1000000.4', {}, junieTree(newEvents(1000000.4)), JUNIE_NOW, ['credits                             --------------------   0%', 'snapshot 6h6m old', '1000000 credits · junie']],
+    ['a balance of 0', {}, junieTree(newEvents(0)), JUNIE_NOW, ['credits                             #################### 100%', 'snapshot 6h6m old', '0 credits · junie']],
+    ['only Unknown lines and noise in the newest session', {}, junieTree([...NOISE, UNKNOWN_LINE, 'not json at all'].join('\n')), JUNIE_NOW, ['credits                             ##------------------  10%', 'snapshot 7h46m old', '900000 credits · junie']],
+    ['a balance of -1', {}, junieTree(newEvents(-1)), JUNIE_NOW, [ROW_30, 'snapshot 6h12m old', '704864 credits · junie']],
+    ['a string balance', {}, junieTree(newEvents('701512')), JUNIE_NOW, [ROW_30, 'snapshot 6h12m old', '704864 credits · junie']],
+    ['a snapshot older than 48h', {}, junieTree(), '2026-09-20T12:53:51Z', [ROW_30, 'stale snapshot 2d0h old', '701513 credits · junie']]
+  ])('renders %s', async (_case, env, tree, now, lines) => {
+    expect(await junieLines(junieIo(tree), env, now)).toEqual(lines);
+  });
+
+  it('colours a fresh junie gauge calm with a dim snapshot line and caption, and dims a stale panel without a ramp escape', async () => {
+    const fresh = await runApp(junieIo(), JUNIE_ENV, JUNIE_NOW);
+    expect(fresh).toContain(`\njunie\n${'credits'.padEnd(35)} ${CALM}${'█'.repeat(6)}${'░'.repeat(14)}\x1b[0m ${CALM} 30%\x1b[0m\n${DIM}snapshot 6h6m old\x1b[0m\n${DIM}701513 credits · junie\x1b[0m\n`);
+    const stale = await runApp(junieIo(), JUNIE_ENV, '2026-09-20T12:53:51Z');
+    expect(stale).toContain(`${DIM}${RULE}\njunie\n${'credits'.padEnd(35)} ${'█'.repeat(6)}${'░'.repeat(14)}  30%\nstale snapshot 2d0h old\n701513 credits · junie\x1b[0m\n`);
+  });
+
+  it.each<[string, Record<string, string>]>([
+    ['a missing home', {}],
+    ['an empty index', { 'sessions/index.jsonl': '' }],
+    ['an index of only bad lines', { 'sessions/index.jsonl': 'not json at all' }],
+    ['sessions whose events files are missing', { 'sessions/index.jsonl': INDEX }],
+    ['only Unknown lines, noise and bad lines', { 'sessions/index.jsonl': INDEX, 'sessions/session-new/events.jsonl': [...NOISE, UNKNOWN_LINE, 'not json at all'].join('\n'), 'sessions/session-old/events.jsonl': UNKNOWN_LINE }]
+  ])('renders a dim unavailable junie panel with %s while the others render normally', async (_case, tree) => {
+    const output = await runApp(junieIo(tree), JUNIE_ENV, JUNIE_NOW);
+    expect(output).toContain(`${DIM}${RULE}\njunie\nno junie quota snapshot — run junie once\njunie · junie\x1b[0m\n`);
+    expect(panelOf(output, 'claude')).toHaveLength(5);
+    expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
+  });
+
+  it.each([[{}], [{ DANDELION_JUNIE_HOME: '' }]])('defaults junie home to ~/.junie for %j', async (env) => {
+    const output = await runApp(junieIo(junieTree(), '/home/tester/.junie'), { ...GROK_ENV, NO_COLOR: '1', ...env }, JUNIE_NOW);
+    expect(panelOf(output, 'junie').slice(1)).toEqual([ROW_30, 'snapshot 6h6m old', '701513 credits · junie']);
+  });
+
+  describe('against a real junie home', () => {
+    let scratch = '';
+
+    beforeEach(() => {
+      scratch = mkdtempSync(join(tmpdir(), 'dandelion-junie-'));
+    });
+
+    afterEach(() => {
+      rmSync(scratch, { recursive: true, force: true });
+    });
+
+    function writeTree(home: string, tree: Record<string, string>): void {
+      for (const [path, body] of Object.entries(tree)) {
+        mkdirSync(join(home, path, '..'), { recursive: true });
+        writeFileSync(join(home, path), body);
+      }
+    }
+
+    function snapshotOf(dir: string): [string, number, number, string][] {
+      return readdirSync(dir, { recursive: true, encoding: 'utf8' }).sort().map((name) => {
+        const info = statSync(join(dir, name));
+        return [name, info.size, info.mtimeMs, info.isFile() ? readFileSync(join(dir, name), 'utf8') : ''];
+      });
+    }
+
+    it('renders the Background home and an empty home without writing to either', async () => {
+      const home = join(scratch, 'junie');
+      writeTree(home, junieTree());
+      const empty = join(scratch, 'empty');
+      mkdirSync(empty);
+      const io = { ...routedRunner(), reader: realIo.reader };
+      const before = snapshotOf(scratch);
+      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: home }, JUNIE_NOW), 'junie').slice(1)).toEqual([ROW_30, 'snapshot 6h6m old', '701513 credits · junie']);
+      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: empty }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
+      expect(snapshotOf(scratch)).toEqual(before);
+    });
+
+    it('is unavailable when the index is a directory or unreadable', async () => {
+      const io = { ...routedRunner(), reader: realIo.reader };
+      mkdirSync(join(scratch, 'sessions', 'index.jsonl'), { recursive: true });
+      expect(panelOf(await runApp(io, { DANDELION_JUNIE_HOME: scratch }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
+      const locked = join(scratch, 'locked');
+      writeTree(locked, junieTree());
+      chmodSync(join(locked, 'sessions', 'index.jsonl'), 0o000);
+      const reason = panelOf(await runApp(io, { DANDELION_JUNIE_HOME: locked }, JUNIE_NOW), 'junie')[1];
+      expect(reason === 'no junie quota snapshot — run junie once' || process.getuid?.() === 0).toBe(true);
+    });
+  });
+
+  describe('live dashboard and route', () => {
+    let scratch = '';
+    let statePath = '';
+
+    beforeEach(() => {
+      scratch = mkdtempSync(join(tmpdir(), 'dandelion-junie-state-'));
+      statePath = join(scratch, 'eligibility.json');
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      vi.setSystemTime(new Date(JUNIE_NOW));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      rmSync(scratch, { recursive: true, force: true });
+    });
+
+    async function settledJunie(io: ProbeIo, env: Record<string, string>) {
+      const dashboard = startDashboard({ ...io, launcher: MISSING_KIMI }, { ...JUNIE_ENV, NO_COLOR: '1', DANDELION_STATE_FILE: statePath, ...env });
+      for (let turn = 0; turn < 10; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+      return dashboard;
+    }
+
+    function onlyJunie(tree: Record<string, string> = junieTree()): ProbeIo {
+      return withFiles(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), junieFiles(tree, '/junie'));
+    }
+
+    it('toggles junie off with space and flashes it as not routable without a reference', async () => {
+      const dashboard = await settledJunie(junieIo(), {});
+      dashboard.press('k');
+      dashboard.press('k');
+      dashboard.press(' ');
+      expect(dashboard.lastFrame().split('\n')).toContain(`▸ junie${' '.repeat(54)}routing off`);
+      expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual({ junie: false });
+      dashboard.press('q');
+      await dashboard.finished;
+      rmSync(statePath);
+      const unreferenced = await settledJunie(junieIo(), { DANDELION_JUNIE_REFERENCE: '' });
+      unreferenced.press('k');
+      unreferenced.press('k');
+      unreferenced.press(' ');
+      const lines = unreferenced.lastFrame().split('\n');
+      expect(lines[lines.indexOf('▸ junie') + 3]).toBe('not routable (no usage windows)');
+      await vi.advanceTimersByTimeAsync(2000);
+      const later = unreferenced.lastFrame().split('\n');
+      expect(later[later.indexOf('▸ junie') + 3]).toBe('701513 credits · junie');
+      expect(readdirSync(scratch)).toEqual([]);
+      unreferenced.press('q');
+      await unreferenced.finished;
+    });
+
+    it.each<[Record<string, string>, string]>([
+      [{}, '1/1 windows above 80% · next reset: none'],
+      [{ DANDELION_JUNIE_REFERENCE: '' }, 'all windows below 80% · next reset: none']
+    ])('counts junie credits in the fleet summary and never takes a reset from it with %j', async (env, summary) => {
+      const dashboard = await settledJunie(onlyJunie(junieTree(newEvents(150000))), env);
+      expect(dashboard.lastFrame().split('\n')[1]).toBe(summary);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it.each<[string, Record<string, string>, Record<string, string>, string, boolean]>([
+      ['headroom', {}, junieTree(), 'gemini-3.8-flash high junie', true],
+      ['headroom', {}, junieTree(newEvents(0)), 'gemini-3.8-flash high junie', true],
+      ['headroom', { DANDELION_JUNIE_REFERENCE: '' }, junieTree(), 'none', false],
+      ['headroom', {}, {}, 'none', false],
+      ['high', {}, junieTree(newEvents(1000000)), 'none', false]
+    ])('routes %s with only junie available under %j', async (mode, env, tree, line, routed) => {
+      const request = { mode: mode === 'high' ? ('high' as const) : ('headroom' as const), now: JUNIE_NOW, zone: 'UTC' };
+      expect(await runRoute(onlyJunie(tree), { ...JUNIE_ENV, DANDELION_STATE_FILE: statePath, ...env }, request)).toEqual({ line, routed });
+    });
+
+    it('shows junie in the route box and none in the --high box', async () => {
+      const dashboard = await settledJunie(onlyJunie(), {});
+      const lines = dashboard.lastFrame().split('\n');
+      expect(lines.slice(3, 5)).toEqual([`| ${'gemini-3.8-flash high'.padEnd(31)} |  | ${'none'.padEnd(31)} |`, `| ${'junie'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`]);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it('skips junie when the state file turns it off', async () => {
+      writeFileSync(statePath, '{"junie": false}');
+      expect(await runRoute(onlyJunie(), { ...JUNIE_ENV, DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: JUNIE_NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
+    });
   });
 });

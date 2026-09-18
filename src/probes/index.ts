@@ -5,6 +5,7 @@ import { probeCli, type CliProbe } from './cli.ts';
 import { probeCodex, type CodexIo } from './codex.ts';
 import { probeCursor, type CursorIo } from './cursor.ts';
 import { probeGrok, type GrokIo } from './grok.ts';
+import { probeJunie } from './junie.ts';
 import { kiloProbe } from './kilo.ts';
 import { probeKimi, type KimiIo } from './kimi.ts';
 
@@ -30,6 +31,7 @@ export function providerProbes(io: ProbeIo, env: Record<string, string | undefin
     { id: 'grok', probe: (now) => probeGrok(io, env, now) },
     { id: 'codex', probe: (now) => probeCodex(io, now) },
     { id: 'cursor', probe: (now) => probeCursor(io, env, now) },
+    { id: 'junie', probe: (now) => probeJunie(io, env, now) },
     cliProbe(io, kiloProbe(env))
   ];
 }

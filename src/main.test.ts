@@ -339,9 +339,9 @@ describe('main', () => {
     }
   });
 
-  it('prints eight dim unavailable panels in order when no CLI is on PATH, grok home is empty and cursor auth is missing', () => {
+  it('prints nine dim unavailable panels in order when no CLI is on PATH, grok and junie homes are empty and cursor auth is missing', () => {
     const grokHome = mkdtempSync(join(tmpdir(), 'dandelion-grok-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome, DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json') };
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome, DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json') };
     delete env.NO_COLOR;
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
     rmSync(grokHome, { recursive: true, force: true });
@@ -355,6 +355,7 @@ describe('main', () => {
       ['grok', 'no grok billing snapshot — run grok once', 'grok · grok'],
       ['codex', 'codex CLI not found in PATH', 'codex · codex'],
       ['cursor', 'no cursor auth — run cursor-agent login', 'cursor · cursor'],
+      ['junie', 'no junie quota snapshot — run junie once', 'junie · junie'],
       ['kilo', 'kilo CLI not found in PATH', 'api balance · kilo']
     ].map((lines) => `\x1b[90m${'━'.repeat(72)}\n${lines.join('\n')}\x1b[0m`);
     expect(result.stdout).toBe(`${result.stdout.split('\n')[0]}\n${panels.join('\n')}\n`);
@@ -406,7 +407,7 @@ describe('main', () => {
 
   it('README documents cursor', () => {
     const readme = readFileSync('README.md', 'utf-8');
-    expect(readme).toContain('subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, and the API balance for `kilo`');
+    expect(readme).toContain('subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, the credits balance for `junie`, and the API balance for `kilo`');
     const providers = readme.split('\n').filter((line) => /^- `(claude|agy|kimi|grok|codex|cursor|kilo)` /.test(line));
     expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
     const cursor = providers[5];
@@ -420,6 +421,28 @@ describe('main', () => {
     expect(readme).toMatch(/^- `DANDELION_CURSOR_API_BASE` - .*Defaults to `https:\/\/api2\.cursor\.sh`/m);
   });
 
+  it('README documents junie', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    expect(readme).toContain('`codex` and `cursor`, the credits balance for `junie`, and the API balance for `kilo`');
+    const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy|kimi|grok|codex|cursor|junie|kilo)` /.test(line));
+    expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo']);
+    const junie = providers[7];
+    expect(junie).toContain('newest completion snapshot from `<junie home>/sessions/<id>/events.jsonl` without running junie');
+    expect(junie).toContain('credits used against a reference');
+    expect(junie).toContain("the snapshot's age");
+    expect(junie).toContain('older than 48h is shown dim as stale');
+    expect(junie).toContain('says to run junie once');
+    expect(readme).toContain('All nine probes run in parallel');
+    expect(readme).not.toContain('All eight probes run in parallel');
+    expect(readme).toMatch(/^- `DANDELION_JUNIE_HOME` - .*Defaults to `~\/\.junie`.*never writes to it/m);
+    expect(readme).toMatch(/^- `DANDELION_JUNIE_REFERENCE` - .*Defaults to `1000000`.*empty string, there is no reference.*not a positive number uses the default/m);
+    const route = readme.split('## Route')[1].split('## ')[0];
+    expect(route).toContain('`grok`, `cursor` and `junie`, in dashboard order');
+    expect(route).toContain('junie credits)');
+    expect(route).toContain('| cursor | `kimi-k3-max` | `kimi-k3-max` |\n| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |\n');
+    expect(route).toContain('so `--high` does not use junie');
+  });
+
   it('README documents the work claude account', () => {
     const readme = readFileSync('README.md', 'utf-8');
     const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy)` /.test(line));
@@ -428,7 +451,6 @@ describe('main', () => {
     expect(providers[1]).toContain('(claude · work)');
     expect(providers[1]).toContain('same command with `CLAUDE_CONFIG_DIR` set to the work config dir');
     expect(providers[1]).toContain('Without that dir it is unavailable');
-    expect(readme).toContain('All eight probes run in parallel');
     expect(readme).not.toContain('All seven probes run in parallel');
     expect(readme).toMatch(/^- `DANDELION_CLAUDE_WORK_CONFIG_DIR` - .*Defaults to `~\/\.claude-work`/m);
   });

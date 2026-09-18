@@ -13,7 +13,8 @@ const ROUTING_TABLE: Route[] = [
   { id: 'agy', standard: 'gemini-3.1-pro-high medium', max: 'gemini-3.1-pro-high high' },
   { id: 'kimi', standard: 'kimi-code/kimi-for-coding-highspeed', max: 'kimi-code/kimi-for-coding-highspeed' },
   { id: 'grok', standard: 'grok-4.6 xhigh', max: 'grok-4.6 xhigh' },
-  { id: 'cursor', standard: 'kimi-k3-max', max: 'kimi-k3-max' }
+  { id: 'cursor', standard: 'kimi-k3-max', max: 'kimi-k3-max' },
+  { id: 'junie', standard: 'gemini-3.8-flash high', max: 'gemini-3.8-flash high' }
 ];
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
