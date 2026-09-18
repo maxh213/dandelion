@@ -37,6 +37,11 @@ chmodSync(kilo, 0o755);
 const link = join(fixture, 'dandelion');
 symlinkSync(main, link);
 const moduleUrl = pathToFileURL(main).href;
+const entry = join(fixture, 'main.ts');
+const entryLink = join(fixture, 'dandelion-entry');
+writeFileSync(entry, '');
+symlinkSync(entry, entryLink);
+const entryUrl = pathToFileURL(entry).href;
 
 function timeCli() {
   const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: empty, ALLOWANCE_JUNIE_HOME: empty, ALLOWANCE_CURSOR_AUTH_FILE: join(empty, 'missing-auth.json') });
@@ -54,11 +59,14 @@ try {
   if (!app.isEntryFile(moduleUrl, link) || !app.isEntryFile(moduleUrl, main) || app.isEntryFile(moduleUrl, kilo)) {
     throw new Error('isEntryFile gave an unexpected answer');
   }
+  if (!app.isEntryFile(entryUrl, entryLink) || !app.isEntryFile(entryUrl, entry) || app.isEntryFile(entryUrl, kilo)) {
+    throw new Error('isEntryFile gave an unexpected answer on the fixture entry');
+  }
   timeCli();
   emit(TARGETS.cliSymlink, await repeat(VALUES, timeCli), 'ms');
-  emit(TARGETS.entrySymlink, perCallSync(ITERATIONS, () => app.isEntryFile(moduleUrl, link)), 'us');
-  emit(TARGETS.entryDirect, perCallSync(ITERATIONS, () => app.isEntryFile(moduleUrl, main)), 'us');
-  emit(TARGETS.entryOther, perCallSync(ITERATIONS, () => app.isEntryFile(moduleUrl, kilo)), 'us');
+  emit(TARGETS.entrySymlink, perCallSync(ITERATIONS, () => app.isEntryFile(entryUrl, entryLink)), 'us');
+  emit(TARGETS.entryDirect, perCallSync(ITERATIONS, () => app.isEntryFile(entryUrl, entry)), 'us');
+  emit(TARGETS.entryOther, perCallSync(ITERATIONS, () => app.isEntryFile(entryUrl, kilo)), 'us');
 } finally {
   rmSync(fixture, { recursive: true, force: true });
   rmSync(empty, { recursive: true, force: true });

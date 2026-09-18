@@ -18,12 +18,19 @@ export async function repeat(count, fn) {
   return values;
 }
 
+const WARM_MS = 300;
+
 function warmups(count) {
   return Math.max(20, Math.ceil(count / 10));
 }
 
+function warm(calls, count, since) {
+  return calls >= warmups(count) && performance.now() - since >= WARM_MS;
+}
+
 export async function perCall(count, fn) {
-  for (let i = 0; i < warmups(count); i++) await fn();
+  const since = performance.now();
+  for (let calls = 0; !warm(calls, count, since); calls++) await fn();
   const values = [];
   for (let i = 0; i < count; i++) {
     const start = process.hrtime.bigint();
@@ -34,7 +41,8 @@ export async function perCall(count, fn) {
 }
 
 export function perCallSync(count, fn) {
-  for (let i = 0; i < warmups(count); i++) fn();
+  const since = performance.now();
+  for (let calls = 0; !warm(calls, count, since); calls++) fn();
   const values = [];
   for (let i = 0; i < count; i++) {
     const start = process.hrtime.bigint();
