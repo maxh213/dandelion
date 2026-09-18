@@ -12,20 +12,24 @@ const appEntry = join(tree, 'src', 'app', 'index.ts');
 const renderEntry = join(tree, 'src', 'render', 'index.ts');
 const domainEntry = join(tree, 'src', 'domain', 'index.ts');
 const junieEntry = join(tree, 'src', 'probes', 'junie.ts');
+const liveEntry = join(tree, 'src', 'app', 'live.ts');
 const NOW = '2026-09-18T14:00:00.000Z';
 const MIDNIGHT = '2026-09-19T00:00:00.000Z';
 const ZONE = 'Europe/London';
 const ITERATIONS = 200;
 const FAST_ITERATIONS = 2000;
+const SESSIONS = VALUES;
 const BIG_LINES = 1320;
 const SNAPSHOT_FROM_END = 20;
 const NEWER_LINES = 700;
+const HIGH_LINE = 'claude-fable-5-1 max claude';
 
 const TARGETS = {
   cli: 'cli one-shot nine providers junie 1.6MB session log',
   cliFallback: 'cli one-shot nine providers junie newest session without snapshot',
   cliEmpty: 'cli one-shot nine providers empty junie home',
   cliRoute: 'cli route nine providers junie 1.6MB session log',
+  cliHigh: 'cli route --high nine providers junie 1.6MB session log',
   probeReal: 'probeJunie 1.6MB log, snapshot 20 lines from end, real reader (in-process, per call)',
   probeFallbackReal: 'probeJunie newest 0.8MB session without snapshot, older 1.6MB, real reader (in-process, per call)',
   probeEmptyReal: 'probeJunie empty home real reader (in-process, per call)',
@@ -33,13 +37,18 @@ const TARGETS = {
   probeNoReference: 'probeJunie 1.6MB log no reference stub reader (in-process, per call)',
   runApp: 'runApp nine providers junie 1.6MB log stub (in-process, per call)',
   runRoute: 'runRoute nine providers junie 1.6MB log stub (in-process, per call)',
+  runRouteHigh: 'runRoute --high nine providers junie 1.6MB log stub (in-process, per call)',
   renderFresh: 'renderDashboard nine providers junie fresh (in-process, per call)',
   renderStale: 'renderDashboard nine providers junie stale (in-process, per call)',
   renderNoReference: 'renderDashboard nine providers junie no reference (in-process, per call)',
+  renderLive: 'renderLiveFrame nine settled junie fresh (in-process, per call)',
   fleet: 'summariseFleet nine providers (in-process, per call)',
   route30: 'routeLine 014 live case plus junie 30% (in-process, per call)',
   route0: 'routeLine 014 live case plus junie 0% (in-process, per call)',
-  routeIneligible: 'routeLine 014 live case junie 0% ineligible (in-process, per call)'
+  routeIneligible: 'routeLine 014 live case junie 0% ineligible (in-process, per call)',
+  routeNoReference: 'routeLine 014 live case plus junie no reference (in-process, per call)',
+  highRoute: 'highRouteLine 014 live case plus junie 0% (in-process, per call)',
+  session: 'startLive nine stub probes first round then quit (in-process, per session)'
 };
 
 if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry) || !existsSync(domainEntry)) {
@@ -128,13 +137,39 @@ function cliEnv(junieHome) {
   return env;
 }
 
-function timeCli(junieHome, args) {
+function timeCli(junieHome, args, wanted) {
   const env = cliEnv(junieHome);
   const start = process.hrtime.bigint();
   const result = spawnSync(process.execPath, [main, ...args], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
   const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
   if (result.status !== 0) throw new Error(`cli ${args.join(' ')} exited ${result.status}:\n${result.stdout}${result.stderr}`);
+  if (wanted !== undefined && result.stdout !== `${wanted}\n`) throw new Error(`cli ${args.join(' ')} printed ${JSON.stringify(result.stdout)}, wanted ${JSON.stringify(wanted)}`);
   return elapsed;
+}
+
+function keyboardStub() {
+  const listeners = [];
+  return {
+    setRawMode: () => undefined,
+    setEncoding: () => undefined,
+    on: (_event, listener) => listeners.push(listener),
+    pause: () => undefined,
+    press: (key) => listeners.forEach((listener) => listener(key))
+  };
+}
+
+async function liveSession(startLive, probes) {
+  const keyboard = keyboardStub();
+  let bytes = 0;
+  const screen = { write: (text) => (bytes += text.length) };
+  const settled = [];
+  const tracked = probes.map(({ id, probe }) => ({ id, probe: (now) => { const p = probe(now); settled.push(p); return p; } }));
+  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, zone: ZONE });
+  await Promise.allSettled(settled);
+  await new Promise((resolve) => setImmediate(resolve));
+  keyboard.press('q');
+  await ended;
+  return bytes;
 }
 
 const STUB_HOME = '/bench-junie-stub';
@@ -187,8 +222,10 @@ function expectOneOf(actual, wanted, what) {
 
 try {
   const app = await import(pathToFileURL(appEntry).href);
-  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+  const render = await import(pathToFileURL(renderEntry).href);
+  const { renderDashboard } = render;
   const domain = await import(pathToFileURL(domainEntry).href);
+  const hasHigh = typeof domain.highRouteLine === 'function';
 
   timeCli(happyHome, []);
   timeCli(happyHome, ['route']);
@@ -196,6 +233,12 @@ try {
   emit(TARGETS.cliFallback, await repeat(VALUES, () => timeCli(fallbackHome, [])), 'ms');
   emit(TARGETS.cliEmpty, await repeat(VALUES, () => timeCli(emptyHome, [])), 'ms');
   emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(happyHome, ['route'])), 'ms');
+  if (hasHigh) {
+    timeCli(happyHome, ['route', '--high'], HIGH_LINE);
+    emit(TARGETS.cliHigh, await repeat(VALUES, () => timeCli(happyHome, ['route', '--high'], HIGH_LINE)), 'ms');
+  } else {
+    absent(TARGETS.cliHigh);
+  }
 
   if (existsSync(junieEntry)) {
     const { probeJunie } = await import(pathToFileURL(junieEntry).href);
@@ -225,15 +268,32 @@ try {
 
   const stub = stubIo(happyFiles);
   const request = { mode: 'headroom', now: NOW, zone: ZONE };
+  const highRequest = { mode: 'high', now: NOW, zone: ZONE };
   await app.runApp(stub, appEnv, NOW);
   await app.runRoute(stub, appEnv, request);
   emit(TARGETS.runApp, await perCall(ITERATIONS, () => app.runApp(stub, appEnv, NOW)), 'us');
   emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stub, appEnv, request)), 'us');
+  if (hasHigh) {
+    const high = await app.runRoute(stub, appEnv, highRequest);
+    if (high.line !== HIGH_LINE) throw new Error(`runRoute --high printed ${JSON.stringify(high.line)}`);
+    emit(TARGETS.runRouteHigh, await perCall(ITERATIONS, () => app.runRoute(stub, appEnv, highRequest)), 'us');
+  } else {
+    absent(TARGETS.runRouteHigh);
+  }
 
   for (const usages of [fleet30, fleetStale, fleetNoReference]) renderDashboard(usages, false, NOW, []);
   emit(TARGETS.renderFresh, perCallSync(FAST_ITERATIONS, () => renderDashboard(fleet30, false, NOW, [])), 'us');
   emit(TARGETS.renderStale, perCallSync(FAST_ITERATIONS, () => renderDashboard(fleetStale, false, NOW, [])), 'us');
   emit(TARGETS.renderNoReference, perCallSync(FAST_ITERATIONS, () => renderDashboard(fleetNoReference, false, NOW, [])), 'us');
+
+  if (typeof render.renderLiveFrame === 'function') {
+    const liveView = { slots: fleet30.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: ZONE, settled: fleet30 };
+    const settledOnce = render.renderLiveFrame(liveView, false, NOW);
+    if (render.renderLiveFrame(liveView, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
+    emit(TARGETS.renderLive, perCallSync(FAST_ITERATIONS, () => render.renderLiveFrame(liveView, false, NOW)), 'us');
+  } else {
+    absent(TARGETS.renderLive);
+  }
 
   domain.summariseFleet(fleet30, NOW);
   emit(TARGETS.fleet, perCallSync(FAST_ITERATIONS, () => domain.summariseFleet(fleet30, NOW)), 'us');
@@ -242,9 +302,28 @@ try {
   expectOneOf(domain.routeLine(fleet30, NOW, MIDNIGHT, []), GROK, 'junie 30%');
   expectOneOf(domain.routeLine(fleet0, NOW, MIDNIGHT, []), ['gemini-3.8-flash high junie', ...GROK], 'junie 0%');
   expectOneOf(domain.routeLine(fleet0, NOW, MIDNIGHT, ['junie']), GROK, 'junie ineligible');
+  expectOneOf(domain.routeLine(fleetNoReference, NOW, MIDNIGHT, []), GROK, 'junie no reference');
   emit(TARGETS.route30, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet30, NOW, MIDNIGHT, [])), 'us');
   emit(TARGETS.route0, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, NOW, MIDNIGHT, [])), 'us');
   emit(TARGETS.routeIneligible, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, NOW, MIDNIGHT, ['junie'])), 'us');
+  emit(TARGETS.routeNoReference, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleetNoReference, NOW, MIDNIGHT, [])), 'us');
+
+  if (hasHigh) {
+    expectOneOf(domain.highRouteLine(fleet0, []), [HIGH_LINE], 'high plus junie 0%');
+    emit(TARGETS.highRoute, perCallSync(FAST_ITERATIONS, () => domain.highRouteLine(fleet0, [])), 'us');
+  } else {
+    absent(TARGETS.highRoute);
+  }
+
+  if (existsSync(liveEntry)) {
+    const { startLive } = await import(pathToFileURL(liveEntry).href);
+    const probes = fleet30.map((usage) => ({ id: usage.id, probe: async () => usage }));
+    const bytes = await liveSession(startLive, probes);
+    if (bytes < 1000) throw new Error(`live session drew too little: ${bytes}`);
+    emit(TARGETS.session, await perCall(SESSIONS, () => liveSession(startLive, probes)), 'us');
+  } else {
+    absent(TARGETS.session);
+  }
 } finally {
   rmSync(fixture, { recursive: true, force: true });
 }
