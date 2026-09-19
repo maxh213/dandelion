@@ -4,7 +4,7 @@ export type JunieIo = { reader: FileReader };
 
 type Session = { id: string; updatedAt: number };
 
-type Snapshot = { balance: number; snapshotAt: string };
+type Snapshot = { balance: number; endedAtMs: number };
 
 const SNAPSHOT_TYPE = 'TaskQuotaSnapshot.JetBrains';
 const DEFAULT_REFERENCE = 1000000;
@@ -16,55 +16,62 @@ function junieHome(reader: FileReader, env: Record<string, string | undefined>):
   return env['DANDELION_JUNIE_HOME'] || `${reader.homeDir()}/.junie`;
 }
 
-function parsed(line: string): unknown {
-  try {
-    return JSON.parse(line);
-  } catch {
-    return undefined;
-  }
-}
-
-function sessionOn(line: string): Session[] {
-  const entry = parsed(line);
+function usableSessions(entry: unknown): Session[] {
   const id = fieldOf(entry, 'sessionId');
   const updatedAt = fieldOf(entry, 'updatedAt');
   return typeof id === 'string' && Number.isFinite(updatedAt) ? [{ id, updatedAt: Number(updatedAt) }] : [];
 }
 
-function sessionsNewestFirst(index: string): Session[] {
-  return index.split('\n').flatMap(sessionOn).sort((a, b) => b.updatedAt - a.updatedAt);
+function sessionsOn(line: string): Session[] {
+  try {
+    return usableSessions(JSON.parse(line));
+  } catch {
+    return [];
+  }
 }
 
-function isJetBrains(quota: unknown): boolean {
-  const type = fieldOf(quota, 'type');
-  return typeof type === 'string' && type.endsWith(SNAPSHOT_TYPE);
+async function sessionsNewestFirst(reader: FileReader, home: string): Promise<Session[]> {
+  const index = await reader.read(`${home}/sessions/index.jsonl`);
+  return index === undefined ? [] : index.split('\n').flatMap(sessionsOn).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-function instantOf(ms: unknown): string | undefined {
-  const date = new Date(Number(ms));
-  return typeof ms === 'number' && !Number.isNaN(date.getTime()) ? date.toISOString() : undefined;
+function isInstant(ms: unknown): ms is number {
+  return typeof ms === 'number' && !Number.isNaN(new Date(ms).getTime());
 }
 
-function snapshotOn(line: string): Snapshot | undefined {
-  const completion = fieldOf(parsed(line), 'completion');
+function usableSnapshots(completion: unknown): Snapshot[] {
   const quota = fieldOf(completion, 'quota');
   const balance = fieldOf(quota, 'balanceLeft');
-  const snapshotAt = instantOf(fieldOf(completion, 'endedAtMs'));
-  return isJetBrains(quota) && isCount(balance) && snapshotAt !== undefined ? { balance, snapshotAt } : undefined;
+  const endedAtMs = fieldOf(completion, 'endedAtMs');
+  const jetBrains = String(fieldOf(quota, 'type')).endsWith(SNAPSHOT_TYPE);
+  return jetBrains && isCount(balance) && isInstant(endedAtMs) ? [{ balance, endedAtMs }] : [];
+}
+
+function snapshotsOn(line: string): Snapshot[] {
+  try {
+    return usableSnapshots(fieldOf(JSON.parse(line), 'completion'));
+  } catch {
+    return [];
+  }
+}
+
+function lineAround(log: string, at: number): string {
+  const end = log.indexOf('\n', at);
+  return log.slice(log.lastIndexOf('\n', at) + 1, end === -1 ? undefined : end);
 }
 
 function newestSnapshot(log: string): Snapshot | undefined {
-  const candidates = log.split('\n').filter((line) => line.includes(SNAPSHOT_TYPE));
-  for (let at = candidates.length - 1; at >= 0; at--) {
-    const snapshot = snapshotOn(candidates[at]);
+  for (let at = log.length, hit = log.lastIndexOf(SNAPSHOT_TYPE); hit !== at; at = hit, hit = log.lastIndexOf(SNAPSHOT_TYPE, at - 1)) {
+    const [snapshot] = snapshotsOn(lineAround(log, hit));
     if (snapshot !== undefined) return snapshot;
   }
   return undefined;
 }
 
-async function newestSessionSnapshot(reader: FileReader, home: string, sessions: Session[]): Promise<Snapshot | undefined> {
-  for (const { id } of sessions) {
-    const snapshot = newestSnapshot((await reader.read(`${home}/sessions/${id}/events.jsonl`)) ?? '');
+async function newestSessionSnapshot(reader: FileReader, home: string): Promise<Snapshot | undefined> {
+  for (const { id } of await sessionsNewestFirst(reader, home)) {
+    const log = await reader.read(`${home}/sessions/${id}/events.jsonl`);
+    const snapshot = log === undefined ? undefined : newestSnapshot(log);
     if (snapshot !== undefined) return snapshot;
   }
   return undefined;
@@ -89,12 +96,11 @@ function withNote(windows: UsageWindow[]): { note?: string } {
 }
 
 export async function probeJunie(io: JunieIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
-  const home = junieHome(io.reader, env);
-  const index = (await io.reader.read(`${home}/sessions/index.jsonl`)) ?? '';
-  const snapshot = await newestSessionSnapshot(io.reader, home, sessionsNewestFirst(index));
+  const snapshot = await newestSessionSnapshot(io.reader, junieHome(io.reader, env));
   const usage = { id: 'junie', displayName: 'junie', fetchedAt: now };
   if (snapshot === undefined) return { ...usage, planLabel: 'junie', windows: [], status: 'unavailable', reason: UNAVAILABLE };
   const windows = creditsWindows(snapshot.balance, referenceOf(env['DANDELION_JUNIE_REFERENCE']));
   const planLabel = `${Math.round(snapshot.balance)} credits`;
-  return { ...usage, planLabel, windows, status: 'ok', snapshotAt: snapshot.snapshotAt, ...withNote(windows) };
+  const snapshotAt = new Date(snapshot.endedAtMs).toISOString();
+  return { ...usage, planLabel, windows, status: 'ok', snapshotAt, ...withNote(windows) };
 }

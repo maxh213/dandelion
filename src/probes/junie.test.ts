@@ -5,6 +5,7 @@ import { probeJunie, type JunieIo } from './junie.ts';
 const NOW = '2026-09-18T19:00:00Z';
 const JETBRAINS = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot.JetBrains';
 const UNKNOWN = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot.Unknown';
+const SNAPSHOT_SUFFIX = 'TaskQuotaSnapshot.JetBrains';
 const INDEX = [
   '{"sessionId":"session-old","createdAt":1789735398143,"updatedAt":1789735405438,"projectDir":"/w","taskName":"Old","status":"Sending LLM request"}',
   'not json at all',
@@ -84,6 +85,7 @@ describe('probeJunie', () => {
 
   it.each<[string, number]>([
     ['2000000', 65],
+    ['1500000', 53],
     ['500000', 0],
     ['abc', 30],
     ['0', 30],
@@ -122,6 +124,8 @@ describe('probeJunie', () => {
     ['a string balance', 1789736100000, '701512'],
     ['a missing balance', 1789736100000, undefined],
     ['a string endedAtMs', '1789736100000', 5],
+    ['an ISO string endedAtMs', '2026-09-18T12:55:00.000Z', 5],
+    ['a null endedAtMs', null, 5],
     ['an endedAtMs out of range', 1e300, 5],
     ['a missing endedAtMs', undefined, 5]
   ])('skips a JetBrains line with %s for an earlier one in the same file', async (_case, endedAtMs, balance) => {
@@ -130,10 +134,31 @@ describe('probeJunie', () => {
     expect(usage).toMatchObject({ planLabel: '704864 credits', windows: [{ usedPct: 30 }], snapshotAt: '2026-09-18T12:47:31.253Z' });
   });
 
-  it('skips a line that only names the JetBrains type outside the quota', async () => {
-    const echo = JSON.stringify({ kind: 'UserPromptEvent', prompt: JETBRAINS, completion: { endedAtMs: 1789736100000, quota: { type: 'x', balanceLeft: 1 } } });
-    const usage = await probeJunie(readerOf(homeWith(`${OLD_EVENTS}\n${echo}`)).io, HOME, NOW);
-    expect(usage).toMatchObject({ planLabel: '900000 credits', windows: [{ usedPct: 10 }] });
+  it.each<[string, string]>([
+    ['outside the quota', JSON.stringify({ kind: 'UserPromptEvent', prompt: JETBRAINS, completion: { endedAtMs: 1789736100000, quota: { type: 'x', balanceLeft: 1 } } })],
+    ['without a completion', JSON.stringify({ kind: 'UserPromptEvent', prompt: JETBRAINS })],
+    ['beside a numeric quota type', JSON.stringify({ prompt: JETBRAINS, completion: { endedAtMs: 1789736100000, quota: { type: 7, balanceLeft: 1 } } })],
+    ['at the start of the quota type', JSON.stringify({ completion: { endedAtMs: 1789736100000, quota: { type: `${SNAPSHOT_SUFFIX}.Unknown`, balanceLeft: 1 } } })],
+    ['on a line cut short while junie is still appending', snapshotLine(1789736100000, 5).slice(0, -20)]
+  ])('skips a line that names the JetBrains type %s for an earlier snapshot', async (_case, line) => {
+    const usage = await probeJunie(readerOf(homeWith(`${OLD_EVENTS}\n${line}`)).io, HOME, NOW);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: '900000 credits', windows: [{ usedPct: 10 }], snapshotAt: '2026-09-18T11:13:20.000Z' });
+  });
+
+  it.each<[string, string]>([
+    ['on the only line', OLD_EVENTS],
+    ['on the first line behind a leading newline and ahead of trailing blank lines', `\n${OLD_EVENTS}\n${`${NOISE[0]}\n`.repeat(3)}\n`],
+    ['on the first line ahead of noise without a trailing newline', [OLD_EVENTS, ...NOISE].join('\n')],
+    ['on the last line behind a trailing newline', `${NOISE.join('\n')}\n${OLD_EVENTS}\n`]
+  ])('finds a snapshot %s', async (_case, events) => {
+    const usage = await probeJunie(readerOf(homeWith(events)).io, HOME, NOW);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: '900000 credits', snapshotAt: '2026-09-18T11:13:20.000Z' });
+  });
+
+  it('finds an older usable snapshot behind 50,000 unusable JetBrains lines', async () => {
+    const unusable = Array.from({ length: 50000 }, () => snapshotLine(1789736100000, -1)).join('\n');
+    const usage = await probeJunie(readerOf(homeWith(`${snapshotLine(1789735651253, 704863.73775)}\n${unusable}`)).io, HOME, NOW);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: '704864 credits', snapshotAt: '2026-09-18T12:47:31.253Z' });
   });
 
   it('falls back to an older session when the newest holds only Unknown lines and noise', async () => {
@@ -144,21 +169,32 @@ describe('probeJunie', () => {
   });
 
   it('skips index lines without a string sessionId or a finite updatedAt', async () => {
-    const index = ['{"sessionId":7,"updatedAt":1}', '{"sessionId":"session-new","updatedAt":"9"}', '{"sessionId":"session-new"}', '[]', 'null', INDEX.split('\n')[0]].join('\n');
-    const { io, reads } = readerOf({ ...homeWith(NEW_EVENTS), '/junie/sessions/index.jsonl': index });
+    const index = ['{"sessionId":7,"updatedAt":9999999999999}', '{"sessionId":"session-new","updatedAt":"9999999999999"}', '{"sessionId":"session-new"}', '[]', 'null', INDEX.split('\n')[0]].join('\n');
+    const { io, reads } = readerOf({ ...homeWith(NEW_EVENTS), '/junie/sessions/7/events.jsonl': snapshotLine(1789736100000, 5), '/junie/sessions/index.jsonl': index });
     expect(await probeJunie(io, HOME, NOW)).toMatchObject({ planLabel: '900000 credits' });
     expect(reads).toEqual(['/junie/sessions/index.jsonl', '/junie/sessions/session-old/events.jsonl']);
   });
 
-  it.each<[string, Record<string, string>]>([
-    ['a missing home', {}],
-    ['an empty index', { '/junie/sessions/index.jsonl': '' }],
-    ['an index of only bad lines', { '/junie/sessions/index.jsonl': 'not json at all' }],
-    ['sessions whose events files are missing', { '/junie/sessions/index.jsonl': INDEX }],
-    ['only Unknown lines, noise and bad lines', homeWith([...NOISE, snapshotLine(1789735700000, undefined, UNKNOWN), 'not json at all', snapshotLine(1789735700000, -1)].join('\n'))]
-  ])('is unavailable with %s', async (_case, files) => {
+  it('visits a resumed session first when its updatedAt is the newest', async () => {
+    const index = ['{"sessionId":"session-old","createdAt":1789735398143,"updatedAt":1789739999999}', '{"sessionId":"session-new","createdAt":1789735553568,"updatedAt":1789735558242}'].join('\n');
+    const { io, reads } = readerOf({ ...homeWith(NEW_EVENTS), '/junie/sessions/index.jsonl': index });
+    expect(await probeJunie(io, HOME, NOW)).toMatchObject({ planLabel: '900000 credits', snapshotAt: '2026-09-18T11:13:20.000Z' });
+    expect(reads).toEqual(['/junie/sessions/index.jsonl', '/junie/sessions/session-old/events.jsonl']);
+  });
+
+  it.each<[string, Record<string, string>, string[]]>([
+    ['a missing home', {}, []],
+    ['an empty index', { '/junie/sessions/index.jsonl': '' }, []],
+    ['an index of only bad lines', { '/junie/sessions/index.jsonl': 'not json at all' }, []],
+    ['sessions whose events files are missing', { '/junie/sessions/index.jsonl': INDEX }, ['session-new', 'session-old']],
+    ['only Unknown lines, noise and bad lines', homeWith([...NOISE, snapshotLine(1789735700000, undefined, UNKNOWN), 'not json at all', snapshotLine(1789735700000, -1)].join('\n')), ['session-new', 'session-old']],
+    ['an empty events file', homeWith(''), ['session-new', 'session-old']],
+    ['a bad first line and no JetBrains line', homeWith(['not json at all', ...NOISE].join('\n')), ['session-new', 'session-old']]
+  ])('is unavailable with %s', async (_case, files, visited) => {
     const withoutOld = { ...files };
     delete withoutOld['/junie/sessions/session-old/events.jsonl'];
-    expect(await probeJunie(readerOf(withoutOld).io, HOME, NOW)).toStrictEqual(UNAVAILABLE);
+    const { io, reads } = readerOf(withoutOld);
+    expect(await probeJunie(io, HOME, NOW)).toStrictEqual(UNAVAILABLE);
+    expect(reads).toEqual(['/junie/sessions/index.jsonl', ...visited.map((id) => `/junie/sessions/${id}/events.jsonl`)]);
   });
 });
