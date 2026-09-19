@@ -2016,7 +2016,9 @@ describe('hermes panel', () => {
     });
   }
 
-  function account(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  function account(
+    overrides: { subscription?: Record<string, unknown>; paid_service_access?: Record<string, unknown> } = {}
+  ): Record<string, unknown> {
     return {
       user: { email: 'qa@example.com' },
       organisation: { id: 'o', slug: 'o', name: 'O' },
@@ -2025,9 +2027,9 @@ describe('hermes panel', () => {
         monthly_credits: 22,
         credits_remaining: 5.5,
         current_period_end: RESET,
-        ...(overrides.subscription as object | undefined)
+        ...overrides.subscription
       },
-      paid_service_access: { paid_access: true, ...(overrides.paid_service_access as object | undefined) }
+      paid_service_access: { paid_access: true, ...overrides.paid_service_access }
     };
   }
 
@@ -2082,7 +2084,7 @@ describe('hermes panel', () => {
     expect(output).toContain(`\nhermes\n${'credits'.padEnd(35)} ${WARM}${'█'.repeat(15)}${'░'.repeat(5)}\x1b[0m ${WARM} 75%\x1b[0m ↻ 3d0h\n${DIM}Plus · $5.50 of $22 · hermes\x1b[0m\n`);
   });
 
-  it.each<[string, Record<string, unknown>, string[]]>([
+  it.each<[string, { subscription?: Record<string, unknown>; paid_service_access?: Record<string, unknown> }, string[]]>([
     ['credits remaining above the grant', { subscription: { credits_remaining: 22.472091793333334 } }, ['credits                             --------------------   0% ↻ 3d0h', 'Plus · $22.47 of $22 · hermes']],
     ['zero remaining', { subscription: { credits_remaining: 0 } }, ['credits                             #################### 100% ↻ 3d0h', 'Plus · $0.00 of $22 · hermes']],
     ['half remaining', { subscription: { credits_remaining: 11 } }, ['credits                             ##########----------  50% ↻ 3d0h', 'Plus · $11.00 of $22 · hermes']],

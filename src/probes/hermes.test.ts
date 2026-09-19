@@ -20,7 +20,9 @@ function answer(value: unknown, status = 200): Outcome {
   return { status, body: typeof value === 'string' ? value : JSON.stringify(value) };
 }
 
-function account(overrides: Record<string, unknown> = {}) {
+function account(
+  overrides: { subscription?: Record<string, unknown>; paid_service_access?: Record<string, unknown> } = {}
+) {
   return {
     user: { email: 'qa@example.com', privy_did: 'did' },
     organisation: { id: 'o', slug: 'o', name: 'O' },
@@ -32,7 +34,7 @@ function account(overrides: Record<string, unknown> = {}) {
       current_period_end: RESET,
       credits_remaining: 5.5,
       rollover_credits: 6.591792646666667,
-      ...(overrides.subscription as object | undefined)
+      ...overrides.subscription
     },
     purchased_credits_remaining: 0,
     tool_access: { enabled: false, coverage: { firecrawl: true, fal: true } },
@@ -41,7 +43,7 @@ function account(overrides: Record<string, unknown> = {}) {
       allowed: true,
       paid_access: true,
       reason: 'usable_credits',
-      ...(overrides.paid_service_access as object | undefined)
+      ...overrides.paid_service_access
     }
   };
 }
