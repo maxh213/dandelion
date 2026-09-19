@@ -33,8 +33,8 @@ module.exports = {
     {
       name: 'port-probes-stand-alone',
       severity: 'error',
-      comment: 'Probes that own an IO port (kimi launcher/fetcher, grok and junie file readers, cursor fetcher/reader) are not CLI probes; they know domain only, not the cli skeleton',
-      from: { path: '^src/probes/(kimi|grok|junie|cursor)\\.ts$' },
+      comment: 'Probes that own an IO port (kimi launcher/fetcher, grok and junie file readers, cursor and hermes fetcher/reader) are not CLI probes; they know domain only, not the cli skeleton',
+      from: { path: '^src/probes/(kimi|grok|junie|cursor|hermes)\\.ts$' },
       to: { path: '^src/probes/' }
     },
     {
