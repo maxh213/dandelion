@@ -1,4 +1,4 @@
-import { fieldOf, isCount, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, newestLineMatch, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type JunieIo = { reader: FileReader };
 
@@ -55,23 +55,10 @@ function snapshotsOn(line: string): Snapshot[] {
   }
 }
 
-function lineAround(log: string, at: number): string {
-  const end = log.indexOf('\n', at);
-  return log.slice(log.lastIndexOf('\n', at) + 1, end === -1 ? undefined : end);
-}
-
-function newestSnapshot(log: string): Snapshot | undefined {
-  for (let at = log.length, hit = log.lastIndexOf(SNAPSHOT_TYPE); hit !== at; at = hit, hit = log.lastIndexOf(SNAPSHOT_TYPE, at - 1)) {
-    const [snapshot] = snapshotsOn(lineAround(log, hit));
-    if (snapshot !== undefined) return snapshot;
-  }
-  return undefined;
-}
-
 async function newestSessionSnapshot(reader: FileReader, home: string): Promise<Snapshot | undefined> {
   for (const { id } of await sessionsNewestFirst(reader, home)) {
     const log = await reader.read(`${home}/sessions/${id}/events.jsonl`);
-    const snapshot = log === undefined ? undefined : newestSnapshot(log);
+    const snapshot = log === undefined ? undefined : newestLineMatch(log, SNAPSHOT_TYPE, snapshotsOn);
     if (snapshot !== undefined) return snapshot;
   }
   return undefined;

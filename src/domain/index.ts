@@ -60,6 +60,19 @@ export function validInstant(value: unknown): string | undefined {
   return typeof value === 'string' && DATE_BEFORE_TIME.test(value) && !Number.isNaN(Date.parse(value)) ? value : undefined;
 }
 
+function lineAround(log: string, at: number): string {
+  const end = log.indexOf('\n', at);
+  return log.slice(log.lastIndexOf('\n', at) + 1, end === -1 ? undefined : end);
+}
+
+export function newestLineMatch<T>(log: string, needle: string, matchesOn: (line: string) => T[]): T | undefined {
+  for (let at = log.length, hit = log.lastIndexOf(needle); hit !== at; at = hit, hit = log.lastIndexOf(needle, at - 1)) {
+    const [match] = matchesOn(lineAround(log, hit));
+    if (match !== undefined) return match;
+  }
+  return undefined;
+}
+
 export function withReset(window: UsageWindow, resetsAt: string | undefined): UsageWindow {
   return resetsAt === undefined ? window : { ...window, resetsAt };
 }
