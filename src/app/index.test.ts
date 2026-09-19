@@ -87,10 +87,10 @@ function codexSpawner(lines: string[] = codexLines(), spawned: string[][] = []):
 
 const LIVE_CLEAR = '\x1b[H\x1b[2J';
 
-function startDashboard(io: ProbeIo, env: Record<string, string>) {
+function startDashboard(io: ProbeIo, env: Record<string, string>, clock?: () => string) {
   const writes: string[] = [];
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
-  const finished = runLive(io, env, keyboard, { write: (text: string) => writes.push(text) });
+  const finished = runLive(io, env, keyboard, { write: (text: string) => writes.push(text) }, clock);
   const frames = () => writes.filter((text) => text.startsWith(LIVE_CLEAR)).map((text) => text.slice(LIVE_CLEAR.length));
   const press = (key: string) => keyboard.emit('data', key);
   return { writes, finished, frames, press, lastFrame: () => frames().at(-1) ?? '' };
@@ -2183,8 +2183,8 @@ describe('hermes panel', () => {
       rmSync(scratch, { recursive: true, force: true });
     });
 
-    async function settledHermes(io: ProbeIo, env: Record<string, string>) {
-      const dashboard = startDashboard({ ...io, launcher: MISSING_KIMI }, { ...HERMES_ENV, NO_COLOR: '1', DANDELION_STATE_FILE: statePath, ...env });
+    async function settledHermes(io: ProbeIo, env: Record<string, string>, clock?: () => string) {
+      const dashboard = startDashboard({ ...io, launcher: MISSING_KIMI }, { ...HERMES_ENV, NO_COLOR: '1', DANDELION_STATE_FILE: statePath, ...env }, clock);
       for (let turn = 0; turn < 16; turn += 1) await new Promise((resolve) => setImmediate(resolve));
       return dashboard;
     }
@@ -2220,7 +2220,7 @@ describe('hermes panel', () => {
       [5.5, 'all windows below 80% · next reset: hermes credits in 3d0h']
     ])('counts hermes credits in the fleet summary at remaining %s', async (remaining, summary) => {
       const { io } = onlyHermes({ status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: remaining } })) });
-      const dashboard = await settledHermes(io, {});
+      const dashboard = await settledHermes(io, {}, () => HERMES_NOW);
       expect(dashboard.lastFrame().split('\n')[1]).toBe(summary);
       dashboard.press('q');
       await dashboard.finished;

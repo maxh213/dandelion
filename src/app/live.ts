@@ -18,6 +18,7 @@ type LiveOptions = {
   stopChildren(): Promise<void>;
   eligibility: Eligibility;
   zone: string;
+  clock?: () => string;
 };
 
 type Timer = ReturnType<typeof setTimeout>;
@@ -25,6 +26,7 @@ type Timer = ReturnType<typeof setTimeout>;
 type SettledRound = NonNullable<LiveSlot['usage']>[];
 
 type Session = LiveOptions & {
+  clock: () => string;
   results: LiveSlot['usage'][];
   settled: SettledRound | undefined;
   noColor: boolean;
@@ -41,6 +43,10 @@ type Session = LiveOptions & {
   flashTimer?: Timer;
   done(): void;
 };
+
+function wallClock(): string {
+  return new Date().toISOString();
+}
 
 const ENTER_ALTERNATE = '\x1b[?1049h\x1b[?25l';
 const CLEAR = '\x1b[H\x1b[2J';
@@ -78,7 +84,7 @@ function viewOf(session: Session): LiveView {
 
 function draw(session: Session): void {
   if (session.quitting) return;
-  session.screen.write(`${CLEAR}${renderLiveFrame(viewOf(session), session.noColor, new Date().toISOString())}`);
+  session.screen.write(`${CLEAR}${renderLiveFrame(viewOf(session), session.noColor, session.clock())}`);
 }
 
 function anyPending(session: Session): boolean {
@@ -112,7 +118,7 @@ function endRound(session: Session): void {
 function startRound(session: Session): void {
   session.running = true;
   session.rounds += 1;
-  const now = new Date().toISOString();
+  const now = session.clock();
   const settling = session.probes.map(({ probe }, index) => probe(now).then((usage) => settle(session, index, usage)));
   void Promise.allSettled(settling).then(() => endRound(session));
 }
@@ -204,6 +210,7 @@ export function startLive(options: LiveOptions): Promise<void> {
   return new Promise((done) => {
     const session: Session = {
       ...options,
+      clock: options.clock ?? wallClock,
       results: options.probes.map(() => undefined),
       settled: undefined,
       noColor: options.env['NO_COLOR'] !== undefined,
