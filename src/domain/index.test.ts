@@ -116,7 +116,8 @@ describe('routeLine', () => {
     ['kimi', 'kimi-code/kimi-for-coding-highspeed', 'kimi-code/kimi-for-coding-highspeed'],
     ['grok', 'grok-4.6 xhigh', 'grok-4.6 xhigh'],
     ['cursor', 'kimi-k3-max', 'kimi-k3-max'],
-    ['junie', 'gemini-3.8-flash high', 'gemini-3.8-flash high']
+    ['junie', 'gemini-3.8-flash high', 'gemini-3.8-flash high'],
+    ['hermes', 'x-ai/grok-4.6 xhigh', 'x-ai/grok-4.6 xhigh']
   ])('routes %s alone to its standard line, and to its max line when its weekly evaporates', (id, standard, max) => {
     expect(routeOf(`${id}: weekly 50 @2026-09-20T00:00:00.000Z`)).toBe(`${standard} ${id}`);
     expect(routeOf(`${id}: weekly 50 @2026-09-14T20:00:00.000Z`)).toBe(`${max} ${id}`);
@@ -171,6 +172,19 @@ describe('routeLine', () => {
     expect(routeOf(candidates, ineligible)).toBe(line);
   });
 
+  it.each([
+    ['hermes alone at 75%', 'hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
+    ['hermes alone at 0%', 'hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
+    ['hermes alone at 100%', 'hermes: weekly 100 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
+    ['grok at 50 beats hermes at 75', 'grok: weekly 50 @2026-09-17T11:00:00.000Z; hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 xhigh grok'],
+    ['a tie with grok goes to grok', 'grok: weekly 0 @2026-09-17T11:00:00.000Z; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 xhigh grok'],
+    ['a tie with junie goes to junie', 'junie: weekly 0 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'gemini-3.8-flash high junie'],
+    ['an ineligible hermes', 'hermes: weekly 75 @2026-09-20T00:00:00.000Z', ['hermes'], 'none'],
+    ['an unavailable hermes', 'hermes: unavailable', [], 'none']
+  ])('hermes: %s', (_case, candidates, ineligible, line) => {
+    expect(routeOf(candidates, ineligible)).toBe(line);
+  });
+
   it.each<[string, string[], string]>([
     ['junie: weekly 30 @-', [], 'grok-4.6 xhigh grok'],
     ['junie: weekly 0 @-', [], 'gemini-3.8-flash high junie'],
@@ -178,6 +192,17 @@ describe('routeLine', () => {
     ['junie: weekly 0 @-', ['junie'], 'grok-4.6 xhigh grok']
   ])('routes the 014 live case with %s, ineligible %j', (junie, ineligible, line) => {
     const usages = `${liveCase('100')}; ${junie}`;
+    expect(routeLine(usages.split('; ').map(usageOf), LIVE_NOW, MIDNIGHT, ineligible)).toBe(line);
+  });
+
+  it.each<[string, string[], string]>([
+    ['junie: weekly 30 @-; hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 xhigh grok'],
+    ['junie: weekly 30 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
+    ['junie: weekly 0 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'gemini-3.8-flash high junie'],
+    ['junie: weekly 30 @-; hermes: weekly 60 @2026-09-14T13:39:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
+    ['junie: weekly 30 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', ['hermes'], 'grok-4.6 xhigh grok']
+  ])('routes the 014 live case with junie and hermes as %s, ineligible %j', (extra, ineligible, line) => {
+    const usages = `${liveCase('100')}; ${extra}`;
     expect(routeLine(usages.split('; ').map(usageOf), LIVE_NOW, MIDNIGHT, ineligible)).toBe(line);
   });
 
@@ -238,6 +263,8 @@ describe('highRouteLine', () => {
     ['the 014 live case keeps Fable on the untripped personal account', 'claude: session rolling 2, weekly weekly 13, weekly Fable weekly 2; claude-work: session rolling 100, weekly weekly 72, weekly Fable weekly 52; agy: Weekly Limit weekly 17, Five Hour Limit rolling 0; kimi: weekly weekly 95, 5h rolling 0; grok: credits weekly 9; cursor: total weekly 36, auto weekly 36, api weekly 33', [], 'claude-fable-5-1 max claude'],
     ['junie is never in the chain', 'junie: credits weekly 0', [], 'none'],
     ['junie leaves the 014 live case on Fable', 'claude: session rolling 2, weekly weekly 13, weekly Fable weekly 2; claude-work: session rolling 100, weekly weekly 72, weekly Fable weekly 52; grok: credits weekly 9; junie: credits weekly 0', [], 'claude-fable-5-1 max claude'],
+    ['hermes is never in the chain', 'hermes: credits weekly 0', [], 'none'],
+    ['hermes leaves the 014 live case on Fable', 'claude: session rolling 2, weekly weekly 13, weekly Fable weekly 2; claude-work: session rolling 100, weekly weekly 72, weekly Fable weekly 52; grok: credits weekly 9; hermes: credits weekly 0', [], 'claude-fable-5-1 max claude'],
     ['agy is the last entry', 'grok: credits weekly 90; agy: Five Hour Limit rolling 10, Weekly Limit weekly 20', [], 'gemini-3.8-flash-high high agy']
   ])('%s', (_case, candidates, ineligible, line) => {
     expect(highOf(candidates, ineligible)).toBe(line);

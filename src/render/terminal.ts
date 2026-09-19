@@ -162,8 +162,8 @@ function balanceLine(balance: Balance | undefined, noColor: boolean): string {
 }
 
 function caption(usage: ProviderUsage): string {
-  if (usage.planLabel === undefined) return usage.displayName;
-  return `${usage.planLabel} · ${usage.displayName}`;
+  const tagged = usage.planLabel === undefined ? usage.displayName : `${usage.planLabel} · ${usage.displayName}`;
+  return `${tagged}${usage.captionSuffix ?? ''}`;
 }
 
 function captionLine(usage: ProviderUsage, marks: PanelMarks): string {

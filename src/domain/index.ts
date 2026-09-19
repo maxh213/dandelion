@@ -34,6 +34,7 @@ type ProviderIdentity = {
   id: string;
   displayName: string;
   planLabel?: string;
+  captionSuffix?: string;
   windows: UsageWindow[];
   fetchedAt: string;
 };

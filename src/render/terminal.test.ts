@@ -109,6 +109,19 @@ describe('terminal renderer', () => {
     expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n').at(-1)).toBe('x');
   });
 
+  it('appends a caption suffix after the display name', () => {
+    const usage: ProviderUsage = {
+      id: 'hermes',
+      displayName: 'hermes',
+      planLabel: 'Plus · $5.50 of $22',
+      captionSuffix: ' · no paid access',
+      windows: [{ label: 'credits', kind: 'weekly', usedPct: 75 }],
+      fetchedAt: NOW,
+      status: 'ok'
+    };
+    expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n').at(-1)).toBe('Plus · $5.50 of $22 · hermes · no paid access');
+  });
+
   it('renders window rows between the name and the caption', () => {
     const usage: ProviderUsage = {
       id: 'claude',

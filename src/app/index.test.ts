@@ -167,8 +167,8 @@ describe('claude and agy windows', () => {
     const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const lines = plain(output).split('\n');
     expect(lines[0]).toMatch(/^DANDELION +10:00:00Z$/);
-    expect(lines.filter((line) => line === RULE)).toHaveLength(9);
-    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40, 44]);
+    expect(lines.filter((line) => line === RULE)).toHaveLength(10);
+    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40, 44, 48]);
     expect(lines[1]).toBe(RULE);
     expect(panelOf(output, 'claude').at(-1)).toBe('claude · personal · claude');
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
@@ -303,12 +303,13 @@ describe('claude and agy windows', () => {
         'codex\nCommand timed out after 15s\ncodex · codex',
         'cursor\nno cursor auth — run cursor-agent login\ncursor · cursor',
         'junie\nno junie quota snapshot — run junie once\njunie · junie',
+        'hermes\nno hermes auth — run hermes portal login\nhermes · hermes',
         'kilo\nCommand timed out after 20s\napi balance · kilo'
       ].join(`\n${RULE}\n`)
     );
   });
 
-  it('renders nine unavailable panels when no CLI is on the PATH, grok and junie homes are empty and cursor has no auth', async () => {
+  it('renders ten unavailable panels when no CLI is on the PATH, grok and junie homes are empty and cursor has no auth', async () => {
     const output = await runApp(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW);
     expect(output).toContain(
       [
@@ -320,6 +321,7 @@ describe('claude and agy windows', () => {
         `${DIM}${RULE}\ncodex\ncodex CLI not found in PATH\ncodex · codex\x1b[0m`,
         `${DIM}${RULE}\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor\x1b[0m`,
         `${DIM}${RULE}\njunie\nno junie quota snapshot — run junie once\njunie · junie\x1b[0m`,
+        `${DIM}${RULE}\nhermes\nno hermes auth — run hermes portal login\nhermes · hermes\x1b[0m`,
         `${DIM}${RULE}\nkilo\nkilo CLI not found in PATH\napi balance · kilo\x1b[0m`
       ].join('\n')
     );
@@ -433,8 +435,8 @@ describe('claude-work panel', () => {
       const { io, configDirs } = recordingIo();
       const real = { ...io, reader: realIo.reader };
       const stateFile = join(scratch, 'eligibility.json');
-      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: scratch, DANDELION_STATE_FILE: stateFile, NO_COLOR: '1' }, NOW), 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
-      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: file, DANDELION_STATE_FILE: stateFile, NO_COLOR: '1' }, NOW), 'claude-work')[1]).toBe(NO_WORK_CONFIG);
+      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: scratch, DANDELION_STATE_FILE: stateFile, NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, NOW), 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
+      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: file, DANDELION_STATE_FILE: stateFile, NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, NOW), 'claude-work')[1]).toBe(NO_WORK_CONFIG);
       expect(configDirs.sort()).toEqual(['-', '-', scratch]);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
@@ -651,15 +653,15 @@ describe('real grok reader', () => {
     writeLog(home, grokLog());
     const io = { ...routedRunner(), reader: realIo.reader };
     const before = tree(home);
-    const output = await runApp(io, { DANDELION_GROK_HOME: home, NO_COLOR: '1' }, NOW);
+    const output = await runApp(io, { DANDELION_GROK_HOME: home, NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW);
     expect(output).toContain('\ngrok\ncredits                             ###############-----  75% ↻ 11h15m\n');
     expect(tree(home)).toEqual(before);
     const empty = join(home, 'empty');
     mkdirSync(empty);
     const emptyBefore = tree(empty);
-    expect(await runApp(io, { DANDELION_GROK_HOME: empty }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(await runApp(io, { DANDELION_GROK_HOME: empty, DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
     expect(tree(empty)).toEqual(emptyBefore);
-    expect(await runApp(io, { DANDELION_GROK_HOME: join(home, 'missing') }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(await runApp(io, { DANDELION_GROK_HOME: join(home, 'missing'), DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
     expect(readdirSync(home).sort()).toEqual(['empty', 'logs']);
   });
 });
@@ -672,7 +674,7 @@ describe('codex panel', () => {
     const spawned: string[][] = [];
     const output = await runApp(codexIo(CODEX_CHATGPT, codexSpawner(codexLines(), spawned)), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
     const lines = output.split('\n');
-    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40, 44]);
+    expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40, 44, 48]);
     expect(lines.slice(30, 36)).toEqual([
       '='.repeat(72),
       'codex',
@@ -1034,7 +1036,7 @@ describe('cursor panel', () => {
       writeFileSync(authFile, AUTH);
       const before = readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs]);
       const io = { ...cursorIo(), reader: realIo.reader };
-      const output = await runApp(io, { DANDELION_CURSOR_AUTH_FILE: authFile, NO_COLOR: '1' }, NOW);
+      const output = await runApp(io, { DANDELION_CURSOR_AUTH_FILE: authFile, NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, NOW);
       expect(panelOf(output, 'cursor')).toEqual(['cursor', ...ROWS, 'Ultra · $200/mo · cursor']);
       expect(readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs])).toEqual(before);
       expect(readFileSync(authFile, 'utf8')).toBe(AUTH);
@@ -1058,7 +1060,7 @@ describe('cursor panel', () => {
     });
 
     async function settleProbes(): Promise<void> {
-      for (let turn = 0; turn < 10; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+      for (let turn = 0; turn < 16; turn += 1) await new Promise((resolve) => setImmediate(resolve));
     }
 
     function kimiOnlyOnce(): Launcher {
@@ -1091,7 +1093,7 @@ describe('cursor panel', () => {
       return { env, names: () => [...names].sort() };
     }
 
-    const SETTINGS = ['DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_JUNIE_HOME', 'DANDELION_KILO_REFERENCE', 'DANDELION_KIMI_PORT', 'DANDELION_STATE_FILE', 'NO_COLOR', 'XDG_STATE_HOME'];
+    const SETTINGS = ['DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_HERMES_AUTH_FILE', 'DANDELION_JUNIE_HOME', 'DANDELION_KILO_REFERENCE', 'DANDELION_KIMI_PORT', 'DANDELION_STATE_FILE', 'NO_COLOR', 'XDG_STATE_HOME'];
 
     it('applies every setting under its DANDELION_* name', async () => {
       const launch = vi.fn(HAPPY_KIMI.launch);
@@ -1595,7 +1597,7 @@ describe('route eligibility state file', () => {
   }
 
   async function settleProbes(): Promise<void> {
-    for (let turn = 0; turn < 10; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    for (let turn = 0; turn < 16; turn += 1) await new Promise((resolve) => setImmediate(resolve));
   }
 
   async function settledDashboard(io: ProbeIo, env: Record<string, string>) {
@@ -1796,11 +1798,11 @@ describe('junie panel', () => {
   it('renders the newest session snapshot between cursor and kilo, leaving the other panels unchanged', async () => {
     const output = await runApp(junieIo(), { ...JUNIE_ENV, NO_COLOR: '1' }, JUNIE_NOW);
     const lines = output.split('\n');
-    const names = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo'];
+    const names = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
     expect(lines.filter((line) => names.includes(line))).toEqual(names);
     const junie = lines.indexOf('junie');
     expect(lines.slice(junie - 1, junie + 5)).toEqual(['='.repeat(72), 'junie', ROW_30, 'snapshot 6h6m old', '701513 credits · junie', '='.repeat(72)]);
-    expect(lines[junie + 5]).toBe('kilo');
+    expect(lines[junie + 5]).toBe('hermes');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
     const without = await runApp(junieIo({}), { ...JUNIE_ENV, NO_COLOR: '1' }, JUNIE_NOW);
     for (const name of names.filter((each) => each !== 'junie')) expect(panelOf(output, name)).toEqual(panelOf(without, name));
@@ -1880,19 +1882,19 @@ describe('junie panel', () => {
       mkdirSync(empty);
       const io = { ...routedRunner(), reader: realIo.reader };
       const before = snapshotOf(scratch);
-      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: home }, JUNIE_NOW), 'junie').slice(1)).toEqual([ROW_30, 'snapshot 6h6m old', '701513 credits · junie']);
-      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: empty }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
+      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: home, DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie').slice(1)).toEqual([ROW_30, 'snapshot 6h6m old', '701513 credits · junie']);
+      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: empty, DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
       expect(snapshotOf(scratch)).toEqual(before);
     });
 
     it('is unavailable when the index is a directory or unreadable', async () => {
       const io = { ...routedRunner(), reader: realIo.reader };
       mkdirSync(join(scratch, 'sessions', 'index.jsonl'), { recursive: true });
-      expect(panelOf(await runApp(io, { DANDELION_JUNIE_HOME: scratch }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
+      expect(panelOf(await runApp(io, { DANDELION_JUNIE_HOME: scratch, DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
       const locked = join(scratch, 'locked');
       writeTree(locked, junieTree());
       chmodSync(join(locked, 'sessions', 'index.jsonl'), 0o000);
-      const reason = panelOf(await runApp(io, { DANDELION_JUNIE_HOME: locked }, JUNIE_NOW), 'junie')[1];
+      const reason = panelOf(await runApp(io, { DANDELION_JUNIE_HOME: locked, DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie')[1];
       expect(reason === 'no junie quota snapshot — run junie once' || process.getuid?.() === 0).toBe(true);
     });
   });
@@ -1915,7 +1917,7 @@ describe('junie panel', () => {
 
     async function settledJunie(io: ProbeIo, env: Record<string, string>) {
       const dashboard = startDashboard({ ...io, launcher: MISSING_KIMI }, { ...JUNIE_ENV, NO_COLOR: '1', DANDELION_STATE_FILE: statePath, ...env });
-      for (let turn = 0; turn < 10; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+      for (let turn = 0; turn < 16; turn += 1) await new Promise((resolve) => setImmediate(resolve));
       return dashboard;
     }
 
@@ -1927,6 +1929,7 @@ describe('junie panel', () => {
       const dashboard = await settledJunie(junieIo(), {});
       dashboard.press('k');
       dashboard.press('k');
+      dashboard.press('k');
       dashboard.press(' ');
       expect(dashboard.lastFrame().split('\n')).toContain(`▸ junie${' '.repeat(54)}routing off`);
       expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual({ junie: false });
@@ -1934,6 +1937,7 @@ describe('junie panel', () => {
       await dashboard.finished;
       rmSync(statePath);
       const unreferenced = await settledJunie(junieIo(), { DANDELION_JUNIE_REFERENCE: '' });
+      unreferenced.press('k');
       unreferenced.press('k');
       unreferenced.press('k');
       unreferenced.press(' ');
@@ -1982,3 +1986,272 @@ describe('junie panel', () => {
     });
   });
 });
+
+describe('hermes panel', () => {
+  const HERMES_NOW = '2026-09-18T19:00:00Z';
+  const AGENT = 'qa-dummy-hermes-agent-key-016';
+  const ACCESS = 'qa-dummy-hermes-access-016';
+  const RESET = '2026-09-21T19:00:00.000Z';
+  const WARM = '\x1b[33m';
+  const ROW_75 = 'credits                             ###############-----  75% ↻ 3d0h';
+  const HERMES_ENV = { ...GROK_ENV, DANDELION_HERMES_AUTH_FILE: '/auth.json', DANDELION_HERMES_PORTAL_BASE: 'http://127.0.0.1:48016' };
+  type Outcome = Awaited<ReturnType<Fetcher['get']>>;
+
+  function authJson(nous: Record<string, unknown> = {}): string {
+    return JSON.stringify({
+      version: 1,
+      providers: {
+        nous: {
+          access_token: ACCESS,
+          refresh_token: 'r',
+          client_id: 'hermes-cli',
+          portal_base_url: 'https://portal.nousresearch.com',
+          agent_key: AGENT,
+          agent_key_expires_at: '2026-09-19T19:00:00+00:00',
+          expires_at: '2026-09-19T19:00:00+00:00',
+          ...nous
+        }
+      },
+      active_provider: 'nous'
+    });
+  }
+
+  function account(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      user: { email: 'qa@example.com' },
+      organisation: { id: 'o', slug: 'o', name: 'O' },
+      subscription: {
+        plan: 'Plus',
+        monthly_credits: 22,
+        credits_remaining: 5.5,
+        current_period_end: RESET,
+        ...(overrides.subscription as object | undefined)
+      },
+      paid_service_access: { paid_access: true, ...(overrides.paid_service_access as object | undefined) }
+    };
+  }
+
+  function hermesIo(accountAnswer: Outcome = { status: 200, body: JSON.stringify(account()) }, files: Record<string, string> = { '/auth.json': authJson() }) {
+    const stored: Record<string, string> = { '/grok/logs/unified.jsonl': grokLog(), ...files };
+    const requests: [string, Record<string, string>, number][] = [];
+    const reader: FileReader = { homeDir: () => '/home/tester', read: async (path) => stored[path], isDirectory: hasWorkConfig };
+    const fetcher: Fetcher = {
+      get: async (url, headers, timeoutMs) => {
+        if (url.includes('/api/oauth/account')) {
+          requests.push([url, headers, timeoutMs]);
+          return accountAnswer;
+        }
+        return KIMI_FETCHER.get(url, headers, timeoutMs);
+      },
+      post: async () => ({ failure: 'network' })
+    };
+    return { io: { ...routedRunner({}, HAPPY_KIMI, reader), fetcher }, requests };
+  }
+
+  function onlyHermes(accountAnswer?: Outcome, files: Record<string, string> = { '/auth.json': authJson() }) {
+    const { io, requests } = hermesIo(accountAnswer, { '/grok/logs/unified.jsonl': '', ...files });
+    return { io: { ...mockRunner({ stdout: '', stderr: '', failure: 'missing' }), fetcher: io.fetcher, reader: io.reader }, requests };
+  }
+
+  it('renders the credits window between junie and kilo, leaving the other panels unchanged', async () => {
+    const { io } = hermesIo();
+    const output = await runApp(io, { ...HERMES_ENV, NO_COLOR: '1' }, HERMES_NOW);
+    const lines = output.split('\n');
+    const names = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+    expect(lines.filter((line) => names.includes(line))).toEqual(names);
+    const hermes = lines.indexOf('hermes');
+    expect(lines.slice(hermes - 1, hermes + 4)).toEqual(['='.repeat(72), 'hermes', ROW_75, 'Plus · $5.50 of $22 · hermes', '='.repeat(72)]);
+    expect(lines[hermes + 4]).toBe('kilo');
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+    expect(output).not.toContain(AGENT);
+    expect(output).not.toContain(ACCESS);
+    const { io: without } = hermesIo(undefined, {});
+    const missing = await runApp(without, { ...HERMES_ENV, NO_COLOR: '1' }, HERMES_NOW);
+    for (const name of names.filter((each) => each !== 'hermes')) expect(panelOf(output, name)).toEqual(panelOf(missing, name));
+  });
+
+  it('GETs the account once with the agent key and JSON accept', async () => {
+    const { io, requests } = hermesIo();
+    await runApp(io, { ...HERMES_ENV, NO_COLOR: '1' }, HERMES_NOW);
+    expect(requests).toEqual([['http://127.0.0.1:48016/api/oauth/account', { Authorization: `Bearer ${AGENT}`, Accept: 'application/json' }, 15000]]);
+  });
+
+  it('colours the hermes gauge and percent warm and the caption dim', async () => {
+    const { io } = hermesIo();
+    const output = await runApp(io, HERMES_ENV, HERMES_NOW);
+    expect(output).toContain(`\nhermes\n${'credits'.padEnd(35)} ${WARM}${'█'.repeat(15)}${'░'.repeat(5)}\x1b[0m ${WARM} 75%\x1b[0m ↻ 3d0h\n${DIM}Plus · $5.50 of $22 · hermes\x1b[0m\n`);
+  });
+
+  it.each<[string, Record<string, unknown>, string[]]>([
+    ['credits remaining above the grant', { subscription: { credits_remaining: 22.472091793333334 } }, ['credits                             --------------------   0% ↻ 3d0h', 'Plus · $22.47 of $22 · hermes']],
+    ['zero remaining', { subscription: { credits_remaining: 0 } }, ['credits                             #################### 100% ↻ 3d0h', 'Plus · $0.00 of $22 · hermes']],
+    ['half remaining', { subscription: { credits_remaining: 11 } }, ['credits                             ##########----------  50% ↻ 3d0h', 'Plus · $11.00 of $22 · hermes']],
+    ['3.3 remaining', { subscription: { credits_remaining: 3.3 } }, ['credits                             #################---  85% ↻ 3d0h', 'Plus · $3.30 of $22 · hermes']],
+    ['no plan', { subscription: { plan: '' } }, [ROW_75, 'hermes · hermes']],
+    ['paid_access false', { paid_service_access: { paid_access: false } }, [ROW_75, 'Plus · $5.50 of $22 · hermes · no paid access']],
+    ['no plan and paid_access false', { subscription: { plan: '' }, paid_service_access: { paid_access: false } }, [ROW_75, 'hermes · hermes · no paid access']],
+    ['no current_period_end', { subscription: { current_period_end: undefined } }, ['credits                             ###############-----  75%', 'Plus · $5.50 of $22 · hermes']]
+  ])('renders a body with %s', async (_case, overrides, lines) => {
+    const { io } = hermesIo({ status: 200, body: JSON.stringify(account(overrides)) });
+    expect(panelOf(await runApp(io, { ...HERMES_ENV, NO_COLOR: '1' }, HERMES_NOW), 'hermes').slice(1)).toEqual(lines);
+  });
+
+  it.each<[string, Outcome | undefined, Record<string, string>, string]>([
+    ['a missing auth file', undefined, {}, 'no hermes auth — run hermes portal login'],
+    ['an empty auth file', undefined, { '/auth.json': '' }, 'no hermes auth — run hermes portal login'],
+    ['both tokens empty', undefined, { '/auth.json': authJson({ agent_key: '', access_token: '' }) }, 'no hermes auth — run hermes portal login'],
+    ['an expired token', undefined, { '/auth.json': authJson({ agent_key_expires_at: '2026-09-17T19:00:00+00:00', expires_at: '2026-09-17T19:00:00+00:00' }) }, 'hermes token expired — run hermes once'],
+    ['HTTP 401 echoing the token', { status: 401, body: `{"error":"bad token ${AGENT}"}` }, { '/auth.json': authJson() }, 'hermes account request failed: HTTP 401'],
+    ['HTTP 500', { status: 500, body: '' }, { '/auth.json': authJson() }, 'hermes account request failed: HTTP 500'],
+    ['a network failure', { failure: 'network' }, { '/auth.json': authJson() }, 'hermes account request failed'],
+    ['a timeout', { failure: 'timeout' }, { '/auth.json': authJson() }, 'hermes account request timed out after 15s'],
+    ['a non-JSON body', { status: 200, body: 'not json' }, { '/auth.json': authJson() }, 'Could not parse usage from response'],
+    ['monthly_credits 0', { status: 200, body: JSON.stringify(account({ subscription: { monthly_credits: 0 } })) }, { '/auth.json': authJson() }, 'Could not parse usage from response']
+  ])('renders a dim hermes panel for %s while the others render normally', async (_case, accountAnswer, files, reason) => {
+    const { io, requests } = hermesIo(accountAnswer ?? { status: 200, body: JSON.stringify(account()) }, files);
+    const output = await runApp(io, HERMES_ENV, HERMES_NOW);
+    expect(output).toContain(`${DIM}${RULE}\nhermes\n${reason}\nhermes · hermes\x1b[0m\n`);
+    expect(panelOf(output, 'claude')).toHaveLength(5);
+    expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
+    expect(output).not.toContain(AGENT);
+    expect(output).not.toContain(ACCESS);
+    if (reason.startsWith('no hermes auth') || reason.startsWith('hermes token expired')) expect(requests).toEqual([]);
+  });
+
+  it.each([[{}], [{ DANDELION_HERMES_AUTH_FILE: '', DANDELION_HERMES_PORTAL_BASE: '' }]])('defaults the auth file and portal base for %j', async (env) => {
+    const { io, requests } = hermesIo(undefined, {
+      '/home/tester/.hermes/auth.json': authJson({ agent_key: 'home-hermes-agent-key' })
+    });
+    const output = await runApp(io, { ...GROK_ENV, NO_COLOR: '1', ...env }, HERMES_NOW);
+    expect(panelOf(output, 'hermes').slice(1)).toEqual([ROW_75, 'Plus · $5.50 of $22 · hermes']);
+    expect(requests[0]?.[0]).toBe('https://portal.nousresearch.com/api/oauth/account');
+    expect(requests[0]?.[1].Authorization).toBe('Bearer home-hermes-agent-key');
+  });
+
+  describe('against a real auth file', () => {
+    let scratch = '';
+
+    beforeEach(() => {
+      scratch = mkdtempSync(join(tmpdir(), 'dandelion-hermes-'));
+    });
+
+    afterEach(() => {
+      rmSync(scratch, { recursive: true, force: true });
+    });
+
+    it('renders the Background auth file without writing the tokens anywhere', async () => {
+      const authFile = join(scratch, 'auth.json');
+      const body = authJson();
+      writeFileSync(authFile, body);
+      const before = readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs]);
+      const { io } = hermesIo();
+      const real = { ...io, reader: realIo.reader };
+      const output = await runApp(real, { ...HERMES_ENV, DANDELION_HERMES_AUTH_FILE: authFile, NO_COLOR: '1' }, HERMES_NOW);
+      expect(panelOf(output, 'hermes').slice(1)).toEqual([ROW_75, 'Plus · $5.50 of $22 · hermes']);
+      expect(readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs])).toEqual(before);
+      expect(readFileSync(authFile, 'utf8')).toBe(body);
+      expect(output).not.toContain(AGENT);
+      expect(output).not.toContain(ACCESS);
+    });
+
+    it('is unavailable when the auth path is a directory or unreadable', async () => {
+      const { io } = hermesIo();
+      const real = { ...io, reader: realIo.reader };
+      mkdirSync(join(scratch, 'auth-dir'));
+      expect(panelOf(await runApp(real, { ...HERMES_ENV, DANDELION_HERMES_AUTH_FILE: join(scratch, 'auth-dir') }, HERMES_NOW), 'hermes')[1]).toBe('no hermes auth — run hermes portal login');
+      const locked = join(scratch, 'locked.json');
+      writeFileSync(locked, authJson());
+      chmodSync(locked, 0o000);
+      const reason = panelOf(await runApp(real, { ...HERMES_ENV, DANDELION_HERMES_AUTH_FILE: locked }, HERMES_NOW), 'hermes')[1];
+      expect(reason === 'no hermes auth — run hermes portal login' || process.getuid?.() === 0).toBe(true);
+    });
+  });
+
+  describe('live dashboard and route', () => {
+    let scratch = '';
+    let statePath = '';
+
+    beforeEach(() => {
+      scratch = mkdtempSync(join(tmpdir(), 'dandelion-hermes-state-'));
+      statePath = join(scratch, 'eligibility.json');
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      vi.setSystemTime(new Date(HERMES_NOW));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      rmSync(scratch, { recursive: true, force: true });
+    });
+
+    async function settledHermes(io: ProbeIo, env: Record<string, string>) {
+      const dashboard = startDashboard({ ...io, launcher: MISSING_KIMI }, { ...HERMES_ENV, NO_COLOR: '1', DANDELION_STATE_FILE: statePath, ...env });
+      for (let turn = 0; turn < 16; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+      return dashboard;
+    }
+
+    it('toggles hermes off with space and flashes it as not routable without auth', async () => {
+      const { io } = hermesIo();
+      const dashboard = await settledHermes(io, {});
+      dashboard.press('k');
+      dashboard.press('k');
+      dashboard.press(' ');
+      expect(dashboard.lastFrame().split('\n')).toContain(`▸ hermes${' '.repeat(53)}routing off`);
+      expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual({ hermes: false });
+      dashboard.press('q');
+      await dashboard.finished;
+      rmSync(statePath);
+      const { io: missing } = hermesIo(undefined, {});
+      const unroutable = await settledHermes(missing, {});
+      unroutable.press('k');
+      unroutable.press('k');
+      unroutable.press(' ');
+      const lines = unroutable.lastFrame().split('\n');
+      expect(lines[lines.indexOf('▸ hermes') + 2]).toBe('not routable (no usage windows)');
+      await vi.advanceTimersByTimeAsync(2000);
+      const later = unroutable.lastFrame().split('\n');
+      expect(later[later.indexOf('▸ hermes') + 2]).toBe('hermes · hermes');
+      expect(readdirSync(scratch)).toEqual([]);
+      unroutable.press('q');
+      await unroutable.finished;
+    });
+
+    it.each<[number, string]>([
+      [3.3, '1/1 windows above 80% · next reset: hermes credits in 3d0h'],
+      [5.5, 'all windows below 80% · next reset: hermes credits in 3d0h']
+    ])('counts hermes credits in the fleet summary at remaining %s', async (remaining, summary) => {
+      const { io } = onlyHermes({ status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: remaining } })) });
+      const dashboard = await settledHermes(io, {});
+      expect(dashboard.lastFrame().split('\n')[1]).toBe(summary);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it.each<[string, Outcome, Record<string, string>, string, boolean]>([
+      ['headroom at 75%', { status: 200, body: JSON.stringify(account()) }, { '/auth.json': authJson() }, 'x-ai/grok-4.6 xhigh hermes', true],
+      ['headroom at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'x-ai/grok-4.6 xhigh hermes', true],
+      ['headroom at 100%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 0 } })) }, { '/auth.json': authJson() }, 'x-ai/grok-4.6 xhigh hermes', true],
+      ['headroom without auth', { status: 200, body: JSON.stringify(account()) }, {}, 'none', false],
+      ['high at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'none', false]
+    ])('routes %s with only hermes available', async (mode, accountAnswer, files, line, routed) => {
+      const { io } = onlyHermes(accountAnswer, files);
+      const request = { mode: mode.startsWith('high') ? ('high' as const) : ('headroom' as const), now: HERMES_NOW, zone: 'UTC' };
+      expect(await runRoute(io, { ...HERMES_ENV, DANDELION_STATE_FILE: statePath }, request)).toEqual({ line, routed });
+    });
+
+    it('shows hermes in the route box and none in the --high box', async () => {
+      const { io } = onlyHermes();
+      const dashboard = await settledHermes(io, {});
+      const lines = dashboard.lastFrame().split('\n');
+      expect(lines.slice(3, 5)).toEqual([`| ${'x-ai/grok-4.6 xhigh'.padEnd(31)} |  | ${'none'.padEnd(31)} |`, `| ${'hermes'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`]);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it('skips hermes when the state file turns it off', async () => {
+      writeFileSync(statePath, '{"hermes": false}');
+      const { io } = onlyHermes();
+      expect(await runRoute(io, { ...HERMES_ENV, DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: HERMES_NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
+    });
+  });
+});
+

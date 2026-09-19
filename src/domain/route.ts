@@ -14,7 +14,8 @@ const ROUTING_TABLE: Route[] = [
   { id: 'kimi', standard: 'kimi-code/kimi-for-coding-highspeed', max: 'kimi-code/kimi-for-coding-highspeed' },
   { id: 'grok', standard: 'grok-4.6 xhigh', max: 'grok-4.6 xhigh' },
   { id: 'cursor', standard: 'kimi-k3-max', max: 'kimi-k3-max' },
-  { id: 'junie', standard: 'gemini-3.8-flash high', max: 'gemini-3.8-flash high' }
+  { id: 'junie', standard: 'gemini-3.8-flash high', max: 'gemini-3.8-flash high' },
+  { id: 'hermes', standard: 'x-ai/grok-4.6 xhigh', max: 'x-ai/grok-4.6 xhigh' }
 ];
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
