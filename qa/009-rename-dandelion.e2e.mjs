@@ -10,7 +10,7 @@ import { rootDir, NPM, startLive, completeFrames, waitWithin, assertClosed } fro
 
 const PREFIX = 'dandelion-qa-009-';
 const OUTER_TIMEOUT_MS = 60000;
-const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo'];
 const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
 const NO_GROK = 'no grok billing snapshot — run grok once';
 const NO_CURSOR = 'no cursor auth — run cursor-agent login';
@@ -159,6 +159,7 @@ async function everyEntryRunsTheDashboard(bin) {
     NO_COLOR: '1',
     DANDELION_KIMI_PORT: String(await freePort()),
     DANDELION_GROK_HOME: await tempDir(),
+    DANDELION_JUNIE_HOME: await tempDir(),
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir()
@@ -186,6 +187,7 @@ async function newNamesWork(bin) {
     DANDELION_KILO_REFERENCE: '10',
     DANDELION_KIMI_PORT: 'abc',
     DANDELION_GROK_HOME: await tempDir(),
+    DANDELION_JUNIE_HOME: await tempDir(),
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'no-such-dir')
@@ -242,6 +244,7 @@ async function oldNamesAreIgnored(bin) {
       ALLOWANCE_KIMI_PORT: 'abc',
       ALLOWANCE_GROK_HOME: grokHome,
       ALLOWANCE_CURSOR_AUTH_FILE: authFile,
+      DANDELION_JUNIE_HOME: grokHome,
       DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
       ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: await tempDir()
     };
@@ -270,6 +273,7 @@ async function liveIgnoresOldRefreshName(bin) {
     ALLOWANCE_REFRESH_SECONDS: '1',
     DANDELION_KIMI_PORT: String(await freePort()),
     DANDELION_GROK_HOME: await tempDir(),
+    DANDELION_JUNIE_HOME: await tempDir(),
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir()
