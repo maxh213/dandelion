@@ -161,9 +161,12 @@ function balanceLine(balance: Balance | undefined, noColor: boolean): string {
   return `${amount} ${balanceGauge(balance, noColor)}`.padEnd(WIDTH);
 }
 
+function taggedCaption(usage: ProviderUsage): string {
+  return usage.planLabel === undefined ? usage.displayName : `${usage.planLabel} · ${usage.displayName}`;
+}
+
 function caption(usage: ProviderUsage): string {
-  const tagged = usage.planLabel === undefined ? usage.displayName : `${usage.planLabel} · ${usage.displayName}`;
-  return `${tagged}${usage.captionSuffix ?? ''}`;
+  return `${taggedCaption(usage)}${usage.captionSuffix ?? ''}`;
 }
 
 function captionLine(usage: ProviderUsage, marks: PanelMarks): string {

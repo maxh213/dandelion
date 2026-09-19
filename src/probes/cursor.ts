@@ -3,6 +3,7 @@ import {
   USAGE_PARSE_FAILURE,
   fieldOf,
   isCount,
+  isFilled,
   isSuccess,
   successBody,
   unavailableReason,
@@ -29,10 +30,6 @@ const WINDOW_FIELDS = [
   ['auto', 'autoPercentUsed'],
   ['api', 'apiPercentUsed']
 ] as const;
-
-function isFilled(value: unknown): value is string {
-  return typeof value === 'string' && value !== '';
-}
 
 function authFile(reader: FileReader, env: Env): string {
   return env['DANDELION_CURSOR_AUTH_FILE'] || `${reader.homeDir()}/.config/cursor/auth.json`;

@@ -1,4 +1,4 @@
-import { fieldOf, isCount, newestLineMatch, validInstant, withReset, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, isFilled, newestLineMatch, validInstant, withReset, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type GrokIo = { reader: FileReader };
 
@@ -18,7 +18,7 @@ function usedPercent(config: unknown): number | undefined {
 
 function tierOf(ctx: unknown): string {
   const tier = fieldOf(ctx, 'subscriptionTier');
-  return typeof tier === 'string' && tier !== '' ? tier : 'grok';
+  return isFilled(tier) ? tier : 'grok';
 }
 
 function creditsWindow(usedPct: number, config: unknown): UsageWindow {

@@ -3,8 +3,10 @@ import {
   USAGE_PARSE_FAILURE,
   fieldOf,
   isCount,
+  isFilled,
   successBody,
   unavailableReason,
+  usedPctFromRemaining,
   validInstant,
   withReset,
   type Fetcher,
@@ -17,20 +19,17 @@ export type HermesIo = { reader: FileReader; fetcher: Pick<Fetcher, 'get'> };
 
 type Env = Record<string, string | undefined>;
 
+type AccountUsage = { planLabel: string; windows: UsageWindow[]; captionSuffix?: string };
+
 const PORTAL_BASE = 'https://portal.nousresearch.com';
 const ACCOUNT_PATH = '/api/oauth/account';
 const REQUEST_TIMEOUT_MS = 15000;
-const FULL_PCT = 100;
 const FALLBACK_LABEL = 'hermes';
 const NO_AUTH = 'no hermes auth — run hermes portal login';
 const EXPIRED = 'hermes token expired — run hermes once';
 const NO_PAID = ' · no paid access';
 
-function isFilled(value: unknown): value is string {
-  return typeof value === 'string' && value !== '';
-}
-
-function authPath(reader: FileReader, env: Env): string {
+function authFile(reader: FileReader, env: Env): string {
   return env['DANDELION_HERMES_AUTH_FILE'] || `${reader.homeDir()}/.hermes/auth.json`;
 }
 
@@ -38,43 +37,49 @@ function portalBase(env: Env): string {
   return env['DANDELION_HERMES_PORTAL_BASE'] || PORTAL_BASE;
 }
 
-function tokenPair(nous: unknown): { token: string; expiry: unknown } | undefined {
+function parsedAuth(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new ProbeUnavailable(NO_AUTH);
+  }
+}
+
+function bearerOf(nous: unknown): { token: string; expiry: unknown } | undefined {
   const agentKey = fieldOf(nous, 'agent_key');
   if (isFilled(agentKey)) return { token: agentKey, expiry: fieldOf(nous, 'agent_key_expires_at') };
   const access = fieldOf(nous, 'access_token');
   return isFilled(access) ? { token: access, expiry: fieldOf(nous, 'expires_at') } : undefined;
 }
 
-function pairOf(auth: unknown): { token: string; expiry: unknown } {
-  const pair = tokenPair(fieldOf(fieldOf(auth, 'providers'), 'nous'));
-  if (pair === undefined) throw new ProbeUnavailable(NO_AUTH);
-  return pair;
+function nousBearer(auth: unknown): { token: string; expiry: unknown } {
+  const bearer = bearerOf(fieldOf(fieldOf(auth, 'providers'), 'nous'));
+  if (bearer === undefined) throw new ProbeUnavailable(NO_AUTH);
+  return bearer;
 }
 
-function tokenOf(auth: unknown, now: string): string {
-  const { token, expiry } = pairOf(auth);
+function unexpiredToken(token: string, expiry: unknown, now: string): string {
   const instant = validInstant(expiry);
   if (instant === undefined || Date.parse(instant) <= Date.parse(now)) throw new ProbeUnavailable(EXPIRED);
   return token;
 }
 
 async function readToken(reader: FileReader, env: Env, now: string): Promise<string> {
-  const text = await reader.read(authPath(reader, env));
+  const text = await reader.read(authFile(reader, env));
   if (text === undefined) throw new ProbeUnavailable(NO_AUTH);
-  try {
-    return tokenOf(JSON.parse(text), now);
-  } catch (error) {
-    throw error instanceof ProbeUnavailable ? error : new ProbeUnavailable(NO_AUTH);
-  }
+  const { token, expiry } = nousBearer(parsedAuth(text));
+  return unexpiredToken(token, expiry, now);
 }
 
-function grantOf(monthly: unknown, remaining: unknown): { monthly: number; remaining: number } {
-  if (isCount(monthly) && monthly > 0 && isCount(remaining)) return { monthly, remaining };
-  throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
+function positiveCount(value: unknown): number | undefined {
+  return isCount(value) && value > 0 ? value : undefined;
 }
 
-function usedPercent(remaining: number, monthly: number): number {
-  return Math.min(FULL_PCT, Math.max(0, Math.round(FULL_PCT - (FULL_PCT * remaining) / monthly)));
+function creditsGrant(subscription: unknown): { monthly: number; remaining: number } {
+  const monthly = positiveCount(fieldOf(subscription, 'monthly_credits'));
+  const remaining = fieldOf(subscription, 'credits_remaining');
+  if (monthly === undefined || !isCount(remaining)) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
+  return { monthly, remaining };
 }
 
 function planLabelOf(plan: unknown, remaining: number, monthly: number): string {
@@ -85,22 +90,31 @@ function captionSuffixOf(body: unknown): string | undefined {
   return fieldOf(fieldOf(body, 'paid_service_access'), 'paid_access') === false ? NO_PAID : undefined;
 }
 
-function usageOf(body: string): { planLabel: string; windows: UsageWindow[]; captionSuffix?: string } {
-  const parsed: unknown = JSON.parse(body);
-  const subscription = fieldOf(parsed, 'subscription');
-  const { monthly, remaining } = grantOf(fieldOf(subscription, 'monthly_credits'), fieldOf(subscription, 'credits_remaining'));
-  const windows = [
-    withReset(
-      { label: 'credits', kind: 'weekly', usedPct: usedPercent(remaining, monthly) },
-      validInstant(fieldOf(subscription, 'current_period_end'))
-    )
-  ];
-  const planLabel = planLabelOf(fieldOf(subscription, 'plan'), remaining, monthly);
-  const captionSuffix = captionSuffixOf(parsed);
-  return captionSuffix === undefined ? { planLabel, windows } : { planLabel, windows, captionSuffix };
+function creditsWindow(remaining: number, monthly: number, periodEnd: unknown): UsageWindow {
+  return withReset(
+    { label: 'credits', kind: 'weekly', usedPct: usedPctFromRemaining(remaining, monthly) },
+    validInstant(periodEnd)
+  );
 }
 
-async function readHermes(io: HermesIo, env: Env, now: string): Promise<{ planLabel: string; windows: UsageWindow[]; captionSuffix?: string }> {
+function withCaptionSuffix(usage: { planLabel: string; windows: UsageWindow[] }, suffix: string | undefined): AccountUsage {
+  return suffix === undefined ? usage : { ...usage, captionSuffix: suffix };
+}
+
+function usageOf(body: string): AccountUsage {
+  const parsed: unknown = JSON.parse(body);
+  const subscription = fieldOf(parsed, 'subscription');
+  const { monthly, remaining } = creditsGrant(subscription);
+  return withCaptionSuffix(
+    {
+      planLabel: planLabelOf(fieldOf(subscription, 'plan'), remaining, monthly),
+      windows: [creditsWindow(remaining, monthly, fieldOf(subscription, 'current_period_end'))]
+    },
+    captionSuffixOf(parsed)
+  );
+}
+
+async function readHermes(io: HermesIo, env: Env, now: string): Promise<AccountUsage> {
   const token = await readToken(io.reader, env, now);
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
   const outcome = await io.fetcher.get(`${portalBase(env)}${ACCOUNT_PATH}`, headers, REQUEST_TIMEOUT_MS);

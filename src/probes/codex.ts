@@ -1,4 +1,4 @@
-import { fieldOf, isCount, isRecord, withReset, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
+import { fieldOf, isCount, isFilled, isRecord, withReset, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
 import type { CommandRunner, CommandRunnerResult, RunFailure } from './cli.ts';
 
 export type RpcChild = {
@@ -83,7 +83,7 @@ function windowOf(limits: unknown, name: string): UsageWindow[] {
 
 function errorMessage(error: unknown): string {
   const message = fieldOf(error, 'message');
-  return typeof message === 'string' && message !== '' ? message : 'codex app-server error';
+  return isFilled(message) ? message : 'codex app-server error';
 }
 
 function windowsOf(answer: unknown): UsageWindow[] {

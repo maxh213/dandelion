@@ -1,4 +1,4 @@
-import { fieldOf, isCount, newestLineMatch, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, newestLineMatch, usedPctFromRemaining, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type JunieIo = { reader: FileReader };
 
@@ -8,7 +8,6 @@ type Snapshot = { balance: number; endedAtMs: number };
 
 const SNAPSHOT_TYPE = 'TaskQuotaSnapshot.JetBrains';
 const DEFAULT_REFERENCE = 1000000;
-const FULL_PCT = 100;
 const UNAVAILABLE = 'no junie quota snapshot — run junie once';
 const NO_REFERENCE = 'balance without a reference';
 
@@ -70,12 +69,8 @@ function referenceOf(raw: string | undefined): number | undefined {
   return isCount(reference) && reference > 0 ? reference : DEFAULT_REFERENCE;
 }
 
-function usedPercent(balance: number, reference: number): number {
-  return Math.min(FULL_PCT, Math.max(0, Math.round(FULL_PCT - (FULL_PCT * balance) / reference)));
-}
-
 function creditsWindows(balance: number, reference: number | undefined): UsageWindow[] {
-  return reference === undefined ? [] : [{ label: 'credits', kind: 'weekly', usedPct: usedPercent(balance, reference) }];
+  return reference === undefined ? [] : [{ label: 'credits', kind: 'weekly', usedPct: usedPctFromRemaining(balance, reference) }];
 }
 
 function withNote(windows: UsageWindow[]): { note?: string } {

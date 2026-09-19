@@ -55,6 +55,10 @@ export function isCount(value: unknown): value is number {
   return Number.isFinite(value) && Number(value) >= 0;
 }
 
+export function isFilled(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
+}
+
 const DATE_BEFORE_TIME = /\d-\d{2}-\d{2}T/;
 
 export function validInstant(value: unknown): string | undefined {
@@ -76,6 +80,12 @@ export function newestLineMatch<T>(log: string, needle: string, matchesOn: (line
 
 export function withReset(window: UsageWindow, resetsAt: string | undefined): UsageWindow {
   return resetsAt === undefined ? window : { ...window, resetsAt };
+}
+
+const FULL_PCT = 100;
+
+export function usedPctFromRemaining(remaining: number, grant: number): number {
+  return Math.min(FULL_PCT, Math.max(0, Math.round(FULL_PCT - (FULL_PCT * remaining) / grant)));
 }
 
 export const HOT_PCT = 80;
