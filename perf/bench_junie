@@ -144,7 +144,7 @@ writeHome(fallbackHome, fallbackFiles);
 writeHome(walkHome, walkFiles);
 
 function cliEnv(junieHome) {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: emptyHome, ALLOWANCE_JUNIE_HOME: junieHome, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: emptyHome, ALLOWANCE_JUNIE_HOME: junieHome, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(fixture, 'missing-auth.json') });
   for (const name of ['NO_COLOR', 'CLAUDE_CONFIG_DIR', 'ALLOWANCE_CURSOR_API_BASE', 'DANDELION_CURSOR_API_BASE', 'ALLOWANCE_JUNIE_REFERENCE', 'DANDELION_JUNIE_REFERENCE', 'ALLOWANCE_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CLAUDE_WORK_CONFIG_DIR']) delete env[name];
   return env;
 }

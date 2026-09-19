@@ -1,0 +1,357 @@
+#!/usr/bin/env node
+import { execFile } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
+import { VALUES, absent, bothNames, emit, perCall, perCallSync, repeat } from './timing.mjs';
+
+const run = promisify(execFile);
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const domainEntry = join(tree, 'src', 'domain', 'index.ts');
+const hermesEntry = join(tree, 'src', 'probes', 'hermes.ts');
+const liveEntry = join(tree, 'src', 'app', 'live.ts');
+const NOW = '2026-09-18T19:00:00.000Z';
+const LIVE_NOW = '2026-09-14T12:39:00.000Z';
+const LIVE_MIDNIGHT = '2026-09-15T00:00:00.000Z';
+const RESET = '2026-09-21T19:00:00.000Z';
+const ZONE = 'Europe/London';
+const ITERATIONS = 200;
+const FAST_ITERATIONS = 2000;
+const HTTP_ITERATIONS = 200;
+const SESSIONS = VALUES;
+const HIGH_LINE = 'claude-fable-5-1 max claude';
+const AGENT = 'bench-dummy-hermes-agent-key-016';
+const ACCESS = 'bench-dummy-hermes-access-016';
+
+const TARGETS = {
+  cli: 'cli one-shot ten providers hermes ok via local api',
+  cliMissing: 'cli one-shot ten providers hermes auth missing',
+  cliExpired: 'cli one-shot ten providers hermes token expired',
+  cliRoute: 'cli route ten providers hermes ok via local api',
+  cliHigh: 'cli route --high ten providers hermes ok via local api',
+  probeStub: 'probeHermes ok stub fetcher (in-process, per call)',
+  probeHttp: 'probeHermes ok real fetcher local http (in-process, per call)',
+  probeMissing: 'probeHermes auth missing (in-process, per call)',
+  probeExpired: 'probeHermes token expired (in-process, per call)',
+  runApp: 'runApp ten providers hermes ok stub (in-process, per call)',
+  runRoute: 'runRoute ten providers hermes ok stub (in-process, per call)',
+  runRouteHigh: 'runRoute --high ten providers hermes ok stub (in-process, per call)',
+  render: 'renderDashboard ten providers hermes credits (in-process, per call)',
+  renderLive: 'renderLiveFrame ten settled hermes credits (in-process, per call)',
+  fleet: 'summariseFleet ten providers (in-process, per call)',
+  route75: 'routeLine 014 live case plus junie 30% hermes 75% (in-process, per call)',
+  route0: 'routeLine 014 live case plus junie 30% hermes 0% (in-process, per call)',
+  routeTie: 'routeLine 014 live case plus junie 0% hermes 0% (in-process, per call)',
+  routeEvap: 'routeLine 014 live case plus junie 30% hermes 60% evaporating (in-process, per call)',
+  routeIneligible: 'routeLine 014 live case hermes 0% ineligible (in-process, per call)',
+  highRoute: 'highRouteLine 014 live case plus junie 30% hermes 0% (in-process, per call)',
+  session: 'startLive ten stub probes first round then quit (in-process, per session)'
+};
+
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry) || !existsSync(domainEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const ACCOUNT = {
+  user: { email: 'qa@example.com', privy_did: 'did' },
+  organisation: { id: 'o', slug: 'o', name: 'O' },
+  subscription: {
+    plan: 'Plus',
+    tier: 2,
+    monthly_charge: 20,
+    monthly_credits: 22,
+    current_period_end: RESET,
+    credits_remaining: 5.5,
+    rollover_credits: 6.591792646666667
+  },
+  purchased_credits_remaining: 0,
+  tool_access: { enabled: false, coverage: { firecrawl: true, fal: true } },
+  managed_tools: false,
+  paid_service_access: {
+    allowed: true,
+    paid_access: true,
+    reason: 'usable_credits',
+    member_spend_cap_exceeded: false,
+    has_active_subscription: true,
+    active_subscription_is_paid: true,
+    subscription_tier: 2,
+    subscription_monthly_charge: 20,
+    subscription_credits_remaining: 5.5,
+    purchased_credits_remaining: 0,
+    total_usable_credits: 5.5
+  }
+};
+const ACCOUNT_BODY = JSON.stringify(ACCOUNT);
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+const CLAUDE_OUT = 'Current session: 2% used · resets Sep 18, 8:40pm (Europe/London)\nCurrent week (all models): 13% used · resets Sep 19, 11pm (Europe/London)\n';
+const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t83%\t2026-09-23T18:39:00Z\n';
+const OUTPUTS = { claude: CLAUDE_OUT, agy: AGY_OUT, kilo: KILO_OUT };
+
+function authJson(nous) {
+  return JSON.stringify({
+    version: 1,
+    providers: { nous: { refresh_token: 'r', client_id: 'hermes-cli', portal_base_url: 'https://ignored.example', ...nous } },
+    active_provider: 'openai'
+  });
+}
+
+const HAPPY_NOUS = {
+  access_token: ACCESS,
+  agent_key: AGENT,
+  agent_key_expires_at: '2027-09-19T19:00:00+00:00',
+  expires_at: '2027-09-19T19:00:00+00:00'
+};
+const EXPIRED_NOUS = {
+  access_token: ACCESS,
+  agent_key: AGENT,
+  agent_key_expires_at: '2020-09-17T19:00:00+00:00',
+  expires_at: '2020-09-17T19:00:00+00:00'
+};
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-hermes-'));
+const bin = join(fixture, 'bin');
+const missingWork = join(fixture, 'missing-work');
+mkdirSync(bin);
+for (const [name, out] of Object.entries(OUTPUTS)) {
+  writeFileSync(join(bin, name), `#!/bin/sh\ncat <<'OUT'\n${out}OUT\n`);
+  chmodSync(join(bin, name), 0o755);
+}
+const authFile = join(fixture, 'auth.json');
+const expiredFile = join(fixture, 'expired.json');
+const missingAuth = join(fixture, 'missing-auth.json');
+writeFileSync(authFile, authJson(HAPPY_NOUS));
+writeFileSync(expiredFile, authJson(EXPIRED_NOUS));
+
+const server = createServer((req, res) => {
+  const authorised = req.method === 'GET' && req.url === '/api/oauth/account' && req.headers.authorization === `Bearer ${AGENT}` && req.headers.accept === 'application/json';
+  res.writeHead(authorised ? 200 : 401, { 'content-type': 'application/json' });
+  res.end(authorised ? ACCOUNT_BODY : '');
+  req.resume();
+});
+server.keepAliveTimeout = 60000;
+await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+const base = `http://127.0.0.1:${server.address().port}`;
+
+function cliEnv(hermesAuth) {
+  const env = bothNames({
+    ...process.env,
+    ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'),
+    PATH: `${bin}:/usr/bin:/bin`,
+    HOME: fixture,
+    ALLOWANCE_GROK_HOME: fixture,
+    ALLOWANCE_JUNIE_HOME: fixture,
+    ALLOWANCE_CURSOR_AUTH_FILE: missingAuth,
+    ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: missingWork,
+    ALLOWANCE_HERMES_AUTH_FILE: hermesAuth,
+    ALLOWANCE_HERMES_PORTAL_BASE: base
+  });
+  for (const name of ['NO_COLOR', 'CLAUDE_CONFIG_DIR', 'ALLOWANCE_CURSOR_API_BASE', 'DANDELION_CURSOR_API_BASE']) delete env[name];
+  return env;
+}
+
+async function timeCli(hermesAuth, args, wanted) {
+  const env = cliEnv(hermesAuth);
+  const start = process.hrtime.bigint();
+  const { stdout } = await run(process.execPath, [main, ...args], { cwd: tree, env, encoding: 'utf8' });
+  const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
+  if (wanted !== undefined && stdout !== `${wanted}\n`) throw new Error(`cli ${args.join(' ')} printed ${JSON.stringify(stdout)}, wanted ${JSON.stringify(wanted)}`);
+  return elapsed;
+}
+
+function keyboardStub() {
+  const listeners = [];
+  return {
+    setRawMode: () => undefined,
+    setEncoding: () => undefined,
+    on: (_event, listener) => listeners.push(listener),
+    pause: () => undefined,
+    press: (key) => listeners.forEach((listener) => listener(key))
+  };
+}
+
+async function liveSession(startLive, probes, clock) {
+  const keyboard = keyboardStub();
+  let bytes = 0;
+  const screen = { write: (text) => (bytes += text.length) };
+  const settled = [];
+  const tracked = probes.map(({ id, probe }) => ({ id, probe: (now) => { const p = probe(now); settled.push(p); return p; } }));
+  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, zone: ZONE, clock });
+  await Promise.allSettled(settled);
+  await new Promise((resolve) => setImmediate(resolve));
+  keyboard.press('q');
+  await ended;
+  return bytes;
+}
+
+const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
+const stubIo = {
+  ...runner,
+  runner,
+  launcher: { launch: async () => undefined },
+  spawner: { spawn: () => undefined },
+  fetcher: {
+    get: async (url) => (String(url).endsWith('/api/oauth/account') ? { status: 200, body: ACCOUNT_BODY } : { failure: 'network' }),
+    post: async () => ({ failure: 'network' })
+  },
+  reader: { homeDir: () => fixture, read: async (path) => (path === authFile ? authJson(HAPPY_NOUS) : path === expiredFile ? authJson(EXPIRED_NOUS) : undefined), isDirectory: async () => false }
+};
+const appEnv = bothNames({
+  ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'),
+  ALLOWANCE_GROK_HOME: fixture,
+  ALLOWANCE_JUNIE_HOME: fixture,
+  ALLOWANCE_CURSOR_AUTH_FILE: missingAuth,
+  ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: missingWork,
+  ALLOWANCE_HERMES_AUTH_FILE: authFile,
+  ALLOWANCE_HERMES_PORTAL_BASE: base
+});
+const probeEnv = bothNames({ ALLOWANCE_HERMES_AUTH_FILE: authFile, ALLOWANCE_HERMES_PORTAL_BASE: base });
+const missingEnv = bothNames({ ALLOWANCE_HERMES_AUTH_FILE: missingAuth, ALLOWANCE_HERMES_PORTAL_BASE: base });
+const expiredEnv = bothNames({ ALLOWANCE_HERMES_AUTH_FILE: expiredFile, ALLOWANCE_HERMES_PORTAL_BASE: base });
+
+const win = (label, kind, usedPct, resetsAt) => (resetsAt === undefined ? { label, kind, usedPct } : { label, kind, usedPct, resetsAt });
+const ok = (id, windows, extra = {}) => ({ id, displayName: id, planLabel: extra.planLabel ?? id, fetchedAt: extra.fetchedAt ?? NOW, status: 'ok', windows, ...extra });
+function hermesUsage(usedPct, resetsAt, extra = {}) {
+  return ok('hermes', [win('credits', 'weekly', usedPct, resetsAt)], { planLabel: extra.planLabel ?? 'Plus · $5.50 of $22', ...extra });
+}
+function junieUsage(usedPct) {
+  return ok('junie', [win('credits', 'weekly', usedPct)], { planLabel: '701513 credits' });
+}
+function liveCase(junie, hermes, extra = {}) {
+  return [
+    ok('claude', [win('session', 'rolling', 2), win('weekly', 'weekly', 13, '2026-09-19T22:39:00.000Z'), win('weekly Fable', 'weekly', 2, '2026-09-19T22:39:00.000Z')]),
+    ok('claude-work', [win('session', 'rolling', 100, '2026-09-14T15:50:00.000Z'), win('weekly', 'weekly', 72, '2026-09-14T18:00:00.000Z'), win('weekly Fable', 'weekly', 52, '2026-09-14T17:59:00.000Z')]),
+    ok('agy', [win('Gemini Models · Weekly Limit', 'weekly', 17, '2026-09-19T18:39:00.000Z'), win('Claude and GPT models · Five Hour Limit', 'rolling', 0)]),
+    ok('kimi', [win('weekly', 'weekly', 95, '2026-09-17T13:39:00.000Z'), win('5h', 'rolling', 0)]),
+    ok('grok', [win('credits', 'weekly', 9, '2026-09-19T22:39:00.000Z')]),
+    { ...ok('codex', []), status: 'unavailable', reason: 'not found' },
+    ok('cursor', [win('total', 'weekly', 36, '2026-09-29T17:39:00.000Z'), win('auto', 'weekly', 36, '2026-09-29T17:39:00.000Z'), win('api', 'weekly', 33, '2026-09-29T17:39:00.000Z')]),
+    junie,
+    hermes,
+    { ...ok('kilo', []), planLabel: 'api balance', balance: { amount: 14.15, currency: '$', reference: 20 } }
+  ].map((usage) => ({ ...usage, fetchedAt: extra.fetchedAt ?? usage.fetchedAt }));
+}
+const fleet75 = liveCase(junieUsage(30), hermesUsage(75, '2026-09-20T00:00:00.000Z', { captionSuffix: ' · no paid access' }));
+const fleet0 = liveCase(junieUsage(30), hermesUsage(0, '2026-09-20T00:00:00.000Z'));
+const fleetTie = liveCase(junieUsage(0), hermesUsage(0, '2026-09-20T00:00:00.000Z'));
+const fleetEvap = liveCase(junieUsage(30), hermesUsage(60, '2026-09-14T13:39:00.000Z'));
+const dashboardFleet = liveCase(junieUsage(30), hermesUsage(75, RESET, { captionSuffix: ' · no paid access' }), { fetchedAt: NOW });
+
+function expectOneOf(actual, wanted, what) {
+  if (!wanted.includes(actual)) throw new Error(`${what}: got ${JSON.stringify(actual)}, wanted one of ${JSON.stringify(wanted)}`);
+}
+
+try {
+  const app = await import(pathToFileURL(appEntry).href);
+  const render = await import(pathToFileURL(renderEntry).href);
+  const { renderDashboard } = render;
+  const domain = await import(pathToFileURL(domainEntry).href);
+  const hasHigh = typeof domain.highRouteLine === 'function';
+
+  await timeCli(authFile, []);
+  await timeCli(missingAuth, []);
+  await timeCli(expiredFile, []);
+  emit(TARGETS.cli, await repeat(VALUES, () => timeCli(authFile, [])), 'ms');
+  emit(TARGETS.cliMissing, await repeat(VALUES, () => timeCli(missingAuth, [])), 'ms');
+  emit(TARGETS.cliExpired, await repeat(VALUES, () => timeCli(expiredFile, [])), 'ms');
+  emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(authFile, ['route'])), 'ms');
+  if (hasHigh) {
+    await timeCli(authFile, ['route', '--high'], HIGH_LINE);
+    emit(TARGETS.cliHigh, await repeat(VALUES, () => timeCli(authFile, ['route', '--high'], HIGH_LINE)), 'ms');
+  } else {
+    absent(TARGETS.cliHigh);
+  }
+
+  renderDashboard(dashboardFleet, false, NOW, []);
+  emit(TARGETS.render, perCallSync(FAST_ITERATIONS, () => renderDashboard(dashboardFleet, false, NOW, [])), 'us');
+
+  if (typeof render.renderLiveFrame === 'function') {
+    const liveView = { slots: dashboardFleet.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: ZONE, settled: dashboardFleet };
+    const settledOnce = render.renderLiveFrame(liveView, false, NOW);
+    if (render.renderLiveFrame(liveView, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
+    emit(TARGETS.renderLive, perCallSync(FAST_ITERATIONS, () => render.renderLiveFrame(liveView, false, NOW)), 'us');
+  } else {
+    absent(TARGETS.renderLive);
+  }
+
+  domain.summariseFleet(dashboardFleet, NOW);
+  emit(TARGETS.fleet, perCallSync(FAST_ITERATIONS, () => domain.summariseFleet(dashboardFleet, NOW)), 'us');
+
+  const GROK = ['grok-4.6 xhigh grok', 'grok-4.6 grok'];
+  const HERMES = ['x-ai/grok-4.6 xhigh hermes'];
+  const JUNIE = ['gemini-3.8-flash high junie'];
+  expectOneOf(domain.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, []), GROK, 'hermes 75%');
+  expectOneOf(domain.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, []), [...HERMES, ...GROK], 'hermes 0%');
+  expectOneOf(domain.routeLine(fleetTie, LIVE_NOW, LIVE_MIDNIGHT, []), [...JUNIE, ...GROK], 'junie/hermes 0%');
+  expectOneOf(domain.routeLine(fleetEvap, LIVE_NOW, LIVE_MIDNIGHT, []), [...HERMES, ...GROK], 'hermes evaporating');
+  expectOneOf(domain.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, ['hermes']), GROK, 'hermes ineligible');
+  emit(TARGETS.route75, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
+  emit(TARGETS.route0, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeTie, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleetTie, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeEvap, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleetEvap, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeIneligible, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, ['hermes'])), 'us');
+
+  if (hasHigh) {
+    expectOneOf(domain.highRouteLine(fleet0, []), [HIGH_LINE], 'high plus hermes 0%');
+    emit(TARGETS.highRoute, perCallSync(FAST_ITERATIONS, () => domain.highRouteLine(fleet0, [])), 'us');
+  } else {
+    absent(TARGETS.highRoute);
+  }
+
+  if (existsSync(liveEntry)) {
+    const { startLive } = await import(pathToFileURL(liveEntry).href);
+    const probes = dashboardFleet.map((usage) => ({ id: usage.id, probe: async () => usage }));
+    const clock = () => NOW;
+    const bytes = await liveSession(startLive, probes, clock);
+    if (bytes < 1000) throw new Error(`live session drew too little: ${bytes}`);
+    emit(TARGETS.session, await perCall(SESSIONS, () => liveSession(startLive, probes, clock)), 'us');
+  } else {
+    absent(TARGETS.session);
+  }
+
+  const request = { mode: 'headroom', now: NOW, zone: ZONE };
+  const highRequest = { mode: 'high', now: NOW, zone: ZONE };
+  await app.runApp(stubIo, appEnv, NOW);
+  await app.runRoute(stubIo, appEnv, request);
+  emit(TARGETS.runApp, await perCall(ITERATIONS, () => app.runApp(stubIo, appEnv, NOW)), 'us');
+  emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, request)), 'us');
+  if (hasHigh) {
+    const high = await app.runRoute(stubIo, appEnv, highRequest);
+    if (high.line !== HIGH_LINE) throw new Error(`runRoute --high printed ${JSON.stringify(high.line)}`);
+    emit(TARGETS.runRouteHigh, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, highRequest)), 'us');
+  } else {
+    absent(TARGETS.runRouteHigh);
+  }
+
+  if (existsSync(hermesEntry)) {
+    const { probeHermes } = await import(pathToFileURL(hermesEntry).href);
+    const httpIo = { reader: app.realIo.reader, fetcher: app.realIo.fetcher };
+    const warm = await probeHermes(httpIo, probeEnv, NOW);
+    if (warm.status !== 'ok' || warm.windows[0]?.usedPct !== 75 || warm.planLabel !== 'Plus · $5.50 of $22') {
+      throw new Error(`hermes probe failed: ${warm.status} ${warm.planLabel} ${warm.windows[0]?.usedPct}`);
+    }
+    const stubbed = await probeHermes(stubIo, probeEnv, NOW);
+    if (stubbed.status !== 'ok' || stubbed.windows[0]?.usedPct !== 75) throw new Error(`hermes stub probe failed: ${stubbed.status}`);
+    const missing = await probeHermes(httpIo, missingEnv, NOW);
+    if (missing.status !== 'unavailable') throw new Error(`hermes missing probe failed: ${missing.status}`);
+    const expired = await probeHermes(httpIo, expiredEnv, NOW);
+    if (expired.status !== 'unavailable') throw new Error(`hermes expired probe failed: ${expired.status}`);
+    emit(TARGETS.probeStub, await perCall(FAST_ITERATIONS, () => probeHermes(stubIo, probeEnv, NOW)), 'us');
+    emit(TARGETS.probeHttp, await perCall(HTTP_ITERATIONS, () => probeHermes(httpIo, probeEnv, NOW)), 'us');
+    emit(TARGETS.probeMissing, await perCall(FAST_ITERATIONS, () => probeHermes(httpIo, missingEnv, NOW)), 'us');
+    emit(TARGETS.probeExpired, await perCall(FAST_ITERATIONS, () => probeHermes(httpIo, expiredEnv, NOW)), 'us');
+  } else {
+    absent(TARGETS.probeStub, TARGETS.probeHttp, TARGETS.probeMissing, TARGETS.probeExpired);
+  }
+} finally {
+  server.close();
+  server.closeAllConnections();
+  rmSync(fixture, { recursive: true, force: true });
+}

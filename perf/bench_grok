@@ -79,7 +79,7 @@ for (const [name, out] of Object.entries(OUTPUTS)) {
 }
 
 function timeCli(grokHome) {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_JUNIE_HOME: emptyHome, ALLOWANCE_CURSOR_AUTH_FILE: join(tmpdir(), 'bench-grok-missing-cursor-auth.json') });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_JUNIE_HOME: emptyHome, ALLOWANCE_CURSOR_AUTH_FILE: join(tmpdir(), 'bench-grok-missing-cursor-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(tmpdir(), 'bench-grok-missing-cursor-auth.json') });
   delete env.NO_COLOR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
   delete env.DANDELION_CURSOR_API_BASE;
