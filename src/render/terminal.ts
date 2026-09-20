@@ -7,8 +7,6 @@ import {
   routeLine,
   summariseFleet,
   type Balance,
-  type FleetReset,
-  type FleetSummary,
   type ProviderUsage,
   type UsageWindow
 } from '../domain/index.ts';
@@ -275,11 +273,11 @@ function liveBanner(view: LiveView, usages: ProviderUsage[], noColor: boolean, n
   return view.refreshing ? refreshingBanner(tail, noColor) : bannerLine(tail, noColor);
 }
 
-function hotSegment({ hot, windows }: FleetSummary): string {
+function hotSegment(hot: number, windows: number): string {
   return hot === 0 ? `all windows below ${HOT_PCT}%` : `${hot}/${windows} windows above ${HOT_PCT}%`;
 }
 
-function resetSegment(head: string, next: FleetReset, now: string): string {
+function resetSegment(head: string, next: { id: string; label: string; resetsAt: string }, now: string): string {
   const prefix = `${head}${next.id} `;
   const suffix = ` in ${formatCountdown(next.resetsAt, now)}`;
   return `${prefix}${cutCells(next.label, WIDTH - cellCount(prefix) - cellCount(suffix))}${suffix}`;
@@ -287,7 +285,7 @@ function resetSegment(head: string, next: FleetReset, now: string): string {
 
 function summaryLine(usages: ProviderUsage[], now: string): string {
   const fleet = summariseFleet(usages, now);
-  const head = `${hotSegment(fleet)} · next reset: `;
+  const head = `${hotSegment(fleet.hot, fleet.windows)} · next reset: `;
   return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now);
 }
 
