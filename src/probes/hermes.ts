@@ -37,14 +37,6 @@ function portalBase(env: Env): string {
   return env['DANDELION_HERMES_PORTAL_BASE'] || PORTAL_BASE;
 }
 
-function parsedAuth(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new ProbeUnavailable(NO_AUTH);
-  }
-}
-
 function bearerOf(nous: unknown): { token: string; expiry: unknown } | undefined {
   const agentKey = fieldOf(nous, 'agent_key');
   if (isFilled(agentKey)) return { token: agentKey, expiry: fieldOf(nous, 'agent_key_expires_at') };
@@ -66,9 +58,13 @@ function unexpiredToken(token: string, expiry: unknown, now: string): string {
 
 async function readToken(reader: FileReader, env: Env, now: string): Promise<string> {
   const text = await reader.read(authFile(reader, env));
-  if (text === undefined) throw new ProbeUnavailable(NO_AUTH);
-  const { token, expiry } = nousBearer(parsedAuth(text));
-  return unexpiredToken(token, expiry, now);
+  try {
+    const { token, expiry } = nousBearer(JSON.parse(String(text)));
+    return unexpiredToken(token, expiry, now);
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    throw new ProbeUnavailable(NO_AUTH);
+  }
 }
 
 function positiveCount(value: unknown): number | undefined {
