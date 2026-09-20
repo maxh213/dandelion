@@ -22,11 +22,11 @@ const API_KEY_LINE = /^Logged in using an API key/m;
 const CHATGPT_LINE = /ChatGPT/;
 const API_KEY_NOTE = 'api-key billing · no usage windows';
 const PARSE_FAILURE = 'Could not parse rate limits from response';
-const LOGIN_FAILURES: Record<RunFailure, string> = {
+const LOGIN_FAILURES = {
   missing: 'codex CLI not found in PATH',
   timeout: `Command timed out after ${LOGIN_TIMEOUT_MS / 1000}s`,
   exit: 'codex is not logged in'
-};
+} satisfies Record<RunFailure, string>;
 const REQUESTS = [
   { jsonrpc: '2.0', id: 1, method: 'initialize', params: { clientInfo: { name: 'dandelion', title: null, version: '0.1.0' } } },
   { jsonrpc: '2.0', method: 'initialized' },

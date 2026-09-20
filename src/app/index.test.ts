@@ -2072,6 +2072,35 @@ describe('hermes panel', () => {
     for (const name of names.filter((each) => each !== 'hermes')) expect(panelOf(output, name)).toEqual(panelOf(missing, name));
   });
 
+  it('renders junie at 30%, hermes at 75% and kilo at 14 of 20 under the frozen clock', async () => {
+    const snapshot = JSON.stringify({
+      kind: 'SessionA2uxEvent',
+      completion: {
+        endedAtMs: 1789736030118,
+        quota: {
+          type: 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot.JetBrains',
+          balanceLeft: 701512.73275
+        }
+      }
+    });
+    const { io } = hermesIo({ status: 200, body: JSON.stringify(account()) }, {
+      '/auth.json': authJson(),
+      '/junie/sessions/index.jsonl': '{"sessionId":"session-new","updatedAt":1}',
+      '/junie/sessions/session-new/events.jsonl': snapshot
+    });
+    const output = await runApp(io, { ...HERMES_ENV, DANDELION_JUNIE_HOME: '/junie', NO_COLOR: '1' }, HERMES_NOW);
+    const lines = output.split('\n');
+    const names = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+    expect(lines[0]).toMatch(/^DANDELION +19:00:00Z$/);
+    expect(lines.filter((line) => names.includes(line))).toEqual(names);
+    expect(panelOf(output, 'junie').slice(1)).toEqual(['credits                             ######--------------  30%', 'snapshot 6h6m old', '701513 credits · junie']);
+    expect(panelOf(output, 'hermes').slice(1)).toEqual([ROW_75, 'Plus · $5.50 of $22 · hermes']);
+    expect(panelOf(output, 'kilo').slice(1)).toEqual([`$14.15 ${'#'.repeat(14)}${'-'.repeat(6)}`.padEnd(72), 'api balance · kilo']);
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+    expect(output).not.toContain(AGENT);
+    expect(output).not.toContain(ACCESS);
+  });
+
   it('GETs the account once with the agent key and JSON accept', async () => {
     const { io, requests } = hermesIo();
     await runApp(io, { ...HERMES_ENV, NO_COLOR: '1' }, HERMES_NOW);

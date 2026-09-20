@@ -23,7 +23,8 @@ function usableSessions(entry: unknown): Session[] {
 
 function sessionsOn(line: string): Session[] {
   try {
-    return usableSessions(JSON.parse(line));
+    const parsed: unknown = JSON.parse(line);
+    return usableSessions(parsed);
   } catch {
     return [];
   }
@@ -48,7 +49,8 @@ function usableSnapshots(completion: unknown): Snapshot[] {
 
 function snapshotsOn(line: string): Snapshot[] {
   try {
-    return usableSnapshots(fieldOf(JSON.parse(line), 'completion'));
+    const parsed: unknown = JSON.parse(line);
+    return usableSnapshots(fieldOf(parsed, 'completion'));
   } catch {
     return [];
   }

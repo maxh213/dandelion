@@ -112,7 +112,7 @@ export const STYLE_TOKENS = {
   warm: '\x1b[33m',
   hot: '\x1b[31m',
   critical: '\x1b[35m'
-} as const;
+} as const satisfies Record<string, string>;
 
 type StyleToken = keyof typeof STYLE_TOKENS;
 

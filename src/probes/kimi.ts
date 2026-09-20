@@ -102,7 +102,8 @@ function hourWindows(limits: unknown): UsageWindow[] {
 }
 
 function parseUsage(body: string): UsageWindow[] {
-  const data = fieldOf(JSON.parse(body), 'data');
+  const parsed: unknown = JSON.parse(body);
+  const data = fieldOf(parsed, 'data');
   return [weeklyWindow(fieldOf(data, 'summary')), ...hourWindows(fieldOf(data, 'limits'))];
 }
 

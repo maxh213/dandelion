@@ -29,7 +29,7 @@ const WINDOW_FIELDS = [
   ['total', 'totalPercentUsed'],
   ['auto', 'autoPercentUsed'],
   ['api', 'apiPercentUsed']
-] as const;
+] as const satisfies ReadonlyArray<readonly [string, string]>;
 
 function authFile(reader: FileReader, env: Env): string {
   return env['DANDELION_CURSOR_AUTH_FILE'] || `${reader.homeDir()}/.config/cursor/auth.json`;
@@ -44,7 +44,8 @@ function tokenOf(auth: unknown): string {
 async function readToken(reader: FileReader, env: Env): Promise<string> {
   const text = await reader.read(authFile(reader, env));
   try {
-    return tokenOf(JSON.parse(String(text)));
+    const parsed: unknown = JSON.parse(String(text));
+    return tokenOf(parsed);
   } catch {
     throw new ProbeUnavailable(NO_AUTH);
   }
@@ -84,7 +85,8 @@ function labelOf(name: unknown, price: unknown): string {
 }
 
 function planLabelFrom(body: string): string {
-  const info = fieldOf(JSON.parse(body), 'planInfo');
+  const parsed: unknown = JSON.parse(body);
+  const info = fieldOf(parsed, 'planInfo');
   return labelOf(fieldOf(info, 'planName'), fieldOf(info, 'price'));
 }
 
@@ -101,7 +103,8 @@ async function readCursor(io: CursorIo, env: Env): Promise<{ planLabel: string; 
   const token = await readToken(io.reader, env);
   const usage = postTo(io, env, token, 'GetCurrentPeriodUsage');
   const plan = postTo(io, env, token, 'GetPlanInfo');
-  const windows = windowsOf(JSON.parse(successBody(await usage, 'cursor usage request', REQUEST_TIMEOUT_MS)));
+  const parsed: unknown = JSON.parse(successBody(await usage, 'cursor usage request', REQUEST_TIMEOUT_MS));
+  const windows = windowsOf(parsed);
   return { planLabel: await planLabelOf(plan), windows };
 }
 

@@ -296,8 +296,9 @@ describe('window rows', () => {
 });
 
 describe('live frame', () => {
-  const okUsage = (id: string, windows: UsageWindow[], extra: Partial<ProviderUsage> = {}): ProviderUsage =>
-    ({ id, displayName: id, planLabel: 'plan', windows, fetchedAt: NOW, status: 'ok', ...extra }) as ProviderUsage;
+  type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
+  const okUsage = (id: string, windows: UsageWindow[], extra: Partial<Omit<OkUsage, 'id' | 'displayName' | 'windows' | 'status'>> = {}): OkUsage =>
+    ({ id, displayName: id, planLabel: 'plan', windows, fetchedAt: NOW, status: 'ok', ...extra });
   const unavailable = (id: string): ProviderUsage => ({ id, displayName: id, windows: [], fetchedAt: NOW, status: 'unavailable', reason: `${id} CLI not found in PATH` });
   const viewOf = (usages: (ProviderUsage | undefined)[], extra: Partial<LiveView> = {}): LiveView => ({
     slots: usages.map((usage, index) => ({ id: usage?.id ?? `p${index}`, usage })),

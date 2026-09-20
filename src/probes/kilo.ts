@@ -13,11 +13,9 @@ function parseReference(rawReference: string | undefined): number | undefined {
 function parseBalance(stdout: string, rawReference: string | undefined): Balance | undefined {
   const match = BALANCE_LINE.exec(stdout);
   if (!match) return undefined;
-
-  const balance: Balance = { amount: Number.parseFloat(match[1]), currency: '$' };
+  const amount = Number.parseFloat(match[1]);
   const reference = parseReference(rawReference);
-  if (reference !== undefined) balance.reference = reference;
-  return balance;
+  return reference === undefined ? { amount, currency: '$' } : { amount, currency: '$', reference };
 }
 
 export function kiloProbe(env: Record<string, string | undefined>): CliProbe {

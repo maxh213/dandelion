@@ -7,7 +7,7 @@ type RoutableUsage = { id: string; status: string; windows: RoutableWindow[] };
 type Route = { id: string; standard: string; max: string };
 
 const CLAUDE_LINES = { standard: 'claude-opus-5 high', max: 'claude-opus-5 max' };
-const ROUTING_TABLE: Route[] = [
+const ROUTING_TABLE = [
   { id: 'claude', ...CLAUDE_LINES },
   { id: 'claude-work', ...CLAUDE_LINES },
   { id: 'agy', standard: 'gemini-3.1-pro-high medium', max: 'gemini-3.1-pro-high high' },
@@ -16,7 +16,7 @@ const ROUTING_TABLE: Route[] = [
   { id: 'cursor', standard: 'kimi-k3-max', max: 'kimi-k3-max' },
   { id: 'junie', standard: 'gemini-3.8-flash high', max: 'gemini-3.8-flash high' },
   { id: 'hermes', standard: 'x-ai/grok-4.6 xhigh', max: 'x-ai/grok-4.6 xhigh' }
-];
+] satisfies Route[];
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
 const FULL_LEFT = 100;
@@ -100,7 +100,7 @@ export const HIGH_CHAIN: readonly ChainEntry[] = [
   { rank: 3, providers: ['claude', 'claude-work'], line: 'claude-opus-5 max' },
   { rank: 4, providers: ['grok'], line: 'grok-4.6 xhigh' },
   { rank: 5, providers: ['agy'], line: 'gemini-3.8-flash-high high' }
-];
+] satisfies readonly ChainEntry[];
 
 type Account = { id: string; used: number };
 

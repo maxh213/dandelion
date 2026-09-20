@@ -1,14 +1,16 @@
 import type { ProviderProbe } from '../probes/index.ts';
 import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type LiveSlot, type LiveView } from '../render/index.ts';
 
-export type Screen = { write(text: string): unknown };
+export interface Screen {
+  write(text: string): unknown;
+}
 
-export type Keyboard = {
+export interface Keyboard {
   setRawMode(raw: boolean): unknown;
   setEncoding(encoding: 'utf8'): unknown;
   on(event: 'data', listener: (chunk: string) => void): unknown;
   pause(): unknown;
-};
+}
 
 type LiveOptions = {
   probes: ProviderProbe[];

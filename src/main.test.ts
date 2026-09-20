@@ -291,10 +291,18 @@ describe('main', () => {
 
   it('declares the dandelion bin with a shebang on an executable main.ts and no dependencies', () => {
     const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
-    expect([pkg.name, pkg.bin, pkg.dependencies]).toEqual(['dandelion', { dandelion: 'src/main.ts' }, undefined]);
+    expect([pkg.name, pkg.bin, pkg.scripts, pkg.dependencies]).toEqual([
+      'dandelion',
+      { dandelion: 'src/main.ts' },
+      { start: 'node src/main.ts', test: 'vitest run', qa: 'node qa/e2e.mjs' },
+      undefined
+    ]);
     expect(readFileSync(MAIN, 'utf-8').split('\n')[0]).toBe('#!/usr/bin/env node');
     const index = spawnSync('git', ['ls-files', '-s', '--', ':/src/main.ts'], { encoding: 'utf-8' });
     expect(index.stdout).toMatch(/^100755 /);
+    const readme = readFileSync('README.md', 'utf-8');
+    expect(readme.startsWith('# Dandelion Dashboard\n\nDandelion is a terminal dashboard')).toBe(true);
+    expect(readme).toContain('All ten probes run in parallel');
   });
 
   it('prints the same DANDELION dashboard through node src/main.ts and a dandelion symlink', () => {
