@@ -25,15 +25,14 @@ const a = process.argv.slice(2), port = Number(a[a.indexOf('--port') + 1]);
 fs.writeFileSync(path.join(__dirname, 'kimi.args'), a.join(' '));
 if (a[0] !== 'web' || !a.includes('--no-open') || !port) process.exit(2);
 const reset = new Date(Date.now() + 7205 * 60000).toISOString().replace(/\\.\\d{3}Z$/, 'Z');
-const body = JSON.stringify({ data: {
-  summary: { used: 590, limit: 1000, reset_at: reset },
-  limits: [{ used: 42, limit: 100, window: { unit: 'hour', value: 5 } }],
-} });
+const body = JSON.stringify({ code: 0, msg: 'success', data: { kind: 'ok', quota: { usages: {
+  limit5h: { usedRatio: 0.42, resetAt: reset }, limit7d: { usedRatio: 0.59, resetAt: reset }
+}, extraUsage: null } }, request_id: 'qa-018' });
 http.createServer((req, res) => {
   const ok = req.headers.authorization === 'Bearer test-token' && req.url === '/api/v1/oauth/usage';
   res.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' });
   res.end(ok ? body : '{}');
-}).listen(port, '127.0.0.1', () => console.log('kimi web ready: http://127.0.0.1:' + port + '/?token=test-token'));
+}).listen(port, '127.0.0.1', () => console.log('Local: http://127.0.0.1:' + port + '/#token=test-token'));
 `;
 
 const temps = [];

@@ -22,15 +22,30 @@ fs.writeFileSync(path.join(__dirname, 'kimi.pid'), String(process.pid));
 const a = process.argv.slice(2), port = Number(a[a.indexOf('--port') + 1]);
 if (a[0] !== 'web' || !a.includes('--no-open') || !port) process.exit(2);
 const reset = new Date(Date.now() + 7205 * 60000).toISOString().replace(/\\.\\d{3}Z$/, 'Z');
-const body = JSON.stringify({ data: {
-  summary: { used: 590, limit: 1000, reset_at: reset },
-  limits: [{ used: 42, limit: 100, window: { unit: 'hour', value: 5 } }],
-} });
+const body = JSON.stringify({ code: 0, msg: 'success', data: { kind: 'ok', quota: { usages: {
+  limit5h: { usedRatio: 0.42, resetAt: reset }, limit7d: { usedRatio: 0.59, resetAt: reset }
+}, extraUsage: null } }, request_id: 'qa-018' });
 http.createServer((req, res) => {
   const ok = req.headers.authorization === 'Bearer test-token' && req.url === '/api/v1/oauth/usage';
   res.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' });
   res.end(ok ? body : '{}');
-}).listen(port, '127.0.0.1', () => console.log('kimi web ready: http://127.0.0.1:' + port + '/?token=test-token'));
+}).listen(port, '127.0.0.1', () => console.log('Local: http://127.0.0.1:' + port + '/#token=test-token'));
+`;
+
+const KIMI_LIVE = `#!/usr/bin/env node
+const fs = require('node:fs'), http = require('node:http'), path = require('node:path');
+fs.writeFileSync(path.join(__dirname, 'kimi.pid'), String(process.pid));
+const a = process.argv.slice(2), port = Number(a[a.indexOf('--port') + 1]);
+if (a[0] !== 'web' || !a.includes('--no-open') || !port) process.exit(2);
+const body = JSON.stringify({ code: 0, msg: 'success', data: { kind: 'ok', quota: { usages: {
+  limit5h: { usedRatio: 0, resetAt: '2026-09-19T14:58:50Z' },
+  limit7d: { usedRatio: 0, resetAt: '2026-09-25T12:58:50Z' }
+}, extraUsage: null } }, request_id: '01M2WR59QVZ5WJFMF4A6TWESJB' });
+http.createServer((req, res) => {
+  const ok = req.headers.authorization === 'Bearer test-token' && req.url === '/api/v1/oauth/usage';
+  res.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' });
+  res.end(ok ? body : '{}');
+}).listen(port, '127.0.0.1', () => console.log('Local: http://127.0.0.1:' + port + '/#token=test-token'));
 `;
 
 const KIMI_NO_TOKEN = `#!/usr/bin/env node
@@ -111,6 +126,25 @@ async function kimiServesUsage() {
     const fiveHour = lineIndex(lines, /^5h {34}#{8}-{12} {2}42%$/);
     const caption = lines.indexOf('kimi code · kimi');
     assert.ok(kimi < weekly && weekly < fiveHour && fiveHour < caption && caption < kilo, `kimi rows not inside the kimi panel:\n${stdout}`);
+    assert.ok(!stdout.includes('test-token'), `token leaked:\n${stdout}`);
+    await assertKimiGone(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function kimiServesLiveZero() {
+  const dir = await fixtureDir(KIMI_LIVE);
+  try {
+    const { stdout } = await runApp(dir);
+    const { lines, kimi, kilo } = assertKimiBetweenAgyAndKilo(stdout);
+    const weekly = lineIndex(lines, /^weekly {30}-{20} {3}0% ↻ \S+$/);
+    const fiveHour = lineIndex(lines, /^5h {34}-{20} {3}0%$/);
+    const caption = lines.indexOf('kimi code · kimi');
+    assert.ok(kimi < weekly && weekly < fiveHour && fiveHour < caption && caption < kilo, `kimi live 0% rows not inside the kimi panel:\n${stdout}`);
+    assert.ok(!lines[fiveHour].includes('↻'), `5h row shows a countdown:\n${stdout}`);
+    assert.ok(!stdout.includes('Could not parse usage from response'), `live 0% body was parse failure:\n${stdout}`);
+    assert.ok(!stdout.includes('test-token'), `token leaked:\n${stdout}`);
     await assertKimiGone(dir);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -142,6 +176,7 @@ export default async function () {
   workConfigDir = await mkdtemp(join(tmpdir(), 'dandelion-qa-003-work-'));
   try {
     await kimiServesUsage();
+    await kimiServesLiveZero();
     await kimiExitsWithoutToken();
     await assertNoQaProcessLeft();
   } finally {
