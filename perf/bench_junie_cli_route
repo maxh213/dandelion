@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { VALUES, absent, bothNames, emit, repeat } from './timing.mjs';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const domainEntry = join(tree, 'src', 'domain', 'index.ts');
+const BIG_LINES = 1320;
+const SNAPSHOT_FROM_END = 20;
+const QUOTA_TYPE = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
+const HIGH_LINE = 'claude-fable-5-1 max claude';
+
+const TARGETS = {
+  cliRoute: 'cli route nine providers junie 1.6MB session log',
+  cliHigh: 'cli route --high nine providers junie 1.6MB session log'
+};
+
+if (!existsSync(main) || !existsSync(domainEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+function completion(endedAtMs, quota) {
+  return JSON.stringify({
+    kind: 'SessionA2uxEvent',
+    event: { state: 'IN_PROGRESS', agentEvent: { kind: 'ResultBlockUpdatedEvent', agent: { kind: 'MainAgent', id: 'main', name: 'main', type: 'LINEAR' }, stepId: 'ba8fc998-1b74-4ede-a146-bd311cd11ec0', cancelled: false, result: '### Summary\n- pong', title: 'Optimal Response: pong', changes: [], errorCode: 'Submit' } },
+    completion: { endedAtMs, taskCostUsd: 0.0334116, quota },
+    timestampMs: endedAtMs + 4
+  });
+}
+
+function jetBrains(endedAtMs, balanceLeft) {
+  return completion(endedAtMs, { type: `${QUOTA_TYPE}.JetBrains`, balanceUnit: 'CREDITS', balanceLeft });
+}
+
+function noise(i) {
+  return JSON.stringify({
+    kind: 'SessionA2uxEvent',
+    event: { state: 'IN_PROGRESS', agentEvent: { kind: 'ToolBlockUpdatedEvent', stepId: `step-${i}`, output: 'x'.repeat(1100) } },
+    timestampMs: 1789735551000 + i
+  });
+}
+
+function sessionLog(lines, snapshotLine) {
+  const out = [];
+  for (let i = 0; i < lines; i++) {
+    if (snapshotLine !== undefined && i === snapshotLine) out.push(snapshotLine === lines - SNAPSHOT_FROM_END ? jetBrains(1789736030118, 701512.73275) : jetBrains(1789735651253, 900000));
+    else if (i % 97 === 0) out.push(completion(1789735000000 + i, { type: `${QUOTA_TYPE}.Unknown` }));
+    else if (i % 211 === 0) out.push('not json at all');
+    else out.push(noise(i));
+  }
+  return out.join('\n') + '\n';
+}
+
+const bigLog = sessionLog(BIG_LINES, BIG_LINES - SNAPSHOT_FROM_END);
+const olderLog = sessionLog(BIG_LINES, 400);
+const indexLine = (sessionId, updatedAt) => JSON.stringify({ sessionId, createdAt: updatedAt - 5000, updatedAt, projectDir: '/home/max/workspace', taskName: 'Quota Management Task' });
+const SMALL = ['session-260902-141349-1p1o', 'session-260912-232341-4bmo', 'session-260918-133428-6ss5', 'session-260918-133514-13cf'];
+function indexOf(newest, older) {
+  return [...SMALL.map((id, i) => indexLine(id, 1789000000000 + i)), indexLine(older, 1789735400000), indexLine(newest, 1789736040000), '{"broken"'].join('\n') + '\n';
+}
+
+const OUTPUTS = {
+  claude: 'Current session: 2% used · resets Sep 18, 5:40pm (Europe/London)\nCurrent week (all models): 13% used · resets Sep 19, 11pm (Europe/London)\n',
+  agy: 'Gemini Models\tWeekly Limit Remaining\t83%\t2026-09-23T18:39:00Z\n',
+  kilo: 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n'
+};
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-junie-cli-route-'));
+const bin = join(fixture, 'bin');
+const cache = join(fixture, 'node-cache');
+const happyHome = join(fixture, 'happy');
+const emptyHome = join(fixture, 'empty');
+mkdirSync(bin);
+mkdirSync(cache);
+mkdirSync(emptyHome);
+for (const [name, out] of Object.entries(OUTPUTS)) {
+  writeFileSync(join(bin, name), `#!/bin/sh\ncat <<'OUT'\n${out}OUT\n`);
+  chmodSync(join(bin, name), 0o755);
+}
+
+function writeHome(home, files) {
+  for (const [relative, text] of Object.entries(files)) {
+    mkdirSync(join(home, relative, '..'), { recursive: true });
+    writeFileSync(join(home, relative), text);
+  }
+  for (const id of SMALL) mkdirSync(join(home, 'sessions', id), { recursive: true });
+}
+
+const NEWEST = 'session-260918-142254-1bzg';
+const OLDER = 'session-260912-232358-evb0';
+writeHome(happyHome, { 'sessions/index.jsonl': indexOf(NEWEST, OLDER), [`sessions/${NEWEST}/events.jsonl`]: bigLog, [`sessions/${OLDER}/events.jsonl`]: olderLog });
+
+function timeCli(args, wanted) {
+  const env = bothNames({
+    ...process.env,
+    NODE_COMPILE_CACHE: cache,
+    ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'),
+    PATH: `${bin}:/usr/bin:/bin`,
+    HOME: fixture,
+    ALLOWANCE_GROK_HOME: emptyHome,
+    ALLOWANCE_JUNIE_HOME: happyHome,
+    ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'),
+    ALLOWANCE_HERMES_AUTH_FILE: join(fixture, 'missing-auth.json')
+  });
+  for (const name of ['NO_COLOR', 'CLAUDE_CONFIG_DIR', 'ALLOWANCE_CURSOR_API_BASE', 'DANDELION_CURSOR_API_BASE', 'ALLOWANCE_JUNIE_REFERENCE', 'DANDELION_JUNIE_REFERENCE', 'ALLOWANCE_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CLAUDE_WORK_CONFIG_DIR']) delete env[name];
+  const start = process.hrtime.bigint();
+  const result = spawnSync(process.execPath, [main, ...args], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
+  if (result.status !== 0) throw new Error(`cli ${args.join(' ')} exited ${result.status}:\n${result.stdout}${result.stderr}`);
+  if (wanted !== undefined && result.stdout !== `${wanted}\n`) throw new Error(`cli ${args.join(' ')} printed ${JSON.stringify(result.stdout)}, wanted ${JSON.stringify(wanted)}`);
+  return elapsed;
+}
+
+try {
+  const domain = await import(pathToFileURL(domainEntry).href);
+  const hasHigh = typeof domain.highRouteLine === 'function';
+  timeCli(['route']);
+  emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(['route'])), 'ms');
+  if (hasHigh) {
+    timeCli(['route', '--high'], HIGH_LINE);
+    emit(TARGETS.cliHigh, await repeat(VALUES, () => timeCli(['route', '--high'], HIGH_LINE)), 'ms');
+  } else {
+    absent(TARGETS.cliHigh);
+  }
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}
