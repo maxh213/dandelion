@@ -2,7 +2,7 @@
 
 After 018, the kimi panel paints weekly and 5h from kimi 2.0.0's `{ code, data: { kind, quota: { usages: { limit7d, limit5h } } } }` body. Earlier procedures that spawn kimi must serve that envelope (`usedRatio` = percent/100, `resetAt` instead of `reset_at`) or kimi is dim. 003's 59% / 42% numbers stay. `--high` still does not use kimi.
 
-Set up once in the repo root, in a real terminal (bash, GNU tools). First run the set-up block of `qa/017-ts-practices.md`, so `$RX`, `$RH`, `$RB`, `$NODEBIN`, `$KQ`, `$TZQ`, `$ST`, `$JH`, `$HA`, `$H0`, `rt`, `rq`, `live`, `hx` and `jh` exist. Replace `$RX/kimi` (a symlink to `q`) with a 2.0 server that reads `Q_KIMI` as `rolling,weekly,resetHours`. Then add a mode-file fixture `$K2` for panel cases.
+Set up once in the repo root, in a real terminal (bash, GNU tools). First run the set-up block of `qa/017-ts-practices.md`, so `$RX`, `$RH`, `$RB`, `$NODEBIN`, `$KQ`, `$TZQ`, `$ST`, `$JH`, `$HA`, `$H0`, `rt`, `rq`, `live`, `hx` and `jh` exist. Replace `$RX/kimi` (a symlink to `q`) with a 2.0 server that reads `Q_KIMI` as `rolling,weekly,resetHours`. Then add a mode-file fixture `$K2` for panel cases. Weekly `resetAt` is 7205 minutes from now (5 days 5 minutes), as in `qa/003-kimi.e2e.mjs`, so the countdown is `5d0h` (or `4d23h`).
 
 ```bash
 rm -f "$RX/kimi"
@@ -36,7 +36,7 @@ if (mode === 'silent') return;
 if (mode === 'stubborn') process.on('SIGTERM', () => {});
 const ready = 'Local: http://127.0.0.1:' + port + '/#token=test-token';
 if (mode === 'nohttp') return console.log(ready);
-const reset = new Date(Date.now() + 7500 * 60000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+const reset = new Date(Date.now() + 7205 * 60000).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const env = (w, r, extra) => ({ code: 0, msg: 'success', data: { kind: 'ok', quota: { usages: {
   limit5h: { usedRatio: r, resetAt: reset }, limit7d: { usedRatio: w, resetAt: reset }
 }, extraUsage: null } }, request_id: '01M2WR59QVZ5WJFMF4A6TWESJB', ...extra });
@@ -62,7 +62,8 @@ http.createServer((req, res) => {
 EOF
 chmod +x "$K2/kimi"
 alive() { kill -0 "$(cat "$K2/kimi.pid")" 2>/dev/null && echo ALIVE || echo GONE; }
-kiso() { env -i HOME="$H0" PATH="$K2:$NODEBIN" NO_COLOR=1 DANDELION_KIMI_PORT="${DANDELION_KIMI_PORT:-$KQ}" DANDELION_GROK_HOME="$H0/empty" DANDELION_JUNIE_HOME="$H0/empty" DANDELION_CURSOR_AUTH_FILE="$H0/missing-cursor.json" DANDELION_HERMES_AUTH_FILE="$H0/missing-hermes.json" DANDELION_CLAUDE_WORK_CONFIG_DIR="$H0/.claude-work" "$@"; }
+kic() { env -i HOME="$H0" PATH="$K2:$NODEBIN" DANDELION_KIMI_PORT="${DANDELION_KIMI_PORT:-$KQ}" DANDELION_GROK_HOME="$H0/empty" DANDELION_JUNIE_HOME="$H0/empty" DANDELION_CURSOR_AUTH_FILE="$H0/missing-cursor.json" DANDELION_HERMES_AUTH_FILE="$H0/missing-hermes.json" DANDELION_CLAUDE_WORK_CONFIG_DIR="$H0/.claude-work" "$@"; }
+kiso() { kic NO_COLOR=1 "$@"; }
 kr() { echo "$1" > "$K2/mode"; rm -f "$K2/kimi.pid"; time timeout "$2" env -i HOME="$H0" PATH="$K2:$NODEBIN" NO_COLOR=1 DANDELION_KIMI_PORT=$KQ DANDELION_GROK_HOME="$H0/empty" DANDELION_JUNIE_HOME="$H0/empty" DANDELION_CURSOR_AUTH_FILE="$H0/missing-cursor.json" DANDELION_HERMES_AUTH_FILE="$H0/missing-hermes.json" DANDELION_CLAUDE_WORK_CONFIG_DIR="$H0/.claude-work" node "$PWD/src/main.ts" --once; echo "exit=$?"; alive; }
 ```
 
@@ -72,7 +73,7 @@ kr() { echo "$1" > "$K2/mode"; rm -f "$K2/kimi.pid"; time timeout "$2" env -i HO
 2. Run `kr ok 30`.
    - **Expected:** `exit=0` and `GONE`. Panels appear in the order claude, claude-work, agy, kimi, grok, codex, cursor, junie, hermes, kilo. The kimi panel reads `weekly                              ############--------  59% ↻ 5d0h` (or `↻ 4d23h`), then `5h                                  ########------------  42%` with no `↻`, then `kimi code · kimi`. No line is over 72 columns. `test-token` is not in the output.
 
-3. Run `echo ok > "$K2/mode"; kiso node src/main.ts --once`.
+3. Run `echo ok > "$K2/mode"; kic node src/main.ts --once` without `NO_COLOR`.
    - **Expected:** the kimi `weekly` gauge and `59%` are warm (yellow) and the `5h` ones are calm (green). The caption is dim.
 
 4. Run `kr live 30`.
