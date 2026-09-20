@@ -7,11 +7,23 @@ import {
   openEligibility,
   routeLine,
   summariseFleet,
+  validInstant,
   type ProviderUsage,
   type StateFile,
   type UsageWindow,
   type WindowKind
 } from './index.ts';
+
+describe('validInstant', () => {
+  it('accepts a real instant string', () => {
+    expect(validInstant('2026-09-18T10:00:00Z')).toBe('2026-09-18T10:00:00Z');
+  });
+
+  it('omits a non-string that stringifies to a valid instant', () => {
+    expect(validInstant(['2026-09-18T10:00:00Z'])).toBeUndefined();
+    expect(validInstant({ toString: () => '2026-09-18T10:00:00Z' })).toBeUndefined();
+  });
+});
 
 describe('formatCountdown', () => {
   it('formats days and hours', () => {

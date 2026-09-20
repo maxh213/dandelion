@@ -61,6 +61,7 @@ function ioWith(child: FakeChild | undefined, outcome: FetchOutcome = { status: 
   const launcher: Launcher = {
     launch: async (command, args) => {
       launches.push([command, args]);
+      if (args[0] !== 'web' || args[1] !== '--no-open') return undefined;
       return child;
     }
   };
@@ -106,6 +107,25 @@ describe('probeKimi', () => {
       ]
     });
     expect(child.stops).toBe(1);
+  });
+
+  it('fails immediately instead of waiting for a token when launch argv is empty', async () => {
+    const child = fakeChild('');
+    const launcher: Launcher = {
+      launch: async (command, args) => {
+        if (command !== 'kimi' || args[0] !== 'web' || args[1] !== '--no-open') {
+          child.exited = true;
+          return child;
+        }
+        child.log = 'token=test-token';
+        return child;
+      }
+    };
+    const fetcher: KimiIo['fetcher'] = { get: async () => ({ status: 200, body: BODY }) };
+    const usage = await probeKimi({ launcher, fetcher }, PORT, NOW);
+    expect(usage.status).toBe('ok');
+    expect(usage.windows).toStrictEqual(OK_WINDOWS);
+    expect(child.exited).toBe(false);
   });
 
   it('stops the child before resolving', async () => {
@@ -168,6 +188,7 @@ describe('probeKimi', () => {
     [envelope({ limit7d: { usedRatio: -1, resetAt: WEEKLY_RESET }, limit5h: { usedRatio: 0.42, resetAt: ROLLING_RESET } }), [ROLLING_42]],
     [envelope({ limit7d: { usedRatio: 0.59, resetAt: 'soon' } }), [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
     [envelope({ limit7d: { usedRatio: 0.59, resetAt: 42 } }), [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [envelope({ limit7d: { usedRatio: 0.59, resetAt: [WEEKLY_RESET] } }), [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
     [envelope({ limit7d: { usedRatio: Number.POSITIVE_INFINITY, resetAt: WEEKLY_RESET }, limit5h: { usedRatio: 0.42 } }), [ROLLING_42]],
     [envelope({ limit7d: { usedRatio: Number.NaN }, limit5h: { usedRatio: 0.42 } }), [ROLLING_42]],
     [{ ...envelope(), extraUsage: { usedRatio: 0.99 } }, OK_WINDOWS],

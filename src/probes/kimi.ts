@@ -32,18 +32,14 @@ const MAX_PORT = 65535;
 const POLL_MS = 500;
 const TOKEN_WAIT_MS = 20000;
 const REQUEST_TIMEOUT_MS = 10000;
-const FULL_PCT = 100;
-const USAGE_REQUEST = 'kimi usage request';
-const REQUEST_FAILED = `${USAGE_REQUEST} failed`;
 const TOKEN = /token=([A-Za-z0-9._-]+)|Bearer ([A-Za-z0-9._-]+)/;
-const DIGITS = /^\d+$/;
 
 function isDefaultPort(raw: string | undefined): raw is undefined | '' {
   return raw === undefined || raw === '';
 }
 
 function isValidPort(raw: string): boolean {
-  return DIGITS.test(raw) && Number(raw) >= 1 && Number(raw) <= MAX_PORT;
+  return /^\d+$/.test(raw) && Number(raw) >= 1 && Number(raw) <= MAX_PORT;
 }
 
 function parsePort(raw: string | undefined): number {
@@ -80,29 +76,20 @@ async function waitForToken(child: LaunchedProcess, waitedMs: number): Promise<s
 async function requestUsage(fetcher: KimiIo['fetcher'], port: number, token: string): Promise<string> {
   const url = `http://127.0.0.1:${port}/api/v1/oauth/usage`;
   const outcome = await fetcher.get(url, { Authorization: `Bearer ${token}` }, REQUEST_TIMEOUT_MS);
-  return successBody(outcome, USAGE_REQUEST, REQUEST_TIMEOUT_MS);
+  return successBody(outcome, 'kimi usage request', REQUEST_TIMEOUT_MS);
 }
 
 function requestFailed(msg: unknown): string {
-  return isFilled(msg) ? `${REQUEST_FAILED}: ${msg}` : REQUEST_FAILED;
+  return isFilled(msg) ? `kimi usage request failed: ${msg}` : 'kimi usage request failed';
 }
 
 function envelopeFailure(body: unknown): string | undefined {
   const code = fieldOf(body, 'code');
-  if (code === undefined || code === 0) return undefined;
-  return requestFailed(fieldOf(body, 'msg'));
-}
-
-function quotaUsages(body: unknown): Record<string, unknown> {
-  const data = fieldOf(body, 'data');
-  if (fieldOf(data, 'kind') !== 'ok') throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
-  const usages = fieldOf(fieldOf(data, 'quota'), 'usages');
-  if (!isRecord(usages)) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
-  return usages;
+  return code === undefined || code === 0 ? undefined : requestFailed(fieldOf(body, 'msg'));
 }
 
 function usedPctOf(ratio: unknown): number | undefined {
-  return isCount(ratio) ? Math.min(FULL_PCT, Math.round(FULL_PCT * ratio)) : undefined;
+  return isCount(ratio) ? Math.min(100, Math.round(100 * ratio)) : undefined;
 }
 
 function windowFrom(entry: unknown, identity: Pick<UsageWindow, 'label' | 'kind'>, resetsAt?: string): UsageWindow[] {
@@ -118,8 +105,10 @@ function rollingFrom(entry: unknown): UsageWindow[] {
   return windowFrom(entry, { label: '5h', kind: 'rolling' });
 }
 
-function windowsOf(usages: Record<string, unknown>): UsageWindow[] {
-  const windows = [...weeklyFrom(fieldOf(usages, 'limit7d')), ...rollingFrom(fieldOf(usages, 'limit5h'))];
+function windowsOf(usages: unknown): UsageWindow[] {
+  const windows = isRecord(usages)
+    ? [...weeklyFrom(fieldOf(usages, 'limit7d')), ...rollingFrom(fieldOf(usages, 'limit5h'))]
+    : [];
   if (windows.length === 0) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
   return windows;
 }
@@ -128,7 +117,9 @@ function parseUsage(body: string): UsageWindow[] {
   const parsed = parseJson(body);
   const failure = envelopeFailure(parsed);
   if (failure !== undefined) throw new ProbeUnavailable(failure);
-  return windowsOf(quotaUsages(parsed));
+  const data = fieldOf(parsed, 'data');
+  const usages = fieldOf(data, 'kind') === 'ok' ? fieldOf(fieldOf(data, 'quota'), 'usages') : undefined;
+  return windowsOf(usages);
 }
 
 async function readKimi(io: KimiIo, env: Record<string, string | undefined>): Promise<UsageWindow[]> {
