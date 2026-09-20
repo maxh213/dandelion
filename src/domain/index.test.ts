@@ -158,6 +158,16 @@ describe('routeLine', () => {
   });
 
   it.each([
+    ['kimi 10/10@72 beats grok 50', 'kimi: rolling 10 @-, weekly 10 @2026-09-17T11:00:00.000Z; grok: weekly 50 @2026-09-17T11:00:00.000Z', 'kimi-code/kimi-for-coding-highspeed kimi'],
+    ['kimi 90/10@72 trips to grok', 'kimi: rolling 90 @-, weekly 10 @2026-09-17T11:00:00.000Z; grok: weekly 50 @2026-09-17T11:00:00.000Z', 'grok-4.6 xhigh grok'],
+    ['kimi 95/0@72 trips to grok 97', 'kimi: rolling 95 @-, weekly 0 @2026-09-17T11:00:00.000Z; grok: weekly 97 @2026-09-17T11:00:00.000Z', 'grok-4.6 xhigh grok'],
+    ['kimi 0/95@2 evaporates past agy and does not trip', 'kimi: rolling 0 @-, weekly 95 @2026-09-14T13:00:00.000Z; agy: rolling 0 @-, weekly 0 @2026-09-17T11:00:00.000Z', 'kimi-code/kimi-for-coding-highspeed kimi'],
+    ['kimi 0/0@72 alone', 'kimi: rolling 0 @-, weekly 0 @2026-09-17T11:00:00.000Z', 'kimi-code/kimi-for-coding-highspeed kimi']
+  ])('018: %s', (_case, candidates, line) => {
+    expect(routeOf(candidates)).toBe(line);
+  });
+
+  it.each([
     ['junie alone at 30%', 'junie: weekly 30 @-', [], 'gemini-3.8-flash high junie'],
     ['junie alone at 100%', 'junie: weekly 100 @-', [], 'gemini-3.8-flash high junie'],
     ['junie with more left than grok', 'grok: weekly 50 @2026-09-17T11:00:00.000Z; junie: weekly 30 @-', [], 'gemini-3.8-flash high junie'],

@@ -3,12 +3,41 @@ import type { FetchOutcome } from '../domain/index.ts';
 import { probeKimi, type KimiIo, type LaunchedProcess, type Launcher } from './kimi.ts';
 
 const NOW = '2026-09-13T10:00:00Z';
-const BODY = JSON.stringify({
+const WEEKLY_RESET = '2026-09-18T10:00:00Z';
+const ROLLING_RESET = '2026-09-13T15:00:00Z';
+const HAPPY_USAGES = {
+  limit5h: { usedRatio: 0.42, resetAt: ROLLING_RESET },
+  limit7d: { usedRatio: 0.59, resetAt: WEEKLY_RESET }
+};
+const LIVE = {
+  code: 0,
+  msg: 'success',
   data: {
-    summary: { used: 590, limit: 1000, reset_at: '2026-09-18T10:00:00Z' },
-    limits: [{ used: 42, limit: 100, window: { unit: 'hour', value: 5 } }]
-  }
-});
+    kind: 'ok',
+    quota: {
+      usages: {
+        limit5h: { usedRatio: 0, resetAt: '2026-09-19T14:58:50Z' },
+        limit7d: { usedRatio: 0, resetAt: '2026-09-25T12:58:50Z' }
+      },
+      extraUsage: null
+    }
+  },
+  request_id: '01M2WR59QVZ5WJFMF4A6TWESJB'
+};
+
+function envelope(usages: unknown = HAPPY_USAGES): Record<string, unknown> {
+  return {
+    code: 0,
+    msg: 'success',
+    data: { kind: 'ok', quota: { usages, extraUsage: null } },
+    request_id: '01M2WR59QVZ5WJFMF4A6TWESJB'
+  };
+}
+
+const BODY = JSON.stringify(envelope());
+const WEEKLY_59 = { label: 'weekly', kind: 'weekly', usedPct: 59, resetsAt: WEEKLY_RESET };
+const ROLLING_42 = { label: '5h', kind: 'rolling', usedPct: 42 };
+const OK_WINDOWS = [WEEKLY_59, ROLLING_42];
 
 type FakeChild = LaunchedProcess & { log: string; exited: boolean; stops: number };
 
@@ -88,6 +117,7 @@ describe('probeKimi', () => {
   });
 
   it.each([
+    ['Local: http://127.0.0.1:48123/#token=abc.D-9_z'],
     ['open http://127.0.0.1:48123/?token=abc.D-9_z'],
     ['Authorization: Bearer abc.D-9_z']
   ])('finds the token in "%s"', async (log) => {
@@ -95,52 +125,64 @@ describe('probeKimi', () => {
     const usage = await probeKimi(io, PORT, NOW);
     expect(requests[0][1]).toEqual({ Authorization: 'Bearer abc.D-9_z' });
     expect(usage.status).toBe('ok');
+    expect(JSON.stringify(usage)).not.toContain('abc.D-9_z');
+  });
+
+  it('parses the verified live 2.0 body as 0% on both windows', async () => {
+    const child = fakeChild();
+    const usage = await probeKimi(ioWith(child, bodyOf(LIVE)).io, PORT, NOW);
+    expect(usage).toStrictEqual({
+      id: 'kimi',
+      displayName: 'kimi',
+      planLabel: 'kimi code',
+      fetchedAt: NOW,
+      status: 'ok',
+      windows: [
+        { label: 'weekly', kind: 'weekly', usedPct: 0, resetsAt: '2026-09-25T12:58:50Z' },
+        { label: '5h', kind: 'rolling', usedPct: 0 }
+      ]
+    });
+    expect(child.stops).toBe(1);
+  });
+
+  it('rounds limit7d 0.595 to 60% and keeps limit5h 0.42 at 42%', async () => {
+    const usages = {
+      limit5h: { usedRatio: 0.42, resetAt: ROLLING_RESET },
+      limit7d: { usedRatio: 0.595, resetAt: WEEKLY_RESET }
+    };
+    const usage = await probeKimi(ioWith(fakeChild(), bodyOf(envelope(usages))).io, PORT, NOW);
+    expect(usage.windows).toStrictEqual([
+      { label: 'weekly', kind: 'weekly', usedPct: 60, resetsAt: WEEKLY_RESET },
+      ROLLING_42
+    ]);
   });
 
   it.each<[unknown, unknown[]]>([
-    [{ data: { summary: { used: 500, limit: 1000 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 50 }]],
-    [{ data: { summary: { used: 1, limit: 3 }, limits: [] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 33 }]],
-    [{ data: { summary: { used: 2, limit: 3 }, limits: [{ used: 9, limit: 10, window: { unit: 'day', value: 1 } }] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 67 }]],
-    [{ data: { summary: { used: 125, limit: 1000 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 13 }]],
-    [{ data: { summary: { used: 0, limit: 1000 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 0 }]],
-    [{ data: { summary: { used: 1200, limit: 1000 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 120 }]],
-    [{ data: { summary: { used: 590, limit: 1000, reset_at: 'soon' } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000, reset_at: 42 } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000, reset_at: ['2026-09-18T10:00:00Z'] } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000, reset_at: '2026-02-30T99:00:00Z' } } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: 'x' } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: {} } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: [null] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: [{ used: 42, limit: 100 }] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
-    [{ data: { summary: { used: 590, limit: 1000 }, limits: [{ used: 42, limit: 100, window: null }] } }, [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]]
-  ])('reads summary variation %j', async (body, windows) => {
+    [envelope({ limit5h: { usedRatio: 0, resetAt: ROLLING_RESET }, limit7d: { usedRatio: 0, resetAt: WEEKLY_RESET } }), [{ label: 'weekly', kind: 'weekly', usedPct: 0, resetsAt: WEEKLY_RESET }, { label: '5h', kind: 'rolling', usedPct: 0 }]],
+    [envelope(), OK_WINDOWS],
+    [envelope({ limit5h: { usedRatio: 1, resetAt: ROLLING_RESET }, limit7d: { usedRatio: 1, resetAt: WEEKLY_RESET } }), [{ label: 'weekly', kind: 'weekly', usedPct: 100, resetsAt: WEEKLY_RESET }, { label: '5h', kind: 'rolling', usedPct: 100 }]],
+    [envelope({ limit5h: { usedRatio: 0, resetAt: ROLLING_RESET }, limit7d: { usedRatio: 1.2, resetAt: WEEKLY_RESET } }), [{ label: 'weekly', kind: 'weekly', usedPct: 100, resetsAt: WEEKLY_RESET }, { label: '5h', kind: 'rolling', usedPct: 0 }]],
+    [envelope({ limit7d: { usedRatio: 0.59, resetAt: WEEKLY_RESET } }), [WEEKLY_59]],
+    [envelope({ limit5h: { usedRatio: 0.42, resetAt: ROLLING_RESET } }), [ROLLING_42]],
+    [envelope({ limit7d: { usedRatio: 0.59, resetAt: WEEKLY_RESET }, limit5h: { usedRatio: 'x', resetAt: ROLLING_RESET } }), [WEEKLY_59]],
+    [envelope({ limit7d: { usedRatio: -1, resetAt: WEEKLY_RESET }, limit5h: { usedRatio: 0.42, resetAt: ROLLING_RESET } }), [ROLLING_42]],
+    [envelope({ limit7d: { usedRatio: 0.59, resetAt: 'soon' } }), [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [envelope({ limit7d: { usedRatio: 0.59, resetAt: 42 } }), [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
+    [envelope({ limit7d: { usedRatio: Number.POSITIVE_INFINITY, resetAt: WEEKLY_RESET }, limit5h: { usedRatio: 0.42 } }), [ROLLING_42]],
+    [envelope({ limit7d: { usedRatio: Number.NaN }, limit5h: { usedRatio: 0.42 } }), [ROLLING_42]],
+    [{ ...envelope(), extraUsage: { usedRatio: 0.99 } }, OK_WINDOWS],
+    [{ data: { kind: 'ok', quota: { usages: HAPPY_USAGES, extraUsage: { usedRatio: 1 } } } }, OK_WINDOWS],
+    [envelope({ ...HAPPY_USAGES, limit1d: { usedRatio: 0.99, resetAt: WEEKLY_RESET } }), OK_WINDOWS]
+  ])('reads 2.0 variation %j', async (body, windows) => {
     const usage = await probeKimi(ioWith(fakeChild(), bodyOf(body)).io, PORT, NOW);
     expect(usage).toMatchObject({ status: 'ok' });
     expect(usage.windows).toStrictEqual(windows);
   });
 
-  it('labels every hour entry 5h in response order and skips bad ones', async () => {
-    const hour = { unit: 'hour', value: 5 };
-    const body = {
-      data: {
-        summary: { used: 590, limit: 1000 },
-        limits: [
-          { used: 42, limit: 100, window: hour },
-          { used: 1, limit: 0, window: hour },
-          { used: 'x', limit: 100, window: hour },
-          { used: 3, window: hour },
-          { used: -1, limit: 100, window: hour },
-          { used: 7, limit: 10, window: { unit: 'hour', value: 1 } },
-          { used: 9, limit: 10, window: { unit: 'day', value: 7 } }
-        ]
-      }
-    };
-    const usage = await probeKimi(ioWith(fakeChild(), bodyOf(body)).io, PORT, NOW);
-    expect(usage.windows).toStrictEqual([
-      { label: 'weekly', kind: 'weekly', usedPct: 59 },
-      { label: '5h', kind: 'rolling', usedPct: 42 },
-      { label: '5h', kind: 'rolling', usedPct: 70 }
-    ]);
+  it('emits weekly then 5h even when the JSON lists limit5h first, and never copies limit5h.resetAt', async () => {
+    const usage = await probeKimi(ioWith(fakeChild(), bodyOf(envelope())).io, PORT, NOW);
+    expect(usage.windows).toStrictEqual(OK_WINDOWS);
+    expect(usage.windows[1]).not.toHaveProperty('resetsAt');
   });
 
   it.each<[string, FetchOutcome, string]>([
@@ -149,19 +191,21 @@ describe('probeKimi', () => {
     ['HTTP 500', { status: 500, body: '{}' }, 'kimi usage request failed: HTTP 500'],
     ['HTTP 199', { status: 199, body: BODY }, 'kimi usage request failed: HTTP 199'],
     ['HTTP 300', { status: 300, body: BODY }, 'kimi usage request failed: HTTP 300'],
-    ['a string used count', bodyOf({ data: { summary: { used: '590', limit: 1000 } } }), PARSE_FAILURE],
+    ['code 1 with msg', bodyOf({ ...envelope(), code: 1, msg: 'quota denied' }), 'kimi usage request failed: quota denied'],
+    ['code 1 with empty msg', bodyOf({ ...envelope(), code: 1, msg: '' }), 'kimi usage request failed'],
+    ['code 1 without msg', bodyOf({ code: 1, data: envelope().data }), 'kimi usage request failed'],
+    ['a string code 0', bodyOf({ code: '0', data: envelope().data }), 'kimi usage request failed'],
+    ['a null code', bodyOf({ code: null, data: envelope().data }), 'kimi usage request failed'],
     ['truncated JSON', bodyOf('{"data":'), PARSE_FAILURE],
-    ['no summary', bodyOf({ data: { limits: [] } }), PARSE_FAILURE],
+    ['kind error', bodyOf({ ...envelope(), data: { kind: 'error', quota: { usages: HAPPY_USAGES } } }), PARSE_FAILURE],
+    ['no quota.usages', bodyOf({ ...envelope(), data: { kind: 'ok', quota: {} } }), PARSE_FAILURE],
+    ['usages as an array', bodyOf({ ...envelope(), data: { kind: 'ok', quota: { usages: [] } } }), PARSE_FAILURE],
+    ['the 003 summary/limits body', bodyOf({ data: { summary: { used: 590, limit: 1000 }, limits: [{ used: 42, limit: 100, window: { unit: 'hour' } }] } }), PARSE_FAILURE],
+    ['both usedRatio strings', bodyOf(envelope({ limit5h: { usedRatio: '0.42' }, limit7d: { usedRatio: '0.59' } })), PARSE_FAILURE],
     ['null', bodyOf('null'), PARSE_FAILURE],
     ['an array', bodyOf('[]'), PARSE_FAILURE],
     ['null data', bodyOf({ data: null }), PARSE_FAILURE],
-    ['null summary', bodyOf({ data: { summary: null } }), PARSE_FAILURE],
-    ['a string summary', bodyOf({ data: { summary: 'x' } }), PARSE_FAILURE],
-    ['a limitless summary', bodyOf({ data: { summary: { used: 1 } } }), PARSE_FAILURE],
-    ['a zero limit', bodyOf({ data: { summary: { used: 1, limit: 0 } } }), PARSE_FAILURE],
-    ['a negative used', bodyOf({ data: { summary: { used: -1, limit: 1000 } } }), PARSE_FAILURE],
-    ['a string used', bodyOf({ data: { summary: { used: '590', limit: 1000 } } }), PARSE_FAILURE],
-    ['a string limit', bodyOf({ data: { summary: { used: 590, limit: '1000' } } }), PARSE_FAILURE]
+    ['a missing kind', bodyOf({ data: { quota: { usages: HAPPY_USAGES } } }), PARSE_FAILURE]
   ])('is unavailable and stops the child on %s', async (_case, outcome, reason) => {
     const child = fakeChild();
     const usage = await probeKimi(ioWith(child, outcome).io, PORT, NOW);

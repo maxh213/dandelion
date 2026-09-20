@@ -3,6 +3,8 @@ import {
   USAGE_PARSE_FAILURE,
   fieldOf,
   isCount,
+  isFilled,
+  isRecord,
   parseJson,
   successBody,
   unavailableReason,
@@ -78,33 +80,46 @@ async function requestUsage(fetcher: KimiIo['fetcher'], port: number, token: str
   return successBody(outcome, 'kimi usage request', REQUEST_TIMEOUT_MS);
 }
 
-function percentOf(entry: unknown): number | undefined {
-  const used = fieldOf(entry, 'used');
-  const limit = fieldOf(entry, 'limit');
-  if (!isCount(used) || !isCount(limit) || limit === 0) return undefined;
-  return Math.round((used * 100) / limit);
+function requestFailed(msg: unknown): string {
+  return isFilled(msg) ? `kimi usage request failed: ${msg}` : 'kimi usage request failed';
 }
 
-function weeklyWindow(summary: unknown): UsageWindow {
-  const usedPct = percentOf(summary);
-  if (usedPct === undefined) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
-  const resetsAt = validInstant(fieldOf(summary, 'reset_at'));
-  return withReset({ label: 'weekly', kind: 'weekly', usedPct }, resetsAt);
+function envelopeFailure(body: unknown): string | undefined {
+  const code = fieldOf(body, 'code');
+  return code === undefined || code === 0 ? undefined : requestFailed(fieldOf(body, 'msg'));
 }
 
-function hourWindow(entry: unknown): UsageWindow[] {
-  const hourly = fieldOf(fieldOf(entry, 'window'), 'unit') === 'hour';
-  const usedPct = hourly ? percentOf(entry) : undefined;
-  return usedPct === undefined ? [] : [{ label: '5h', kind: 'rolling', usedPct }];
+function usagesOf(body: unknown): unknown {
+  const data = fieldOf(body, 'data');
+  const usages = fieldOf(fieldOf(data, 'quota'), 'usages');
+  if (fieldOf(data, 'kind') !== 'ok' || !isRecord(usages)) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
+  return usages;
 }
 
-function hourWindows(limits: unknown): UsageWindow[] {
-  return Array.isArray(limits) ? limits.flatMap(hourWindow) : [];
+function usedPctOf(ratio: unknown): number | undefined {
+  return isCount(ratio) ? Math.min(100, Math.round(100 * ratio)) : undefined;
+}
+
+function weeklyFrom(entry: unknown): UsageWindow[] {
+  const usedPct = usedPctOf(fieldOf(entry, 'usedRatio'));
+  if (usedPct === undefined) return [];
+  return [withReset({ label: 'weekly', kind: 'weekly', usedPct }, validInstant(fieldOf(entry, 'resetAt')))];
+}
+
+function rollingFrom(entry: unknown): UsageWindow[] {
+  const usedPct = usedPctOf(fieldOf(entry, 'usedRatio'));
+  if (usedPct === undefined) return [];
+  return [{ label: '5h', kind: 'rolling', usedPct }];
 }
 
 function parseUsage(body: string): UsageWindow[] {
-  const data = fieldOf(parseJson(body), 'data');
-  return [weeklyWindow(fieldOf(data, 'summary')), ...hourWindows(fieldOf(data, 'limits'))];
+  const parsed = parseJson(body);
+  const failure = envelopeFailure(parsed);
+  if (failure !== undefined) throw new ProbeUnavailable(failure);
+  const usages = usagesOf(parsed);
+  const windows = [...weeklyFrom(fieldOf(usages, 'limit7d')), ...rollingFrom(fieldOf(usages, 'limit5h'))];
+  if (windows.length === 0) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
+  return windows;
 }
 
 async function readKimi(io: KimiIo, env: Record<string, string | undefined>): Promise<UsageWindow[]> {

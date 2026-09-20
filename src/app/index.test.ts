@@ -12,10 +12,34 @@ import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedP
 const NOW = '2026-09-13T10:00:00.000Z';
 const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
 const KIMI_BODY = JSON.stringify({
+  code: 0,
+  msg: 'success',
   data: {
-    summary: { used: 590, limit: 1000, reset_at: '2026-09-18T10:00:00Z' },
-    limits: [{ used: 42, limit: 100, window: { unit: 'hour', value: 5 } }]
-  }
+    kind: 'ok',
+    quota: {
+      usages: {
+        limit5h: { usedRatio: 0.42, resetAt: '2026-09-13T15:00:00Z' },
+        limit7d: { usedRatio: 0.59, resetAt: '2026-09-18T10:00:00Z' }
+      },
+      extraUsage: null
+    }
+  },
+  request_id: '01M2WR59QVZ5WJFMF4A6TWESJB'
+});
+const KIMI_LIVE_BODY = JSON.stringify({
+  code: 0,
+  msg: 'success',
+  data: {
+    kind: 'ok',
+    quota: {
+      usages: {
+        limit5h: { usedRatio: 0, resetAt: '2026-09-19T14:58:50Z' },
+        limit7d: { usedRatio: 0, resetAt: '2026-09-25T12:58:50Z' }
+      },
+      extraUsage: null
+    }
+  },
+  request_id: '01M2WR59QVZ5WJFMF4A6TWESJB'
 });
 const MISSING_KIMI: Launcher = { launch: async () => undefined };
 const KIMI_CHILD: LaunchedProcess = {
@@ -465,6 +489,77 @@ describe('kimi panel', () => {
     expect(lines.indexOf('agy')).toBeLessThan(kimi);
     expect(lines[kimi + 5]).toBe('grok');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+    expect(output).not.toContain('test-token');
+    expect(output).not.toContain('Could not parse usage from response');
+  });
+
+  it('colours weekly warm, 5h calm, and the caption dim', async () => {
+    const output = await runApp(routedRunner(), {}, NOW);
+    const WARM = '\x1b[33m';
+    expect(output).toContain(
+      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(12)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m\n${DIM}kimi code · kimi\x1b[0m\n`
+    );
+  });
+
+  it('renders 0% on both rows from the verified live 2.0 body', async () => {
+    const fetcher: Fetcher = { get: async () => ({ status: 200, body: KIMI_LIVE_BODY }), post: async () => ({ failure: 'network' }) };
+    const io = { ...routedRunner(), fetcher };
+    const output = await runApp(io, { NO_COLOR: '1' }, '2026-09-19T12:58:50Z');
+    const lines = output.split('\n');
+    const kimi = lines.indexOf('kimi');
+    expect(lines.slice(kimi - 1, kimi + 5)).toEqual([
+      '='.repeat(72),
+      'kimi',
+      'weekly                              --------------------   0% ↻ 6d0h',
+      '5h                                  --------------------   0%',
+      'kimi code · kimi',
+      '='.repeat(72)
+    ]);
+    expect(output).not.toContain('Could not parse usage from response');
+    expect(output).not.toContain('test-token');
+  });
+
+  it('trips on the 2.0 5h window and still binds on weekly', async () => {
+    const later = { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: '2026-09-06T10:00:00Z', end: '2026-09-16T10:00:00Z' };
+    const grokAt = (percent: number) =>
+      JSON.stringify({
+        ts: '2026-09-12T16:00:00.000Z',
+        msg: 'billing: fetched credits config',
+        ctx: { config: { creditUsagePercent: percent, currentPeriod: later }, subscriptionTier: 'SuperGrok' }
+      });
+    const kimiAt = (rolling: number, weekly: number) =>
+      JSON.stringify({
+        code: 0,
+        msg: 'success',
+        data: {
+          kind: 'ok',
+          quota: {
+            usages: {
+              limit5h: { usedRatio: rolling, resetAt: '2026-09-13T15:00:00Z' },
+              limit7d: { usedRatio: weekly, resetAt: '2026-09-16T10:00:00Z' }
+            },
+            extraUsage: null
+          }
+        }
+      });
+    const missing = { run: async () => ({ stdout: '', stderr: '', failure: 'missing' as const }) };
+    const routeOf = (rolling: number, weekly: number, grokPct: number) =>
+      runRoute(
+        {
+          ...ioOf(missing, HAPPY_KIMI, grokReader(grokAt(grokPct))),
+          fetcher: { get: async () => ({ status: 200, body: kimiAt(rolling, weekly) }), post: async () => ({ failure: 'network' as const }) }
+        },
+        GROK_ENV,
+        { mode: 'headroom', now: NOW, zone: 'UTC' }
+      );
+    expect(await routeOf(0.1, 0.1, 50)).toEqual({ line: 'kimi-code/kimi-for-coding-highspeed kimi', routed: true });
+    expect(await routeOf(0.95, 0, 97)).toEqual({ line: 'grok-4.6 xhigh grok', routed: true });
+    const onlyKimi = { ...ioOf(missing, HAPPY_KIMI, grokReader(undefined)) };
+    expect(await runRoute(onlyKimi, {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({
+      line: 'kimi-code/kimi-for-coding-highspeed kimi',
+      routed: true
+    });
+    expect(await runRoute(onlyKimi, {}, { mode: 'high', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
   });
 
   it('keeps the claude, agy and kilo panels unchanged next to kimi', async () => {
