@@ -11,7 +11,7 @@ export const NPM = join(dirname(process.execPath), 'npm');
 export const ENTER = '\x1b[?1049h';
 export const CLEAR = '\x1b[H\x1b[2J';
 export const RESTORE = '\x1b[?25h\x1b[?1049l';
-export const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo'];
+export const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 export const KIMI_EXITS = '#!/bin/sh\nexit 0\n';
 export const OTHER_PANELS = [
   /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude · personal · claude\n/,
@@ -21,7 +21,8 @@ export const OTHER_PANELS = [
   /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\n/,
   /\ncodex\napi-key billing · no usage windows\ncodex · codex\n/,
   /\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor\n/,
-  /\njunie\nno junie quota snapshot — run junie once\njunie · junie\n/
+  /\njunie\nno junie quota snapshot — run junie once\njunie · junie\n/,
+  /\nhermes\nno hermes auth — run hermes portal login\nhermes · hermes\n/
 ];
 const OUTER_TIMEOUT_MS = 60000;
 const PREFIX = 'dandelion-qa-007-';
@@ -64,6 +65,7 @@ export async function appEnv(pathDir) {
     DANDELION_GROK_HOME: grokHome,
     DANDELION_JUNIE_HOME: grokHome,
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
+    DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir,
     DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json')
   };

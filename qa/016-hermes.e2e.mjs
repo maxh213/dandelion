@@ -9,16 +9,22 @@ import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, stat, symlink 
 import assert from 'node:assert/strict';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PREFIX = 'dandelion-qa-015-';
+const PREFIX = 'dandelion-qa-016-';
 const OUTER_TIMEOUT_MS = 60000;
 const HOUR_MS = 3600000;
 const CLEAR = '\x1b[H\x1b[2J';
-const CALM = '\x1b[32m';
+const WARM = '\x1b[33m';
 const DIM = '\x1b[90m';
 const NOT_ROUTABLE = 'not routable (no usage windows)';
-const UNAVAILABLE = 'no junie quota snapshot — run junie once';
+const NO_AUTH = 'no hermes auth — run hermes portal login';
+const EXPIRED = 'hermes token expired — run hermes once';
+const HTTP_401 = 'hermes account request failed: HTTP 401';
+const AGENT = 'qa-dummy-hermes-agent-key-016';
+const ACCESS = 'qa-dummy-hermes-access-016';
+const CAPTION = 'Plus · $5.50 of $22 · hermes';
 const NAMES = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 const QUOTA = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
+const ACCOUNT_GET = `GET /api/oauth/account Bearer ${AGENT} application/json`;
 
 const FIXTURE = `#!/usr/bin/env node
 const http = require('node:http'), path = require('node:path');
@@ -63,6 +69,10 @@ function quotaLine(endedAtMs, kind, balance) {
   const quota = { type: `${QUOTA}.${kind}`, balanceUnit: 'CREDITS' };
   if (balance !== undefined) quota.balanceLeft = balance;
   return JSON.stringify({ kind: 'SessionA2uxEvent', event: { state: 'IN_PROGRESS' }, completion: { endedAtMs, taskCostUsd: 0.03, quota }, timestampMs: endedAtMs });
+}
+
+function expiry(past) {
+  return new Date(Date.now() + (past ? -HOUR_MS : 24 * HOUR_MS)).toISOString().replace(/\.\d{3}Z$/, '+00:00');
 }
 
 async function tempDir() {
@@ -111,6 +121,66 @@ async function cursorApi() {
   return server;
 }
 
+async function hermesPortal() {
+  const portal = { mode: 'ok', remaining: 5.5, hours: 72, requests: [] };
+  const server = createHttpServer((req, res) => {
+    portal.requests.push(`${req.method} ${req.url} ${req.headers.authorization} ${req.headers.accept}`);
+    if (portal.mode === 'unauthorized') {
+      res.writeHead(401).end(JSON.stringify({ error: `bad token ${req.headers.authorization}` }));
+      return;
+    }
+    const end = new Date(Date.now() + portal.hours * HOUR_MS).toISOString();
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      user: { email: 'qa@example.com' },
+      organisation: { id: 'o', slug: 'o', name: 'O' },
+      subscription: {
+        plan: 'Plus',
+        tier: 2,
+        monthly_charge: 20,
+        monthly_credits: 22,
+        current_period_end: end,
+        credits_remaining: portal.remaining,
+        rollover_credits: 6.591792646666667
+      },
+      purchased_credits_remaining: 0,
+      tool_access: { enabled: false },
+      managed_tools: false,
+      paid_service_access: {
+        allowed: true,
+        paid_access: true,
+        reason: 'usable_credits',
+        subscription_credits_remaining: portal.remaining,
+        purchased_credits_remaining: 0,
+        total_usable_credits: portal.remaining
+      }
+    }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  portal.server = server;
+  return portal;
+}
+
+async function writeAuth(path, { past = false } = {}) {
+  const exp = expiry(past);
+  await writeFile(path, JSON.stringify({
+    version: 1,
+    providers: {
+      nous: {
+        access_token: ACCESS,
+        refresh_token: 'qa-dummy-refresh-016',
+        client_id: 'hermes-cli',
+        portal_base_url: 'https://portal.nousresearch.com',
+        agent_key: AGENT,
+        agent_key_expires_at: exp,
+        expires_at: exp
+      }
+    },
+    active_provider: 'nous'
+  }) + '\n');
+}
+
 async function writeJunieHome(dir, balance, { newestAgoMs = HOUR_MS, dropNewest = false } = {}) {
   const now = Date.now();
   await rm(dir, { recursive: true, force: true });
@@ -131,18 +201,6 @@ async function writeJunieHome(dir, balance, { newestAgoMs = HOUR_MS, dropNewest 
     ...(dropNewest ? [] : [quotaLine(now - newestAgoMs, 'JetBrains', balance)])
   ].join('\n') + '\n';
   await writeFile(join(dir, 'sessions', 's-new', 'events.jsonl'), newest);
-}
-
-async function snapshotTree(dir) {
-  const entries = await readdir(dir, { recursive: true, withFileTypes: true }).catch(() => []);
-  const records = [];
-  for (const entry of entries) {
-    const path = join(entry.parentPath, entry.name);
-    const info = await stat(path);
-    const content = entry.isFile() ? await readFile(path, 'utf8') : '';
-    records.push([path, info.size, info.mtimeMs, content]);
-  }
-  return records.sort(([a], [b]) => a.localeCompare(b));
 }
 
 async function homeFor(usages, state) {
@@ -167,12 +225,12 @@ async function homeFor(usages, state) {
   }
   if (usages.cursor) {
     await mkdir(join(home, '.config', 'cursor'), { recursive: true });
-    await writeFile(join(home, '.config', 'cursor', 'auth.json'), '{"accessToken":"qa-015"}');
+    await writeFile(join(home, '.config', 'cursor', 'auth.json'), '{"accessToken":"qa-016"}');
   }
   return home;
 }
 
-async function envFor(ctx, usages, { state, extraEnv = {}, junieHome, color = false } = {}) {
+async function envFor(ctx, usages, { state, extraEnv = {}, junieHome, color = false, authFile } = {}) {
   if (usages.cursor) ctx.cursor.usage = usages.cursor;
   const vars = Object.fromEntries(Object.entries(ENV_NAMES)
     .filter(([name]) => usages[name])
@@ -187,8 +245,9 @@ async function envFor(ctx, usages, { state, extraEnv = {}, junieHome, color = fa
     DANDELION_STATE_FILE: join(home, 'state', 'eligibility.json'),
     DANDELION_KIMI_PORT: String(await freePort()),
     DANDELION_CURSOR_API_BASE: `http://127.0.0.1:${ctx.cursor.address().port}`,
-    DANDELION_JUNIE_HOME: junieHome ?? ctx.junie,
-    DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json'),
+    DANDELION_JUNIE_HOME: junieHome ?? ctx.empty,
+    DANDELION_HERMES_AUTH_FILE: authFile ?? ctx.auth,
+    DANDELION_HERMES_PORTAL_BASE: `http://127.0.0.1:${ctx.portal.server.address().port}`,
     DANDELION_REFRESH_SECONDS: '3600',
     ...(color ? {} : { NO_COLOR: '1' }),
     ...vars,
@@ -237,9 +296,25 @@ function assertOrder(stdout) {
   assert.deepEqual([...starts].sort((a, b) => a - b), starts, `panels are not in the order ${NAMES.join(', ')}:\n${stdout}`);
 }
 
-function assertAge(line, hours) {
-  const expected = hours >= 48 ? new RegExp(`^stale snapshot ${Math.floor(hours / 24)}d0h old$`) : new RegExp(`^snapshot ${hours}h[01]m old$`);
-  assert.match(line, expected, `age line: ${JSON.stringify(line)}`);
+function assertNoTokens(...texts) {
+  for (const text of texts) {
+    assert.equal((text.match(/qa-dummy-hermes-(agent-key|access)-016/g) || []).length, 0, `a dummy token leaked:\n${text}`);
+  }
+}
+
+function assertCredits(line, pct) {
+  assert.match(line, new RegExp(`^${creditsRow(pct)} ↻ (3d0h|2d23h)$`), `credits row: ${JSON.stringify(line)}`);
+}
+
+function assertAccountGet(portal) {
+  assert.deepEqual(portal.requests, [ACCOUNT_GET], `fixture requests: ${JSON.stringify(portal.requests)}`);
+}
+
+function configure(portal, remaining = 5.5, hours = 72, mode = 'ok') {
+  portal.remaining = remaining;
+  portal.hours = hours;
+  portal.mode = mode;
+  portal.requests.length = 0;
 }
 
 function startLive(env) {
@@ -279,134 +354,78 @@ async function quit(run) {
   assert.deepEqual(await run.closed, [0, null], `unexpected exit\noutput:\n${run.output}\nstderr:\n${run.stderr}`);
 }
 
-async function happyPathAndReferences(ctx) {
-  const before = await snapshotTree(ctx.junie);
-  const result = await run(ctx, '--once', { claude: [0, 20, 72], grok: [9, 130] });
+async function happyPathAndColour(ctx) {
+  const before = await readFile(ctx.auth, 'utf8');
+  configure(ctx.portal);
+  const result = await run(ctx, '--once', {});
   assert.equal(result.status, 0, describe('happy --once', result));
   assert.equal(result.stderr, '');
   assertOrder(result.stdout);
-  const junie = panelLines(result.stdout, 'junie');
-  assert.deepEqual(junie.slice(0, 2), ['junie', creditsRow(30)]);
-  assert.ok(!junie[1].includes('↻'), `credits row has a countdown:\n${junie[1]}`);
-  assertAge(junie[2], 1);
-  assert.equal(junie[3], '701513 credits · junie');
+  const hermes = panelLines(result.stdout, 'hermes');
+  assert.equal(hermes[0], 'hermes');
+  assertCredits(hermes[1], 75);
+  assert.equal(hermes[2], CAPTION);
+  assert.equal(panelLines(result.stdout, 'kilo')[0], 'kilo');
   assertWidth(result.stdout);
-  assert.deepEqual(await snapshotTree(ctx.junie), before, 'junie home changed during the happy-path run');
+  assert.equal(await readFile(ctx.auth, 'utf8'), before, 'the auth file changed');
+  assertNoTokens(result.stdout, result.stderr);
+  assertAccountGet(ctx.portal);
 
-  const colour = await run(ctx, '--once', { claude: [0, 20, 72], grok: [9, 130] }, { color: true });
+  configure(ctx.portal);
+  const colour = await run(ctx, '--once', {}, { color: true });
   assert.equal(colour.status, 0, describe('colour --once', colour));
-  assert.ok(colour.stdout.includes(`${CALM}${'█'.repeat(6)}${'░'.repeat(14)}\x1b[0m ${CALM} 30%\x1b[0m`), `junie gauge is not calm:\n${colour.stdout}`);
-  assert.ok(colour.stdout.includes(`${DIM}snapshot `), `snapshot line is not dim:\n${colour.stdout}`);
-  assert.ok(colour.stdout.includes(`${DIM}701513 credits · junie\x1b[0m`), `caption is not dim:\n${colour.stdout}`);
-
-  const emptyRef = await run(ctx, '--once', {}, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } });
-  assert.equal(emptyRef.status, 0, describe('empty reference', emptyRef));
-  const emptyLines = panelLines(emptyRef.stdout, 'junie');
-  assert.equal(emptyLines[1], 'balance without a reference');
-  assertAge(emptyLines[2], 1);
-  assert.equal(emptyLines[3], '701513 credits · junie');
-  assert.ok(!emptyLines.some((line) => line.includes('#') || line.includes('%')), `empty-reference panel has a gauge:\n${emptyRef.stdout}`);
-
-  const badRef = await run(ctx, '--once', {}, { extraEnv: { DANDELION_JUNIE_REFERENCE: 'abc' } });
-  assert.equal(panelLines(badRef.stdout, 'junie')[1], creditsRow(30), describe('abc reference', badRef));
-
-  const twoM = await run(ctx, '--once', {}, { extraEnv: { DANDELION_JUNIE_REFERENCE: '2000000' } });
-  assert.equal(panelLines(twoM.stdout, 'junie')[1], creditsRow(65), describe('reference 2000000', twoM));
-}
-
-async function balancesFallbackAndStale(ctx) {
-  await writeJunieHome(ctx.junie, 1000000);
-  const full = await run(ctx, '--once', {});
-  const fullLines = panelLines(full.stdout, 'junie');
-  assert.equal(fullLines[1], creditsRow(0), describe('full balance', full));
-  assert.equal(fullLines[3], '1000000 credits · junie');
-
-  await writeJunieHome(ctx.junie, 0);
-  const zero = await run(ctx, '--once', {});
-  const zeroLines = panelLines(zero.stdout, 'junie');
-  assert.equal(zeroLines[1], creditsRow(100), describe('zero balance', zero));
-  assert.equal(zeroLines[3], '0 credits · junie');
-
-  await writeJunieHome(ctx.junie, 701512.73275, { dropNewest: true });
-  const fallback = await run(ctx, '--once', {});
-  const older = panelLines(fallback.stdout, 'junie');
-  assert.equal(older[1], creditsRow(10), describe('fallback', fallback));
-  assertAge(older[2], 3);
-  assert.equal(older[3], '900000 credits · junie');
-
-  await writeJunieHome(ctx.junie, 701512.73275, { newestAgoMs: 3 * 86400000 });
-  const stale = await run(ctx, '--once', {});
-  const staleLines = panelLines(stale.stdout, 'junie');
-  assert.equal(staleLines[1], creditsRow(30), describe('stale row', stale));
-  assertAge(staleLines[2], 72);
-  const staleColour = await run(ctx, '--once', {}, { color: true });
-  assert.ok(staleColour.stdout.includes(`${DIM}${'━'.repeat(72)}\njunie\n`), `stale panel is not dim:\n${staleColour.stdout}`);
-  const junieBlock = staleColour.stdout.slice(staleColour.stdout.indexOf('\njunie\n'), staleColour.stdout.indexOf('\nhermes\n'));
-  assert.ok(!junieBlock.includes(CALM), `stale gauge still has a ramp escape:\n${junieBlock}`);
-  await writeJunieHome(ctx.junie, 701512.73275);
-}
-
-async function emptyHomeUnchanged(ctx) {
-  const before = await snapshotTree(ctx.empty);
-  const empty = await run(ctx, '--once', {}, { junieHome: ctx.empty });
-  assert.equal(empty.status, 0, describe('empty home', empty));
-  assert.equal(empty.signal, null);
-  assert.deepEqual(panelLines(empty.stdout, 'junie').slice(0, 3), ['junie', UNAVAILABLE, 'junie · junie']);
-  assertOrder(empty.stdout);
-  assert.deepEqual(await snapshotTree(ctx.empty), before, 'empty junie home changed');
-
-  const missing = join(ctx.empty, 'nowhere');
-  const gone = await run(ctx, '--once', {}, { junieHome: missing });
-  assert.equal(gone.status, 0, describe('missing home', gone));
-  assert.deepEqual(panelLines(gone.stdout, 'junie').slice(0, 3), ['junie', UNAVAILABLE, 'junie · junie']);
-  await assert.rejects(stat(missing), 'missing junie home was created');
+  assert.ok(colour.stdout.includes(`${WARM}${'█'.repeat(15)}${'░'.repeat(5)}\x1b[0m ${WARM} 75%\x1b[0m`), `hermes gauge is not warm:\n${colour.stdout}`);
+  assert.ok(colour.stdout.includes(`${DIM}${CAPTION}\x1b[0m`), `caption is not dim:\n${colour.stdout}`);
+  assertNoTokens(colour.stdout, colour.stderr);
 }
 
 async function routeCases(ctx) {
   const rows = [
-    ['junie beats grok 50', 'route', { grok: [50, 72] }, {}, 'gemini-3.8-flash high junie', 0],
-    ['empty reference skips junie', 'route', { grok: [50, 72] }, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'grok-4.6 xhigh grok', 0],
-    ['empty reference alone', 'route', {}, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'none', 1],
-    ['live case junie 30%', 'route', liveCase(100), {}, 'grok-4.6 xhigh grok', 0],
-    ['live case junie 0%', 'route', liveCase(100), { junieHome: ctx.full }, 'gemini-3.8-flash high junie', 0],
-    ['live case empty reference', 'route', liveCase(100), { junieHome: ctx.full, extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'grok-4.6 xhigh grok', 0],
-    ['live case junie ineligible', 'route', liveCase(100), { junieHome: ctx.full, state: '{"junie": false}' }, 'grok-4.6 xhigh grok', 0],
-    ['live case --high', 'route --high', liveCase(100), {}, 'claude-fable-5-1 max claude', 0],
-    ['--high never uses junie', 'route --high', {}, { junieHome: ctx.full }, 'none', 1]
+    ['live case junie 30% hermes 75%', 'route', liveCase(100), {}, 5.5, 72, 'grok-4.6 xhigh grok', 0],
+    ['live case hermes 0%', 'route', liveCase(100), {}, 22, 72, 'x-ai/grok-4.6 xhigh hermes', 0],
+    ['live case junie 0% hermes 0%', 'route', liveCase(100), { junieHome: ctx.full }, 22, 72, 'gemini-3.8-flash high junie', 0],
+    ['hermes 60% evaporates in 1h', 'route', liveCase(100), {}, 8.8, 1, 'x-ai/grok-4.6 xhigh hermes', 0],
+    ['hermes ineligible', 'route', liveCase(100), { state: '{"hermes": false}' }, 22, 72, 'grok-4.6 xhigh grok', 0],
+    ['live case --high', 'route --high', liveCase(100), {}, 22, 72, 'claude-fable-5-1 max claude', 0],
+    ['--high never uses hermes', 'route --high', {}, {}, 22, 72, 'none', 1]
   ];
-  for (const [label, args, usages, options, line, code] of rows) {
-    const result = await run(ctx, args, usages, options);
+  for (const [label, args, usages, options, remaining, hours, line, code] of rows) {
+    configure(ctx.portal, remaining, hours);
+    const result = await run(ctx, args, usages, { ...options, junieHome: options.junieHome ?? ctx.junie });
     assert.deepEqual(
       { stdout: result.stdout, stderr: result.stderr, status: result.status },
       { stdout: `${line}\n`, stderr: '', status: code },
       describe(label, result)
     );
+    assertNoTokens(result.stdout, result.stderr);
   }
 }
 
 async function liveToggleAndFlash(ctx) {
-  const env = await envFor(ctx, { grok: [9, 130] });
+  configure(ctx.portal, 22);
+  const env = await envFor(ctx, {});
   const session = startLive(env);
   try {
     await waitSettled(session);
+    assert.ok(lastFrame(session).includes('x-ai/grok-4.6 xhigh'), lastFrame(session));
+    assert.match(lastFrame(session), /\| hermes +\|/, lastFrame(session));
     session.child.stdin.write('k');
     await waitFor(session, () => panelLines(lastFrame(session), 'kilo')[0] === '▸ kilo', 10000, 'selected kilo');
     session.child.stdin.write('k');
     await waitFor(session, () => panelLines(lastFrame(session), 'hermes')[0].startsWith('▸ hermes'), 10000, 'selected hermes');
-    session.child.stdin.write('k');
-    await waitFor(session, () => panelLines(lastFrame(session), 'junie')[0].startsWith('▸ junie'), 10000, 'selected junie');
     session.child.stdin.write(' ');
-    const off = `▸ junie${' '.repeat(54)}routing off`;
-    await waitFor(session, () => panelLines(lastFrame(session), 'junie')[0] === off, 10000, 'junie routing off');
+    const off = `▸ hermes${' '.repeat(53)}routing off`;
+    await waitFor(session, () => panelLines(lastFrame(session), 'hermes')[0] === off, 10000, 'hermes routing off');
     assert.equal([...off].length, 72);
-    assert.ok(lastFrame(session).includes('grok-4.6 xhigh'), lastFrame(session));
-    assert.deepEqual(JSON.parse(await readFile(env.DANDELION_STATE_FILE, 'utf8')), { junie: false });
+    assert.match(lastFrame(session), /\| none +\|/, lastFrame(session));
+    assert.deepEqual(JSON.parse(await readFile(env.DANDELION_STATE_FILE, 'utf8')), { hermes: false });
     await quit(session);
   } finally {
     session.child.kill();
   }
 
-  const flashEnv = await envFor(ctx, { grok: [9, 130] }, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } });
+  configure(ctx.portal, 22);
+  const flashEnv = await envFor(ctx, {}, { authFile: join(ctx.hermesDir, 'missing.json') });
   const flash = startLive(flashEnv);
   try {
     await waitSettled(flash);
@@ -414,23 +433,21 @@ async function liveToggleAndFlash(ctx) {
     await waitFor(flash, () => panelLines(lastFrame(flash), 'kilo')[0] === '▸ kilo', 10000, 'selected kilo');
     flash.child.stdin.write('k');
     await waitFor(flash, () => panelLines(lastFrame(flash), 'hermes')[0] === '▸ hermes', 10000, 'selected hermes');
-    flash.child.stdin.write('k');
-    await waitFor(flash, () => panelLines(lastFrame(flash), 'junie')[0] === '▸ junie', 10000, 'selected junie');
     const pressedAt = Date.now();
     const firstAfter = flash.frameStarts.length;
     flash.child.stdin.write(' ');
-    const caption = (frame) => panelLines(frame, 'junie').at(-1);
+    const caption = (frame) => panelLines(frame, 'hermes').at(-1);
     const indexWhere = (from, text) => frames(flash).findIndex((frame, index) => index >= from && caption(frame) === text);
-    await waitFor(flash, () => indexWhere(firstAfter, NOT_ROUTABLE) >= 0, 10000, 'junie not routable flash');
+    await waitFor(flash, () => indexWhere(firstAfter, NOT_ROUTABLE) >= 0, 10000, 'hermes not routable flash');
     const flashed = indexWhere(firstAfter, NOT_ROUTABLE);
-    await waitFor(flash, () => indexWhere(flashed, '701513 credits · junie') >= 0, 10000, 'junie caption back');
-    const back = indexWhere(flashed, '701513 credits · junie');
+    await waitFor(flash, () => indexWhere(flashed, 'hermes · hermes') >= 0, 10000, 'hermes caption back');
+    const back = indexWhere(flashed, 'hermes · hermes');
     const flashDelay = flash.frameStarts[flashed] - pressedAt;
     const backDelay = flash.frameStarts[back] - pressedAt;
     assert.ok(flashDelay < 1000, `the flash took ${flashDelay}ms to draw`);
     assert.ok(backDelay >= 1900 && backDelay <= 3000, `the caption came back after ${backDelay}ms`);
     assert.ok(frames(flash).slice(firstAfter).every((frame) => !frame.includes('routing off')), 'a header shows routing off');
-    await assert.rejects(stat(flashEnv.DANDELION_STATE_FILE), 'the unreferenced toggle wrote state');
+    await assert.rejects(stat(flashEnv.DANDELION_STATE_FILE), 'the missing-auth toggle wrote state');
     await quit(flash);
   } finally {
     flash.child.kill();
@@ -438,41 +455,74 @@ async function liveToggleAndFlash(ctx) {
 }
 
 async function fleetSummary(ctx) {
-  await writeJunieHome(ctx.junie, 150000);
+  configure(ctx.portal, 3.3);
   const hotEnv = await envFor(ctx, {});
   const hot = startLive(hotEnv);
   try {
     await waitSettled(hot);
     const settled = frames(hot).find((frame) => !frame.includes('probing…'));
-    assert.equal(panelLines(settled, 'junie')[1], creditsRow(85), settled);
-    assert.equal(settled.split('\n')[1], '1/1 windows above 80% · next reset: none', settled);
+    assertCredits(panelLines(settled, 'hermes')[1], 85);
+    assert.match(settled.split('\n')[1], /^1\/1 windows above 80% · next reset: hermes credits in (3d0h|2d23h)$/, settled);
     await quit(hot);
   } finally {
     hot.child.kill();
   }
 
-  const noneEnv = await envFor(ctx, {}, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } });
-  const none = startLive(noneEnv);
+  configure(ctx.portal, 5.5);
+  const calmEnv = await envFor(ctx, {});
+  const calm = startLive(calmEnv);
   try {
-    await waitSettled(none);
-    const settled = frames(none).find((frame) => !frame.includes('probing…'));
-    assert.equal(settled.split('\n')[1], 'all windows below 80% · next reset: none', settled);
-    await quit(none);
+    await waitSettled(calm);
+    const settled = frames(calm).find((frame) => !frame.includes('probing…'));
+    assertCredits(panelLines(settled, 'hermes')[1], 75);
+    assert.match(settled.split('\n')[1], /^all windows below 80% · next reset: hermes credits in (3d0h|2d23h)$/, settled);
+    await quit(calm);
   } finally {
-    none.child.kill();
+    calm.child.kill();
   }
-  await writeJunieHome(ctx.junie, 701512.73275);
 }
 
-async function readmeDocumentsJunie() {
+async function failuresExpiredMissing401(ctx) {
+  await writeAuth(ctx.auth, { past: true });
+  configure(ctx.portal);
+  const expired = await run(ctx, '--once', {});
+  assert.equal(expired.status, 0, describe('expired token', expired));
+  assert.deepEqual(panelLines(expired.stdout, 'hermes').slice(0, 3), ['hermes', EXPIRED, 'hermes · hermes']);
+  assert.deepEqual(ctx.portal.requests, [], 'expired token still requested the portal');
+  assertNoTokens(expired.stdout, expired.stderr, EXPIRED);
+
+  configure(ctx.portal);
+  const missing = await run(ctx, '--once', {}, { authFile: join(ctx.hermesDir, 'missing.json') });
+  assert.equal(missing.status, 0, describe('missing auth', missing));
+  assert.deepEqual(panelLines(missing.stdout, 'hermes').slice(0, 3), ['hermes', NO_AUTH, 'hermes · hermes']);
+  assert.deepEqual(ctx.portal.requests, [], 'missing auth still requested the portal');
+  assertNoTokens(missing.stdout, missing.stderr, NO_AUTH);
+
+  await writeAuth(ctx.auth);
+  configure(ctx.portal, 5.5, 72, 'unauthorized');
+  const started = Date.now();
+  const unauthorized = await run(ctx, '--once', {});
+  const elapsed = Date.now() - started;
+  assert.equal(unauthorized.status, 0, describe('HTTP 401', unauthorized));
+  assert.ok(elapsed < 5000, `401 took ${elapsed}ms`);
+  assert.deepEqual(panelLines(unauthorized.stdout, 'hermes').slice(0, 3), ['hermes', HTTP_401, 'hermes · hermes']);
+  assertNoTokens(unauthorized.stdout, unauthorized.stderr, HTTP_401);
+  assertAccountGet(ctx.portal);
+  configure(ctx.portal);
+}
+
+async function readmeDocumentsHermes() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
-  assert.match(readme, /^- `junie` - reads the newest completion snapshot from `<junie home>\/sessions\/<id>\/events\.jsonl`/m);
+  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy|kimi|grok|codex|cursor|junie|hermes|kilo)` /.test(line));
+  assert.deepEqual(providers.map((line) => line.split('`')[1]), NAMES);
+  assert.match(providers[8], /Nous Portal tokens from the hermes auth file without running hermes/);
+  assert.match(providers[8], /GETs `\/api\/oauth\/account` \(15s timeout\)/);
   assert.ok(readme.includes('All ten probes run in parallel'));
-  assert.match(readme, /^- `DANDELION_JUNIE_HOME` - .*Defaults to `~\/\.junie`.*never writes to it/m);
-  assert.match(readme, /^- `DANDELION_JUNIE_REFERENCE` - .*Defaults to `1000000`.*empty string, there is no reference/m);
-  assert.ok(readme.includes('| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |'));
-  assert.ok(readme.includes('junie credits'));
-  assert.ok(readme.includes('`--high` does not use junie'));
+  assert.match(readme, /^- `DANDELION_HERMES_AUTH_FILE` - .*Defaults to `~\/\.hermes\/auth\.json`/m);
+  assert.match(readme, /^- `DANDELION_HERMES_PORTAL_BASE` - .*Defaults to `https:\/\/portal\.nousresearch\.com`/m);
+  assert.ok(readme.includes('| hermes | `x-ai/grok-4.6 xhigh` | `x-ai/grok-4.6 xhigh` |'));
+  assert.ok(readme.includes('hermes credits'));
+  assert.ok(readme.includes('`--high` does not use hermes'));
   const pkg = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8'));
   assert.equal(pkg.dependencies, undefined, 'package.json has a dependencies section');
 }
@@ -486,23 +536,27 @@ async function assertNoQaProcessLeft() {
 }
 
 export default async function () {
-  const server = await cursorApi();
+  const cursor = await cursorApi();
+  const portal = await hermesPortal();
   try {
+    const hermesDir = await tempDir();
+    const auth = join(hermesDir, 'auth.json');
+    await writeAuth(auth);
     const junie = await tempDir();
     const empty = await tempDir();
     const full = await tempDir();
     await writeJunieHome(junie, 701512.73275);
     await writeJunieHome(full, 1000000);
-    const ctx = { zone: localElevenZone(), cursor: server, bin: await fixtureDir(), junie, empty, full };
-    await happyPathAndReferences(ctx);
-    await balancesFallbackAndStale(ctx);
-    await emptyHomeUnchanged(ctx);
+    const ctx = { zone: localElevenZone(), cursor, portal, bin: await fixtureDir(), hermesDir, auth, junie, empty, full };
+    await happyPathAndColour(ctx);
     await routeCases(ctx);
     await liveToggleAndFlash(ctx);
     await fleetSummary(ctx);
-    await readmeDocumentsJunie();
+    await failuresExpiredMissing401(ctx);
+    await readmeDocumentsHermes();
   } finally {
-    server.close();
+    cursor.close();
+    portal.server.close();
     await Promise.all(temps.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   }
   await assertNoQaProcessLeft();

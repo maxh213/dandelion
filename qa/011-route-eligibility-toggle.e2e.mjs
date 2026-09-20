@@ -91,6 +91,7 @@ async function sandbox(ctx, usages, extraEnv = {}) {
     TERM: 'xterm',
     Q_T0: String(ctx.t0),
     DANDELION_STATE_FILE: join(tmp, 'state', 'eligibility.json'),
+    DANDELION_HERMES_AUTH_FILE: join(tmp, 'missing-hermes.json'),
     ...q,
     ...extraEnv
   };

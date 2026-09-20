@@ -135,6 +135,7 @@ async function run(ctx, args, usages, extraEnv = {}) {
   const env = {
     HOME: home,
     DANDELION_STATE_FILE: join(home, 'no-state', 'eligibility.json'),
+    DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json'),
     TZ: ctx.zone,
     PATH: ctx.bin,
     DANDELION_KIMI_PORT: String(await freePort()),

@@ -159,6 +159,7 @@ async function envFor(ctx, usages, state, extraEnv) {
   return {
     HOME: home,
     DANDELION_STATE_FILE: join(home, 'state', 'eligibility.json'),
+    DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json'),
     TZ: ctx.zone,
     PATH: ctx.bin,
     DANDELION_KIMI_PORT: String(await freePort()),

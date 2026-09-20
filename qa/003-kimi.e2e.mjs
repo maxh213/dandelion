@@ -62,7 +62,7 @@ function freePort() {
 
 async function runApp(dir) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, NO_COLOR: '1', DANDELION_KIMI_PORT: String(await freePort()), DANDELION_JUNIE_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json') };
+  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, NO_COLOR: '1', DANDELION_KIMI_PORT: String(await freePort()), DANDELION_JUNIE_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(dir, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json') };
   const started = Date.now();
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   const elapsed = Date.now() - started;
