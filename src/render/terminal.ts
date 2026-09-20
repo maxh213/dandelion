@@ -349,19 +349,23 @@ function probingAnswer(spinner: number): BoxAnswer {
   return { model: probingLine(spinner), account: '', dimmed: true };
 }
 
-type MidnightCache = { zone: string; fromMs: number; midnightMs: number; midnight: string };
+let midnightZone: string | undefined;
+let midnightFromMs: number | undefined;
+let midnightUntilMs: number | undefined;
+let midnightInstant: string | undefined;
 
-let midnightCache: MidnightCache | undefined;
-
-function cacheHolds(cache: MidnightCache, zone: string, nowMs: number): boolean {
-  return cache.zone === zone && nowMs >= cache.fromMs && nowMs < cache.midnightMs;
+function cacheHolds(zone: string, nowMs: number): boolean {
+  return midnightZone === zone && nowMs >= Number(midnightFromMs) && nowMs < Number(midnightUntilMs);
 }
 
 function cachedMidnight(zone: string, now: string): string {
   const nowMs = Date.parse(now);
-  if (midnightCache !== undefined && cacheHolds(midnightCache, zone, nowMs)) return midnightCache.midnight;
+  if (cacheHolds(zone, nowMs)) return String(midnightInstant);
   const midnight = nextLocalMidnight(zone, now);
-  midnightCache = { zone, fromMs: nowMs, midnightMs: Date.parse(midnight), midnight };
+  midnightZone = zone;
+  midnightFromMs = nowMs;
+  midnightUntilMs = Date.parse(midnight);
+  midnightInstant = midnight;
   return midnight;
 }
 
