@@ -10,12 +10,19 @@ function parseReference(rawReference: string | undefined): number | undefined {
   return Number.parseFloat(rawReference);
 }
 
+function amountIn(stdout: string): number | undefined {
+  const captured = BALANCE_LINE.exec(stdout)?.[1];
+  return captured === undefined ? undefined : Number.parseFloat(captured);
+}
+
+function kiloBalance(amount: number, reference: number | undefined): Balance {
+  const balance = { amount, currency: '$' };
+  return reference === undefined ? balance : { ...balance, reference };
+}
+
 function parseBalance(stdout: string, rawReference: string | undefined): Balance | undefined {
-  const match = BALANCE_LINE.exec(stdout);
-  if (!match) return undefined;
-  const amount = Number.parseFloat(match[1]);
-  const reference = parseReference(rawReference);
-  return reference === undefined ? { amount, currency: '$' } : { amount, currency: '$', reference };
+  const amount = amountIn(stdout);
+  return amount === undefined ? undefined : kiloBalance(amount, parseReference(rawReference));
 }
 
 export function kiloProbe(env: Record<string, string | undefined>): CliProbe {

@@ -5,6 +5,7 @@ import {
   isCount,
   isFilled,
   isSuccess,
+  parseJson,
   successBody,
   unavailableReason,
   withReset,
@@ -26,10 +27,10 @@ const DIGITS = /^\d+$/;
 const FALLBACK_LABEL = 'cursor';
 const NO_AUTH = 'no cursor auth — run cursor-agent login';
 const WINDOW_FIELDS = [
-  ['total', 'totalPercentUsed'],
-  ['auto', 'autoPercentUsed'],
-  ['api', 'apiPercentUsed']
-] as const satisfies ReadonlyArray<readonly [string, string]>;
+  { label: 'total', key: 'totalPercentUsed' },
+  { label: 'auto', key: 'autoPercentUsed' },
+  { label: 'api', key: 'apiPercentUsed' }
+] as const satisfies ReadonlyArray<{ label: string; key: string }>;
 
 function authFile(reader: FileReader, env: Env): string {
   return env['DANDELION_CURSOR_AUTH_FILE'] || `${reader.homeDir()}/.config/cursor/auth.json`;
@@ -44,8 +45,7 @@ function tokenOf(auth: unknown): string {
 async function readToken(reader: FileReader, env: Env): Promise<string> {
   const text = await reader.read(authFile(reader, env));
   try {
-    const parsed: unknown = JSON.parse(String(text));
-    return tokenOf(parsed);
+    return tokenOf(parseJson(String(text)));
   } catch {
     throw new ProbeUnavailable(NO_AUTH);
   }
@@ -74,7 +74,7 @@ function windowOf(label: string, percent: unknown, resetsAt: string | undefined)
 function windowsOf(usage: unknown): UsageWindow[] {
   const planUsage = fieldOf(usage, 'planUsage');
   const resetsAt = cycleEnd(fieldOf(usage, 'billingCycleEnd'));
-  const windows = WINDOW_FIELDS.flatMap(([label, key]) => windowOf(label, fieldOf(planUsage, key), resetsAt));
+  const windows = WINDOW_FIELDS.flatMap(({ label, key }) => windowOf(label, fieldOf(planUsage, key), resetsAt));
   if (windows.length === 0) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
   return windows;
 }
@@ -85,8 +85,7 @@ function labelOf(name: unknown, price: unknown): string {
 }
 
 function planLabelFrom(body: string): string {
-  const parsed: unknown = JSON.parse(body);
-  const info = fieldOf(parsed, 'planInfo');
+  const info = fieldOf(parseJson(body), 'planInfo');
   return labelOf(fieldOf(info, 'planName'), fieldOf(info, 'price'));
 }
 
@@ -103,8 +102,7 @@ async function readCursor(io: CursorIo, env: Env): Promise<{ planLabel: string; 
   const token = await readToken(io.reader, env);
   const usage = postTo(io, env, token, 'GetCurrentPeriodUsage');
   const plan = postTo(io, env, token, 'GetPlanInfo');
-  const parsed: unknown = JSON.parse(successBody(await usage, 'cursor usage request', REQUEST_TIMEOUT_MS));
-  const windows = windowsOf(parsed);
+  const windows = windowsOf(parseJson(successBody(await usage, 'cursor usage request', REQUEST_TIMEOUT_MS)));
   return { planLabel: await planLabelOf(plan), windows };
 }
 

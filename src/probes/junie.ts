@@ -1,4 +1,4 @@
-import { fieldOf, isCount, newestLineMatch, usedPctFromRemaining, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, matchesOnJsonLine, newestLineMatch, usedPctFromRemaining, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type JunieIo = { reader: FileReader };
 
@@ -22,12 +22,7 @@ function usableSessions(entry: unknown): Session[] {
 }
 
 function sessionsOn(line: string): Session[] {
-  try {
-    const parsed: unknown = JSON.parse(line);
-    return usableSessions(parsed);
-  } catch {
-    return [];
-  }
+  return matchesOnJsonLine(line, usableSessions);
 }
 
 async function sessionsNewestFirst(reader: FileReader, home: string): Promise<Session[]> {
@@ -48,12 +43,7 @@ function usableSnapshots(completion: unknown): Snapshot[] {
 }
 
 function snapshotsOn(line: string): Snapshot[] {
-  try {
-    const parsed: unknown = JSON.parse(line);
-    return usableSnapshots(fieldOf(parsed, 'completion'));
-  } catch {
-    return [];
-  }
+  return matchesOnJsonLine(line, (parsed) => usableSnapshots(fieldOf(parsed, 'completion')));
 }
 
 async function newestSessionSnapshot(reader: FileReader, home: string): Promise<Snapshot | undefined> {

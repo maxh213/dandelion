@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ProviderUsage } from '../domain/index.ts';
-import { renderRoute } from './route.ts';
+import { renderRoute, type RouteRequest } from './route.ts';
 
 const NOW = '2026-09-14T20:00:00.000Z';
 const CLAUDE: ProviderUsage[] = [
@@ -24,5 +24,10 @@ describe('renderRoute', () => {
   it('walks the quality chain instead of the 010 rules when high', () => {
     expect(renderRoute(CLAUDE, [], { mode: 'high', now: NOW, zone: 'Etc/GMT+7' })).toEqual({ line: 'claude-fable-5-1 max claude', routed: true });
     expect(renderRoute(CLAUDE, ['claude'], { mode: 'high', now: NOW, zone: 'Etc/GMT+7' })).toEqual({ line: 'none', routed: false });
+  });
+
+  it('rejects a route mode it does not know', () => {
+    const request = { mode: 'bogus', now: NOW, zone: 'UTC' } as unknown as RouteRequest;
+    expect(() => renderRoute([], [], request)).toThrow('Unexpected route mode');
   });
 });

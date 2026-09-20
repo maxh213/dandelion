@@ -4,6 +4,7 @@ import {
   fieldOf,
   isCount,
   isFilled,
+  parseJson,
   successBody,
   unavailableReason,
   usedPctFromRemaining,
@@ -59,7 +60,7 @@ function unexpiredToken(token: string, expiry: unknown, now: string): string {
 async function readToken(reader: FileReader, env: Env, now: string): Promise<string> {
   const text = await reader.read(authFile(reader, env));
   try {
-    const { token, expiry } = nousBearer(JSON.parse(String(text)));
+    const { token, expiry } = nousBearer(parseJson(String(text)));
     return unexpiredToken(token, expiry, now);
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error;
@@ -98,7 +99,7 @@ function withCaptionSuffix(usage: { planLabel: string; windows: UsageWindow[] },
 }
 
 function usageOf(body: string): AccountUsage {
-  const parsed: unknown = JSON.parse(body);
+  const parsed = parseJson(body);
   const subscription = fieldOf(parsed, 'subscription');
   const { monthly, remaining } = creditsGrant(subscription);
   return withCaptionSuffix(

@@ -6,12 +6,22 @@ export type RouteMode = 'headroom' | 'high';
 
 export type RouteRequest = { mode: RouteMode; now: string; zone: string };
 
+function assertNever(value: never): never {
+  throw new Error(`Unexpected route mode: ${JSON.stringify(value)}`);
+}
+
+function headroomLine(usages: ProviderUsage[], ineligible: string[], { now, zone }: RouteRequest): string {
+  return routeLine(usages, now, nextLocalMidnight(zone, now), ineligible);
+}
+
 function lineFor(usages: ProviderUsage[], ineligible: string[], request: RouteRequest): string {
   switch (request.mode) {
     case 'high':
       return highRouteLine(usages, ineligible);
     case 'headroom':
-      return routeLine(usages, request.now, nextLocalMidnight(request.zone, request.now), ineligible);
+      return headroomLine(usages, ineligible, request);
+    default:
+      return assertNever(request.mode);
   }
 }
 

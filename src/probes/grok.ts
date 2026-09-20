@@ -1,4 +1,4 @@
-import { fieldOf, isCount, isFilled, newestLineMatch, validInstant, withReset, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, isFilled, matchesOnJsonLine, newestLineMatch, validInstant, withReset, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type GrokIo = { reader: FileReader };
 
@@ -36,12 +36,7 @@ function usableSnapshots(event: unknown): Snapshot[] {
 }
 
 function snapshotsOn(line: string): Snapshot[] {
-  try {
-    const event: unknown = JSON.parse(line);
-    return fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshots(event) : [];
-  } catch {
-    return [];
-  }
+  return matchesOnJsonLine(line, (event) => (fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshots(event) : []));
 }
 
 export async function probeGrok(io: GrokIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {

@@ -1,4 +1,4 @@
-import { fieldOf, isCount, isFilled, isRecord, withReset, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
+import { fieldOf, isCount, isFilled, isRecord, parseJson, withReset, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
 import type { CommandRunner, CommandRunnerResult, RunFailure } from './cli.ts';
 
 export type RpcChild = {
@@ -97,7 +97,7 @@ function windowsOf(answer: unknown): UsageWindow[] {
 
 function answerIn(line: string): unknown {
   try {
-    const message: unknown = JSON.parse(line);
+    const message = parseJson(line);
     return fieldOf(message, 'id') === ANSWER_ID ? message : null;
   } catch {
     return null;

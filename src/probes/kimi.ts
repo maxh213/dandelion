@@ -3,6 +3,7 @@ import {
   USAGE_PARSE_FAILURE,
   fieldOf,
   isCount,
+  parseJson,
   successBody,
   unavailableReason,
   validInstant,
@@ -102,8 +103,7 @@ function hourWindows(limits: unknown): UsageWindow[] {
 }
 
 function parseUsage(body: string): UsageWindow[] {
-  const parsed: unknown = JSON.parse(body);
-  const data = fieldOf(parsed, 'data');
+  const data = fieldOf(parseJson(body), 'data');
   return [weeklyWindow(fieldOf(data, 'summary')), ...hourWindows(fieldOf(data, 'limits'))];
 }
 

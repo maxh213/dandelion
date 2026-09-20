@@ -51,6 +51,19 @@ export function fieldOf(value: unknown, key: string): unknown {
   return isRecord(value) ? value[key] : undefined;
 }
 
+export function parseJson(text: string): unknown {
+  const value: unknown = JSON.parse(text);
+  return value;
+}
+
+export function matchesOnJsonLine<T>(line: string, matchesOn: (value: unknown) => T[]): T[] {
+  try {
+    return matchesOn(parseJson(line));
+  } catch {
+    return [];
+  }
+}
+
 export function isCount(value: unknown): value is number {
   return Number.isFinite(value) && Number(value) >= 0;
 }
