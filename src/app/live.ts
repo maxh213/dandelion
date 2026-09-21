@@ -92,6 +92,10 @@ function draw(session: Session): void {
   session.screen.write(`${CLEAR}${renderLiveFrame(viewOf(session), session.noColor, session.clock())}`);
 }
 
+function redrawOnResize(session: Session): void {
+  session.screen.on?.('resize', () => draw(session));
+}
+
 function anyPending(session: Session): boolean {
   return session.results.includes(undefined);
 }
@@ -231,7 +235,7 @@ export function startLive(options: LiveOptions): Promise<void> {
     options.keyboard.setRawMode(true);
     options.keyboard.setEncoding('utf8');
     options.keyboard.on('data', (chunk) => press(session, chunk));
-    options.screen.on?.('resize', () => draw(session));
+    redrawOnResize(session);
     draw(session);
     startRound(session);
     scheduleTick(session);

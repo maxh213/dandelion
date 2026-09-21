@@ -395,26 +395,46 @@ function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
 }
 
 function rowBudget(rows: number | undefined): number {
-  const given = Number(rows);
-  return Number.isInteger(given) && given > 0 ? given : FALLBACK_ROWS;
+  return typeof rows === 'number' && Number.isInteger(rows) && rows > 0 ? rows : FALLBACK_ROWS;
 }
 
-function regionStart(panels: string[], selected: number | undefined): number {
-  if (selected === undefined || selected < 0) return 0;
-  return panels.slice(0, selected).reduce((height, panel) => height + panel.split('\n').length, 1);
+function panelLines(panels: string[]): string[] {
+  return panels.flatMap((panel) => panel.split('\n'));
+}
+
+function fromSelectedHeader(panels: string[], selected: number): string[] {
+  return panelLines(panels.slice(selected)).slice(1);
+}
+
+function hasSelection(selected: number | undefined): selected is number {
+  return selected !== undefined && selected >= 0;
 }
 
 function regionLines(panels: string[], selected: number | undefined, height: number): string[] {
-  const start = regionStart(panels, selected);
-  return panels.flatMap((panel) => panel.split('\n')).slice(start, start + height);
+  const lines = hasSelection(selected) ? fromSelectedHeader(panels, selected) : panelLines(panels);
+  return lines.slice(0, height);
+}
+
+function liveChrome(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string[] {
+  return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...routeBoxes(view, noColor, now)];
+}
+
+function liveFooter(noColor: boolean): string[] {
+  return [dim(HELP_FOOTER, noColor)];
+}
+
+function livePanels(view: LiveView, noColor: boolean, now: string): string[] {
+  return view.slots.map((slot, index) => livePanel(slot, view.spinner, noColor, now, slotMarks(view, slot, index)));
+}
+
+function regionHeight(rows: number, chrome: string[], footer: string[]): number {
+  return Math.max(0, rows - chrome.length - footer.length);
 }
 
 export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
-  const usages = settledUsages(view.slots);
-  const panels = view.slots.map((slot, index) => livePanel(slot, view.spinner, noColor, now, slotMarks(view, slot, index)));
   const rows = rowBudget(view.rows);
-  const footer = view.footer ? [dim(HELP_FOOTER, noColor)] : [];
-  const chrome = [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...routeBoxes(view, noColor, now)];
-  const region = regionLines(panels, view.selected, Math.max(0, rows - chrome.length - footer.length));
+  const chrome = liveChrome(view, settledUsages(view.slots), noColor, now);
+  const footer = view.footer ? liveFooter(noColor) : [];
+  const region = regionLines(livePanels(view, noColor, now), view.selected, regionHeight(rows, chrome, footer));
   return [...chrome, ...region, ...footer].slice(0, rows).join('\n');
 }
