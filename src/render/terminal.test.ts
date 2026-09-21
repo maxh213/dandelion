@@ -512,6 +512,10 @@ describe('live frame', () => {
       expect(frameOf({ selected: 0 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2), RULE]);
     });
 
+    it('keeps the selected header visible when that panel is taller than the region', () => {
+      expect(frameOf({ selected: 0, rows: 8 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', CLAUDE_PANEL[2]]);
+    });
+
     it('keeps the help footer as the last line of the frame', () => {
       expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2), FOOTER]);
     });

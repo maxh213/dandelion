@@ -218,6 +218,8 @@ describe('live session', () => {
     expect(session.lastFrame().split('\n')).toHaveLength(12);
     expect(session.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
     session.press('?');
+    expect(session.lastFrame()).not.toContain('keys:');
+    expect(session.lastFrame().split('\n')).toHaveLength(12);
     session.screen.rows = 30;
     session.screen.emit('resize');
     const grown = session.lastFrame();
@@ -226,6 +228,43 @@ describe('live session', () => {
     session.screen.rows = 12;
     session.screen.emit('resize');
     expect(session.lastFrame()).toBe(settled);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('scrolls a short session to the last panel and walks back to the first with the boxes in the chrome', async () => {
+    const session = startSession({ rows: 12 });
+    await session.settleRound(0);
+    IDS.forEach(() => session.press('j'));
+    const kilo = session.lastFrame().split('\n');
+    expect(kilo.length).toBeLessThanOrEqual(12);
+    expect(kilo[2]?.startsWith('+- route')).toBe(true);
+    expect(kilo[6]).toBe('▸ kilo');
+    expect(kilo).not.toContain('claude');
+    IDS.slice(1).forEach(() => session.press('k'));
+    const claude = session.lastFrame().split('\n');
+    expect(claude.length).toBeLessThanOrEqual(12);
+    expect(claude[2]?.startsWith('+- route')).toBe(true);
+    expect(claude[6]).toBe('▸ claude');
+    expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
+    session.press('?');
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 11), 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help']);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('clips a 4-row session to the banner, the summary and the first two box lines', async () => {
+    const session = startSession({ rows: 4 });
+    const pending = session.lastFrame().split('\n');
+    expect(pending).toHaveLength(4);
+    expect(pending[0]?.startsWith('DANDELION')).toBe(true);
+    expect(pending[2]?.startsWith('+- route')).toBe(true);
+    await session.settleRound(0);
+    const settled = session.lastFrame().split('\n');
+    expect(settled).toHaveLength(4);
+    expect(settled[2]?.startsWith('+- route')).toBe(true);
+    session.press('?');
+    expect(session.lastFrame().split('\n')).toEqual(settled);
     session.press('q');
     await session.finished;
   });
