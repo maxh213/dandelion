@@ -8,7 +8,7 @@ import { VALUES, absent, emit, perCall, perCallSync } from './timing.mjs';
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
 const appEntry = join(tree, 'src', 'app', 'index.ts');
 const liveEntry = join(tree, 'src', 'app', 'live.ts');
-const renderEntry = join(tree, 'src', 'render', 'terminal.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
 const domainEntry = join(tree, 'src', 'domain', 'index.ts');
 const NOW = '2026-09-13T10:00:00.000Z';
 const ITERATIONS = 2000;

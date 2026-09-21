@@ -1,0 +1,206 @@
+#!/usr/bin/env node
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { VALUES, absent, emit, perCall, perCallSync } from './timing.mjs';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const liveEntry = join(tree, 'src', 'app', 'live.ts');
+const NOW = '2026-09-13T10:00:00.000Z';
+const LATER = '2026-09-16T10:00:00.000Z';
+const ITERATIONS = 2000;
+const SESSIONS = VALUES;
+const KILO = 9;
+const J_TO_KILO = ['j', 'j', 'j', 'j', 'j', 'j', 'j', 'j', 'j', 'j'];
+const K_TO_CLAUDE = ['k', 'k', 'k', 'k', 'k', 'k', 'k', 'k', 'k'];
+
+const TARGETS = {
+  settled12: 'renderLiveFrame ten settled 12-row unselected (in-process, per call)',
+  pending12: 'renderLiveFrame ten pending 12-row unselected (in-process, per call)',
+  selectedKilo: 'renderLiveFrame ten settled 12-row selected kilo (in-process, per call)',
+  selectedClaudeFooter: 'renderLiveFrame ten settled 12-row selected claude footer (in-process, per call)',
+  chrome4: 'renderLiveFrame ten settled 4-row chrome clip (in-process, per call)',
+  tall60: 'renderLiveFrame ten settled 60-row unclipped (in-process, per call)',
+  session12: 'startLive ten stub probes 12-row first round then quit (in-process, per session)',
+  sessionScroll: 'startLive ten stub probes 12-row j to kilo k to claude then quit (in-process, per session)',
+  sessionResize: 'startLive ten stub probes 12-row resize 12-30-12 then quit (in-process, per session)'
+};
+
+if (!existsSync(renderEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const win = (label, kind, usedPct) => ({ label, kind, usedPct, resetsAt: LATER });
+const ok = (id, windows, extra = {}) => ({
+  id,
+  displayName: id,
+  planLabel: extra.planLabel ?? id,
+  windows,
+  fetchedAt: NOW,
+  status: 'ok',
+  ...extra
+});
+const down = (id, reason) => ({
+  id,
+  displayName: id,
+  planLabel: id,
+  windows: [],
+  fetchedAt: NOW,
+  status: 'unavailable',
+  reason
+});
+
+const usages = [
+  ok('claude', [win('session', 'rolling', 3), win('weekly', 'weekly', 86), win('weekly Fable', 'weekly', 100)], { planLabel: 'claude · personal' }),
+  ok('claude-work', [win('session', 'rolling', 0), win('weekly', 'weekly', 12), win('weekly Fable', 'weekly', 23)], { planLabel: 'claude · work' }),
+  ok('agy', [win('Gemini Models · Five Hour Limit', 'rolling', 50), win('Gemini Models · Weekly Limit', 'weekly', 50)]),
+  ok('kimi', [win('weekly', 'weekly', 85), win('5h', 'rolling', 85)], { planLabel: 'kimi code' }),
+  ok('grok', [win('credits', 'weekly', 90)], { planLabel: 'SuperGrok', snapshotAt: NOW }),
+  ok('codex', [], { planLabel: 'codex', note: 'api-key billing · no usage windows' }),
+  ok('cursor', [win('total', 'weekly', 80), win('auto', 'weekly', 80), win('api', 'weekly', 80)], { planLabel: 'Ultra' }),
+  down('junie', 'no junie quota snapshot — run junie once'),
+  down('hermes', 'no hermes auth — run hermes portal login'),
+  ok('kilo', [], { planLabel: 'api balance', balance: { amount: 14.15, currency: '$', reference: 20 } })
+];
+
+function viewOf(extra = {}) {
+  return {
+    slots: usages.map((usage) => ({ id: usage.id, usage })),
+    spinner: 0,
+    refreshing: false,
+    footer: false,
+    ineligible: [],
+    zone: 'UTC',
+    settled: usages,
+    selected: -1,
+    rows: 12,
+    ...extra
+  };
+}
+
+const pendingView = viewOf({
+  slots: usages.map(({ id }) => ({ id, usage: undefined })),
+  settled: undefined
+});
+
+function keyboardStub() {
+  const listeners = [];
+  return {
+    setRawMode: () => undefined,
+    setEncoding: () => undefined,
+    on: (_event, listener) => listeners.push(listener),
+    pause: () => undefined,
+    press: (key) => listeners.forEach((listener) => listener(key))
+  };
+}
+
+function screenStub(rows) {
+  const listeners = [];
+  const screen = {
+    rows,
+    bytes: 0,
+    last: '',
+    write: (text) => {
+      screen.bytes += text.length;
+      screen.last = text;
+    },
+    on: (_event, listener) => listeners.push(listener),
+    emitResize: () => listeners.forEach((listener) => listener())
+  };
+  return screen;
+}
+
+async function session(startLive, probes, { rows = 12, keys = [], resizes = [] } = {}) {
+  const keyboard = keyboardStub();
+  const screen = screenStub(rows);
+  const settled = [];
+  const tracked = probes.map(({ id, probe }) => ({
+    id,
+    probe: (now) => {
+      const pending = probe(now);
+      settled.push(pending);
+      return pending;
+    }
+  }));
+  const ended = startLive({
+    probes: tracked,
+    env: { NO_COLOR: '1' },
+    keyboard,
+    screen,
+    stopChildren: async () => undefined,
+    eligibility: { ineligible: () => [], toggle: () => true },
+    zone: 'UTC',
+    clock: () => NOW
+  });
+  await Promise.allSettled(settled);
+  await new Promise((resolve) => setImmediate(resolve));
+  for (const next of resizes) {
+    screen.rows = next;
+    screen.emitResize();
+  }
+  for (const key of keys) keyboard.press(key);
+  keyboard.press('q');
+  await ended;
+  return screen.bytes;
+}
+
+function expectStable(renderLiveFrame, view, name) {
+  const once = renderLiveFrame(view, true, NOW);
+  if (renderLiveFrame(view, true, NOW) !== once) throw new Error(`${name} changed between identical renders`);
+  if (!once.includes('DANDELION')) throw new Error(`${name} drew no banner`);
+  return once;
+}
+
+function expectClipped(frame, rows, name) {
+  const lines = frame.split('\n');
+  if (lines.length > rows) throw new Error(`${name} was ${lines.length} lines, want at most ${rows}`);
+  if (frame.endsWith('\n')) throw new Error(`${name} had a trailing newline`);
+}
+
+const render = await import(pathToFileURL(renderEntry).href);
+if (typeof render.renderLiveFrame !== 'function') {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const { renderLiveFrame } = render;
+const settled12 = expectStable(renderLiveFrame, viewOf(), '12-row settled');
+const pending12 = expectStable(renderLiveFrame, pendingView, '12-row pending');
+const selectedKilo = expectStable(renderLiveFrame, viewOf({ selected: KILO }), '12-row kilo');
+const selectedClaudeFooter = expectStable(renderLiveFrame, viewOf({ selected: 0, footer: true }), '12-row claude footer');
+const chrome4 = expectStable(renderLiveFrame, viewOf({ rows: 4 }), '4-row chrome');
+const tall60 = expectStable(renderLiveFrame, viewOf({ rows: 60 }), '60-row settled');
+const clips = renderLiveFrame(viewOf({ rows: 1 }), true, NOW).split('\n').length === 1;
+if (clips) {
+  expectClipped(settled12, 12, '12-row settled');
+  expectClipped(pending12, 12, '12-row pending');
+  expectClipped(selectedKilo, 12, '12-row kilo');
+  expectClipped(selectedClaudeFooter, 12, '12-row claude footer');
+  expectClipped(chrome4, 4, '4-row chrome');
+  expectClipped(tall60, 60, '60-row settled');
+  if (!settled12.split('\n').includes('claude')) throw new Error('12-row settled opened past claude');
+  if (!selectedKilo.includes('kilo')) throw new Error('12-row kilo selection dropped kilo');
+  if (!selectedClaudeFooter.split('\n').at(-1).includes('keys:')) throw new Error('12-row footer was not last');
+}
+
+emit(TARGETS.settled12, perCallSync(ITERATIONS, () => renderLiveFrame(viewOf(), true, NOW)), 'us');
+emit(TARGETS.pending12, perCallSync(ITERATIONS, () => renderLiveFrame(pendingView, true, NOW)), 'us');
+emit(TARGETS.selectedKilo, perCallSync(ITERATIONS, () => renderLiveFrame(viewOf({ selected: KILO }), true, NOW)), 'us');
+emit(TARGETS.selectedClaudeFooter, perCallSync(ITERATIONS, () => renderLiveFrame(viewOf({ selected: 0, footer: true }), true, NOW)), 'us');
+emit(TARGETS.chrome4, perCallSync(ITERATIONS, () => renderLiveFrame(viewOf({ rows: 4 }), true, NOW)), 'us');
+emit(TARGETS.tall60, perCallSync(ITERATIONS, () => renderLiveFrame(viewOf({ rows: 60 }), true, NOW)), 'us');
+
+if (!existsSync(liveEntry)) {
+  absent(TARGETS.session12, TARGETS.sessionScroll, TARGETS.sessionResize);
+  process.exit(0);
+}
+
+const { startLive } = await import(pathToFileURL(liveEntry).href);
+const probes = usages.map((usage) => ({ id: usage.id, probe: async () => usage }));
+const bytes = await session(startLive, probes);
+if (bytes < 400) throw new Error(`12-row live session drew too little: ${bytes}`);
+emit(TARGETS.session12, await perCall(SESSIONS, () => session(startLive, probes)), 'us');
+emit(TARGETS.sessionScroll, await perCall(SESSIONS, () => session(startLive, probes, { keys: [...J_TO_KILO, ...K_TO_CLAUDE] })), 'us');
+emit(TARGETS.sessionResize, await perCall(SESSIONS, () => session(startLive, probes, { resizes: [30, 12] })), 'us');

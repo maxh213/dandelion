@@ -10,7 +10,6 @@ const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
 const main = join(tree, 'src', 'main.ts');
 const appEntry = join(tree, 'src', 'app', 'index.ts');
 const renderEntry = join(tree, 'src', 'render', 'index.ts');
-const terminalEntry = join(tree, 'src', 'render', 'terminal.ts');
 const domainEntry = join(tree, 'src', 'domain', 'index.ts');
 const claudeEntry = join(tree, 'src', 'probes', 'claude.ts');
 const cliEntry = join(tree, 'src', 'probes', 'cli.ts');
@@ -100,7 +99,7 @@ const usages = [
 
 try {
   const { runApp, realIo } = await import(pathToFileURL(appEntry).href);
-  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+  const { renderDashboard, renderLiveFrame } = await import(pathToFileURL(renderEntry).href);
   const claude = await import(pathToFileURL(claudeEntry).href);
   const { probeCli } = await import(pathToFileURL(cliEntry).href);
 
@@ -147,12 +146,11 @@ try {
     absent(TARGETS.fleet);
   }
 
-  const terminal = existsSync(terminalEntry) ? await import(pathToFileURL(terminalEntry).href) : {};
-  if (terminal.renderLiveFrame) {
+  if (renderLiveFrame) {
     const view = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: 'UTC', settled: usages };
-    const settledOnce = terminal.renderLiveFrame(view, false, NOW);
-    if (terminal.renderLiveFrame(view, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
-    emit(TARGETS.frame, perCallSync(ITERATIONS, () => terminal.renderLiveFrame(view, false, NOW)), 'us');
+    const settledOnce = renderLiveFrame(view, false, NOW);
+    if (renderLiveFrame(view, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
+    emit(TARGETS.frame, perCallSync(ITERATIONS, () => renderLiveFrame(view, false, NOW)), 'us');
   } else {
     absent(TARGETS.frame);
   }
