@@ -20,6 +20,10 @@ Feature: 019 - The live dashboard fits the terminal: the chrome stays put and th
     write after "\e[H\e[2J" is those lines joined by "\n" with no trailing newline.
   - junie and hermes stay in the panel list; with the 013 fixture they draw their dim four-line "run once"
     panels of 015 and 016.
+  - End-to-end live sessions run on a stated pty size: a piped `script` session reports a 0 by 0 pty, which
+    the 24-line fallback would clip, so the shared launcher ("qa/live-session.mjs" startLive) and the
+    private startLive copies in the 011, 015, 016 and 017 e2es set 60 rows by 80 columns — the tallest
+    pre-019 live frame is 55 lines. Only the 019 e2e runs its sessions at 12 by 80.
 
   Background:
     Given the fixtures, HOME, TZ and DANDELION_* variables of features/013-route-boxes.feature, with every reset
@@ -93,6 +97,10 @@ Feature: 019 - The live dashboard fits the terminal: the chrome stays put and th
 
   Scenario: Frame height and scrolling, unit level
     Given the unit tests of "src/render/terminal.test.ts" and "src/app/live.test.ts"
+    And the settled ten-panel view carries the probes' real planLabels for the 013 fixture — claude
+      "claude · personal", claude-work "claude · work", agy "agy", kimi "kimi code", grok "SuperGrok",
+      codex "codex", cursor "Ultra", junie "junie", hermes "hermes", kilo "api balance" — and grok's
+      snapshot line, so every panel height is the live one
     Then the settled ten-panel view rendered with rows 12 and selected -1 is the 12-line frame of "A short
       terminal opens on the top of the dashboard", with rows 24 it is 24 lines ending with the kimi panel's
       rule, and rows 0, undefined or a non-integer each render as 24
@@ -113,10 +121,15 @@ Feature: 019 - The live dashboard fits the terminal: the chrome stays put and th
 
   Scenario: End-to-end checks
     When the user runs `node qa/e2e.mjs`
-    Then every e2e passes, and the 001 to 018 e2es are unchanged
+    Then every e2e passes, and the 001 to 018 e2e files keep every assertion, fixture and key press
+    And the only qa/ edit outside the new 019 e2e gives the five live launchers their stated pty size from
+      the assumptions: "qa/live-session.mjs" startLive and the private startLive copies in 011, 015, 016
+      and 017 prefix the "script" command with "stty rows 60 cols 80; ". Unselected frames are then
+      byte-identical to today, and every selected-panel assertion already keys on the selected header,
+      which the scroll rule keeps at the top of the region
     And "qa/019-scrollable-route-boxes.e2e.mjs" uses temp dirs prefixed "dandelion-qa-019-", sets
-      DANDELION_STATE_FILE in every child env, and drives live sessions through "qa/live-session.mjs" on a
-      12-row by 80-column pty
+      DANDELION_STATE_FILE in every child env, and drives its live sessions through the same launcher on a
+      12-row by 80-column pty, resizing it mid-session with stty
     And it covers: the settled and all-pending 12-row frames of "A short terminal opens on the top of the
       dashboard", "j" to kilo and "k" back to claude with the boxes on lines 3 to 6 throughout, the footer as
       the last line, a mid-session resize redrawing against the new rows, the 4-row chrome clipping, and "q"
