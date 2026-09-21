@@ -307,6 +307,7 @@ describe('live frame', () => {
     footer: false,
     ineligible: [],
     zone: 'UTC',
+    rows: 60,
     ...extra
   });
   const AGY_FIVE_HOUR = 'Claude and GPT models · Five Hour Limit';
@@ -408,6 +409,138 @@ describe('live frame', () => {
     expect(lines.at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
   });
+
+  describe('frame height and scrolling', () => {
+    const LATER = '2026-09-16T10:00:00.000Z';
+    const RULE = '='.repeat(72);
+    const BANNER = `${'DANDELION'.padEnd(47)}data 0h0m old · 10:00:00Z`;
+    const SUMMARY = '8/14 windows above 80% · next reset: claude session in 3d0h';
+    const FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
+    const BOX_BLOCK = [
+      '+- route -------------------------+  +- route --high ------------------+',
+      '| claude-opus-5 high              |  | claude-fable-5-1 max            |',
+      '| claude-work                     |  | claude-work                     |',
+      '+---------------------------------+  +---------------------------------+'
+    ];
+    const CLAUDE_PANEL = [
+      RULE,
+      'claude',
+      'session                             #-------------------   3% ↻ 3d0h',
+      'weekly                              #################---  86% ↻ 3d0h',
+      'weekly Fable                        #################### 100% ↻ 3d0h',
+      'claude · personal · claude'
+    ];
+    const WORK_PANEL = [
+      RULE,
+      'claude-work',
+      'session                             --------------------   0% ↻ 3d0h',
+      'weekly                              ##------------------  12% ↻ 3d0h',
+      'weekly Fable                        #####---------------  23% ↻ 3d0h',
+      'claude · work · claude-work'
+    ];
+    const AGY_PANEL = [
+      RULE,
+      'agy',
+      'Gemini Models · Five Hour Limit     ##########----------  50% ↻ 3d0h',
+      'Gemini Models · Weekly Limit        ##########----------  50% ↻ 3d0h',
+      'agy · agy'
+    ];
+    const win = (label: string, kind: 'rolling' | 'weekly', usedPct: number): UsageWindow => ({ label, kind, usedPct, resetsAt: LATER });
+    const down = (id: string, reason: string): ProviderUsage => ({ id, displayName: id, planLabel: id, windows: [], fetchedAt: NOW, status: 'unavailable', reason });
+    const tenPanels = (): ProviderUsage[] => [
+      okUsage('claude', [win('session', 'rolling', 3), win('weekly', 'weekly', 86), win('weekly Fable', 'weekly', 100)], { planLabel: 'claude · personal' }),
+      okUsage('claude-work', [win('session', 'rolling', 0), win('weekly', 'weekly', 12), win('weekly Fable', 'weekly', 23)], { planLabel: 'claude · work' }),
+      okUsage('agy', [win('Gemini Models · Five Hour Limit', 'rolling', 50), win('Gemini Models · Weekly Limit', 'weekly', 50)], { planLabel: 'agy' }),
+      okUsage('kimi', [win('weekly', 'weekly', 85), win('5h', 'rolling', 85)], { planLabel: 'kimi code' }),
+      okUsage('grok', [win('credits', 'weekly', 90)], { planLabel: 'SuperGrok', snapshotAt: NOW }),
+      okUsage('codex', [], { planLabel: 'codex', note: 'api-key billing · no usage windows' }),
+      okUsage('cursor', [win('total', 'weekly', 80), win('auto', 'weekly', 80), win('api', 'weekly', 80)], { planLabel: 'Ultra' }),
+      down('junie', 'no junie quota snapshot — run junie once'),
+      down('hermes', 'no hermes auth — run hermes portal login'),
+      okUsage('kilo', [], { planLabel: 'api balance', balance: { amount: 14.15, currency: '$', reference: 20 } })
+    ];
+    const tenPanelView = (extra: Partial<LiveView> = {}): LiveView => {
+      const usages = tenPanels();
+      return viewOf(usages, { settled: usages, selected: -1, rows: 12, ...extra });
+    };
+    const frameOf = (extra: Partial<LiveView> = {}): string[] => renderLiveFrame(tenPanelView(extra), true, NOW).split('\n');
+
+    it('opens a short terminal on the banner, the summary, the boxes and the personal claude panel', () => {
+      const frame = renderLiveFrame(tenPanelView(), true, NOW);
+      expect(frame.endsWith('\n')).toBe(false);
+      expect(frame.split('\n')).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL]);
+    });
+
+    it('opens the all-pending frame on the probing boxes and the first two pending panels', () => {
+      const slots = tenPanels().map(({ id }) => ({ id, usage: undefined }));
+      expect(renderLiveFrame(tenPanelView({ slots, settled: undefined }), true, NOW).split('\n')).toEqual([
+        `${'DANDELION'.padEnd(63)}10:00:00Z`,
+        'all windows below 80% · next reset: none',
+        BOX_BLOCK[0],
+        `| ${'⠋ probing…'.padEnd(31)} |  | ${'⠋ probing…'.padEnd(31)} |`,
+        `| ${''.padEnd(31)} |  | ${''.padEnd(31)} |`,
+        BOX_BLOCK[3],
+        RULE,
+        'claude',
+        '⠋ probing…',
+        RULE,
+        'claude-work',
+        '⠋ probing…'
+      ]);
+    });
+
+    it.each([24, 0, undefined, 12.5])('renders the 24-line budget when rows is %s', (rows) => {
+      expect(frameOf({ rows })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL, ...WORK_PANEL, ...AGY_PANEL, RULE]);
+    });
+
+    it('scrolls the region so the selected panel’s header is its first line', () => {
+      expect(frameOf({ selected: 9 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ kilo', '$14.15 ##############------'.padEnd(72), 'api balance · kilo']);
+      expect(frameOf({ selected: 6 })).toEqual([
+        BANNER,
+        SUMMARY,
+        ...BOX_BLOCK,
+        '▸ cursor',
+        'total                               ################----  80% ↻ 3d0h',
+        'auto                                ################----  80% ↻ 3d0h',
+        'api                                 ################----  80% ↻ 3d0h',
+        'Ultra · cursor',
+        RULE
+      ]);
+    });
+
+    it('walks back to the first panel with the boxes still in the chrome', () => {
+      expect(frameOf({ selected: 0 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2), RULE]);
+    });
+
+    it('keeps the help footer as the last line of the frame', () => {
+      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2), FOOTER]);
+    });
+
+    it.each<[number, string[]]>([
+      [4, [BANNER, SUMMARY, BOX_BLOCK[0], BOX_BLOCK[1]]],
+      [1, [BANNER]]
+    ])('clips the chrome from the bottom when rows is %i', (rows, expected) => {
+      expect(frameOf({ rows })).toEqual(expected);
+      expect(frameOf({ rows, footer: true })).toEqual(expected);
+    });
+
+    it('lays the same view out against a new row budget', () => {
+      const grown = frameOf({ rows: 30 });
+      expect(grown).toHaveLength(30);
+      expect(grown.slice(0, 12)).toEqual(frameOf());
+      expect(grown.at(-1)).toBe('grok');
+      expect(frameOf({ rows: 10 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL.slice(0, 4)]);
+      expect(frameOf({ rows: 30, selected: 9 })).toEqual(frameOf({ selected: 9 }));
+    });
+
+    it('never clips the once dashboard and draws no boxes there', () => {
+      const once = renderDashboard(tenPanels(), true, NOW, []);
+      expect(once.split('\n')).toHaveLength(50);
+      expect(once).not.toContain('+- route');
+      const ids = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+      expect(ids.every((id) => once.includes(`\n${id}\n`))).toBe(true);
+    });
+  });
 });
 
 describe('panel marks', () => {
@@ -431,25 +564,26 @@ describe('panel marks', () => {
 
   it.each<[string, ProviderUsage | undefined, number | undefined, string]>([
     ['unavailable, not selected', unavailableClaude, undefined, `${DIM}${'━'.repeat(72)}\nclaude${' '.repeat(55)}routing off\n${REASON}\n${CAPTION}${RESET}`],
-    ['unavailable, selected', unavailableClaude, 0, `${BOLD}${'━'.repeat(72)}${RESET}\n${DIM}▸ claude${' '.repeat(53)}routing off\n${REASON}\n${CAPTION}${RESET}`],
+    ['unavailable, selected', unavailableClaude, 0, `${DIM}▸ claude${' '.repeat(53)}routing off\n${REASON}\n${CAPTION}${RESET}`],
     ['pending, not selected', undefined, undefined, `${DIM}${'━'.repeat(72)}\nclaude${' '.repeat(55)}routing off\n⠋ probing…${RESET}`],
-    ['pending, selected', undefined, 0, `${BOLD}${'━'.repeat(72)}${RESET}\n${DIM}▸ claude${' '.repeat(53)}routing off\n⠋ probing…${RESET}`]
+    ['pending, selected', undefined, 0, `${DIM}▸ claude${' '.repeat(53)}routing off\n⠋ probing…${RESET}`]
   ])('keeps the tag inside the dim span of an all-dim panel: %s', (_case, usage, selected, bytes) => {
     expect(panelOf(liveView(usage, { selected }))).toBe(bytes);
   });
 
   it('dims the tag on its own and bolds the selected rule of a fresh panel', () => {
     const row = renderWindowRow(WEEKLY, false, NOW);
+    expect(renderPanelOk(freshClaude, false, NOW, { selected: true, ineligible: true }).split('\n')[0]).toBe(`${BOLD}${'━'.repeat(72)}${RESET}`);
     expect(panelOf(liveView(freshClaude, { selected: 0 }))).toBe(
-      [`${BOLD}${'━'.repeat(72)}${RESET}`, `▸ claude${' '.repeat(53)}${DIM}routing off${RESET}`, row, `${DIM}${CAPTION}${RESET}`].join('\n')
+      [`▸ claude${' '.repeat(53)}${DIM}routing off${RESET}`, row, `${DIM}${CAPTION}${RESET}`].join('\n')
     );
-    expect(panelOf(liveView(freshClaude, { ineligible: [], selected: 0 }))).toBe(`${BOLD}${'━'.repeat(72)}${RESET}\n▸ claude\n${row}\n${DIM}${CAPTION}${RESET}`);
+    expect(panelOf(liveView(freshClaude, { ineligible: [], selected: 0 }))).toBe(`▸ claude\n${row}\n${DIM}${CAPTION}${RESET}`);
     expect(panelOf(liveView(freshClaude, { ineligible: ['claude-work'] }))).toBe(renderPanelOk(freshClaude, false, NOW, PLAIN));
   });
 
   it('keeps the plain rule and ends the tag at column 72 under NO_COLOR', () => {
     const row = renderWindowRow(WEEKLY, true, NOW);
-    expect(panelOf(liveView(freshClaude, { selected: 0 }), true).split('\n')).toEqual(['='.repeat(72), `▸ claude${' '.repeat(53)}routing off`, row, CAPTION]);
+    expect(panelOf(liveView(freshClaude, { selected: 0 }), true).split('\n')).toEqual([`▸ claude${' '.repeat(53)}routing off`, row, CAPTION]);
     const stale = renderPanelOk({ ...freshClaude, snapshotAt: '2026-09-10T00:00:00.000Z' }, true, NOW, { selected: true, ineligible: true });
     expect(stale.split('\n').slice(0, 2)).toEqual(['='.repeat(72), `▸ claude${' '.repeat(53)}routing off`]);
     expect(panelOf(liveView(unavailableClaude), true).split('\n')[1]).toHaveLength(72);
@@ -639,7 +773,7 @@ describe('route boxes', () => {
   it('never marks a box line as selected', () => {
     const lines = renderLiveFrame(boxView(ROUTED, { selected: 0, slots: [{ id: 'claude', usage: ROUTED[0] }] }), true, NOW).split('\n');
     expect(lines.slice(2, 6).join('\n')).not.toContain('▸');
-    expect(lines[7]).toBe('▸ claude');
+    expect(lines[6]).toBe('▸ claude');
   });
 
   it('never draws the boxes in the once dashboard', () => {

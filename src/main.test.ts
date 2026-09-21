@@ -47,7 +47,7 @@ const ENTER_ALTERNATE = '\x1b[?1049h\x1b[?25l';
 function procOf(argv: string[], stdinTTY: boolean | undefined, stdoutTTY: boolean | undefined) {
   const writes: string[] = [];
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), isTTY: stdinTTY });
-  const stdout = { isTTY: stdoutTTY, write: (text: string) => writes.push(text) };
+  const stdout = { isTTY: stdoutTTY, rows: 60, write: (text: string) => writes.push(text) };
   const proc = { argv, env: { NO_COLOR: '1' }, stdin: keyboard, stdout, exit: vi.fn() };
   return { proc, keyboard, output: () => writes.join('') };
 }
@@ -562,5 +562,11 @@ describe('main', () => {
     const readme = readFileSync('README.md', 'utf-8');
     const commands = readme.split('## Run Commands')[1].split('## ')[0];
     expect(commands).toMatch(/^- `npm start` - .*Two boxes at the top show the answers `dandelion route` and `dandelion route --high` would print; they update when a round settles or routing is toggled/m);
+  });
+
+  it('README documents that the live dashboard fits the terminal', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const commands = readme.split('## Run Commands')[1].split('## ')[0];
+    expect(commands).toMatch(/^- `npm start` - .*fits the terminal: the `route` and `route --high` boxes stay at the top, and the provider list scrolls with `↑↓\/jk` so earlier panels, personal `claude` included, stay reachable/m);
   });
 });

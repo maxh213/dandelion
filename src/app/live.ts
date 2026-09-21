@@ -3,6 +3,8 @@ import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type LiveSlo
 
 export interface Screen {
   write(text: string): unknown;
+  rows?: number;
+  on?(event: 'resize', listener: () => void): unknown;
 }
 
 export interface Keyboard {
@@ -80,7 +82,8 @@ function viewOf(session: Session): LiveView {
     zone: session.zone,
     settled: session.settled,
     selected: session.selected,
-    flash: session.flash
+    flash: session.flash,
+    rows: session.screen.rows
   };
 }
 
@@ -228,6 +231,7 @@ export function startLive(options: LiveOptions): Promise<void> {
     options.keyboard.setRawMode(true);
     options.keyboard.setEncoding('utf8');
     options.keyboard.on('data', (chunk) => press(session, chunk));
+    options.screen.on?.('resize', () => draw(session));
     draw(session);
     startRound(session);
     scheduleTick(session);

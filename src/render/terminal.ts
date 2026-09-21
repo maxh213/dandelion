@@ -32,6 +32,7 @@ const ROUTE_TITLE = 'route';
 const HIGH_TITLE = 'route --high';
 const NO_SUBSCRIPTION = 'no subscription available';
 const PROBING = 'probing…';
+const FALLBACK_ROWS = 24;
 
 export type PanelMarks = { selected: boolean; ineligible: boolean; caption?: string };
 
@@ -250,6 +251,7 @@ export type LiveView = {
   settled?: ProviderUsage[];
   selected?: number;
   flash?: Flash;
+  rows?: number;
 };
 
 function settledUsages(slots: LiveSlot[]): ProviderUsage[] {
@@ -392,9 +394,27 @@ function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
   return left.map((line, row) => `${line}${BOX_GAP}${right[row]}`);
 }
 
+function rowBudget(rows: number | undefined): number {
+  const given = Number(rows);
+  return Number.isInteger(given) && given > 0 ? given : FALLBACK_ROWS;
+}
+
+function regionStart(panels: string[], selected: number | undefined): number {
+  if (selected === undefined || selected < 0) return 0;
+  return panels.slice(0, selected).reduce((height, panel) => height + panel.split('\n').length, 1);
+}
+
+function regionLines(panels: string[], selected: number | undefined, height: number): string[] {
+  const start = regionStart(panels, selected);
+  return panels.flatMap((panel) => panel.split('\n')).slice(start, start + height);
+}
+
 export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
   const usages = settledUsages(view.slots);
   const panels = view.slots.map((slot, index) => livePanel(slot, view.spinner, noColor, now, slotMarks(view, slot, index)));
+  const rows = rowBudget(view.rows);
   const footer = view.footer ? [dim(HELP_FOOTER, noColor)] : [];
-  return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...routeBoxes(view, noColor, now), ...panels, ...footer].join('\n');
+  const chrome = [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...routeBoxes(view, noColor, now)];
+  const region = regionLines(panels, view.selected, Math.max(0, rows - chrome.length - footer.length));
+  return [...chrome, ...region, ...footer].slice(0, rows).join('\n');
 }

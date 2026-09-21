@@ -66,6 +66,7 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
   const bin = tempDir();
   symlinkSync(process.execPath, join(bin, 'node'));
   symlinkSync('/bin/sh', join(bin, 'sh'));
+  symlinkSync('/usr/bin/stty', join(bin, 'stty'));
   const grokHome = tempDir();
   const inherited = { ...process.env };
   delete inherited.DANDELION_KILO_REFERENCE;
@@ -95,7 +96,7 @@ function launch(command: string, args: string[], env: NodeJS.ProcessEnv): Run {
 }
 
 function startLive(env: NodeJS.ProcessEnv): Run {
-  return launch('/usr/bin/script', ['-qfec', `'${NPM}' start --silent`, '/dev/null'], env);
+  return launch('/usr/bin/script', ['-qfec', `stty rows 60 cols 80; '${NPM}' start --silent`, '/dev/null'], env);
 }
 
 function completeFrames(run: Run): string[] {

@@ -114,7 +114,7 @@ const LIVE_CLEAR = '\x1b[H\x1b[2J';
 function startDashboard(io: ProbeIo, env: Record<string, string>, clock?: () => string) {
   const writes: string[] = [];
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
-  const finished = runLive(io, env, keyboard, { write: (text: string) => writes.push(text) }, clock);
+  const finished = runLive(io, env, keyboard, { rows: 60, write: (text: string) => writes.push(text) }, clock);
   const frames = () => writes.filter((text) => text.startsWith(LIVE_CLEAR)).map((text) => text.slice(LIVE_CLEAR.length));
   const press = (key: string) => keyboard.emit('data', key);
   return { writes, finished, frames, press, lastFrame: () => frames().at(-1) ?? '' };
