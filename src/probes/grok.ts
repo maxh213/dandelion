@@ -1,4 +1,4 @@
-import { fieldOf, isCount, validInstant, withReset, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, isFilled, matchesOnJsonLine, newestLineMatch, validInstant, withReset, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type GrokIo = { reader: FileReader };
 
@@ -18,7 +18,7 @@ function usedPercent(config: unknown): number | undefined {
 
 function tierOf(ctx: unknown): string {
   const tier = fieldOf(ctx, 'subscriptionTier');
-  return typeof tier === 'string' && tier !== '' ? tier : 'grok';
+  return isFilled(tier) ? tier : 'grok';
 }
 
 function creditsWindow(usedPct: number, config: unknown): UsageWindow {
@@ -36,30 +36,12 @@ function usableSnapshots(event: unknown): Snapshot[] {
 }
 
 function snapshotsOn(line: string): Snapshot[] {
-  try {
-    const event: unknown = JSON.parse(line);
-    return fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshots(event) : [];
-  } catch {
-    return [];
-  }
-}
-
-function lineAround(log: string, at: number): string {
-  const end = log.indexOf('\n', at);
-  return log.slice(log.lastIndexOf('\n', at) + 1, end === -1 ? undefined : end);
-}
-
-function newestSnapshot(log: string): Snapshot | undefined {
-  for (let at = log.length, hit = log.lastIndexOf(BILLING_MSG); hit !== at; at = hit, hit = log.lastIndexOf(BILLING_MSG, at - 1)) {
-    const [snapshot] = snapshotsOn(lineAround(log, hit));
-    if (snapshot !== undefined) return snapshot;
-  }
-  return undefined;
+  return matchesOnJsonLine(line, (event) => (fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshots(event) : []));
 }
 
 export async function probeGrok(io: GrokIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
   const log = await io.reader.read(`${grokHome(io.reader, env)}/logs/unified.jsonl`);
-  const snapshot = log === undefined ? undefined : newestSnapshot(log);
+  const snapshot = log === undefined ? undefined : newestLineMatch(log, BILLING_MSG, snapshotsOn);
   const usage = { id: 'grok', displayName: 'grok', fetchedAt: now };
   if (snapshot === undefined) return { ...usage, planLabel: 'grok', windows: [], status: 'unavailable', reason: UNAVAILABLE };
   return { ...usage, planLabel: snapshot.tier, windows: [snapshot.window], status: 'ok', snapshotAt: snapshot.ts };

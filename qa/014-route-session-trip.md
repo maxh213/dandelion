@@ -32,7 +32,7 @@ live() { rq Q_CLAUDE=2,13,130 Q_AGY=0,17,126 Q_KIMI=0,95,73 Q_GROK=9,130 Q_CURSO
    - **Expected:** `none`, `exit=1`, then `0`.
 
 8. Run `mkdir -p "$RX/state"; echo '{"claude-work": false}' > "$ST"; rq Q_CLAUDE=95,80,2 Q_WORK=0,80,2 Q_AGY=10,10,72; rq Q_CLAUDE=95,80,2 Q_WORK=0,80,2; rm -r "$RX/state"`.
-   - **Expected:** `gemini-3.1-pro-high medium agy` with `exit=0`, then `none` with `exit=1`. Neither claude account is printed.
+   - **Expected:** `gemini-3.8-flash-high high agy` with `exit=0`, then `none` with `exit=1`. Neither claude account is printed.
 
 9. Run `rq Q_CLAUDE=0,86,2 Q_AGY=0,0,72`, then `live NO_COLOR=1 A=--once Q_WORK=100,72,5.35 | head -1`.
    - **Expected:** `claude-opus-5 max claude` with `exit=0`, as in 012. Then a line starting `DANDELION`.

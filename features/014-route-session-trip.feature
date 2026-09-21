@@ -30,7 +30,7 @@ Feature: 014 - dandelion route never picks an account whose rolling window is us
       | a weekly at 95 does not trip (rule 1)         | kimi 0/95@2, agy 0/0@72                              | missing                | kimi-code/kimi-for-coding-highspeed kimi | 0 |
       | a weekly at 92 does not trip (rule 2)         | grok 92@72                                           | missing                | grok-4.6 xhigh grok                   | 0    |
       | every routable account tripped                | claude 90/0@72, agy 99/0@72, kimi 100/0@72           | missing                | none                            | 1    |
-      | ineligible work and tripped claude            | claude 95/80@2, claude-work 0/80@2, agy 10/10@72     | {"claude-work": false} | gemini-3.1-pro-high medium agy  | 0    |
+      | ineligible work and tripped claude            | claude 95/80@2, claude-work 0/80@2, agy 10/10@72     | {"claude-work": false} | gemini-3.8-flash-high high agy  | 0    |
       | only ineligible or tripped claude accounts    | claude 95/80@2, claude-work 0/80@2                   | {"claude-work": false} | none                            | 1    |
 
   Scenario: The live case that prompted the task
@@ -70,8 +70,8 @@ Feature: 014 - dandelion route never picks an account whose rolling window is us
       | claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z                                   |             | grok-4.6 xhigh grok                     |
       | claude: rolling 89.9 @-; agy: rolling 89.95 @-                                                     |             | claude-opus-5 high claude         |
       | claude: rolling 89.9 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-                    |             | claude-opus-5 max claude          |
-      | claude: rolling 90 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 80 @-                     |             | gemini-3.1-pro-high medium agy    |
-      | agy: other 99 @-, weekly 50 @2026-09-20T00:00:00.000Z                                              |             | gemini-3.1-pro-high medium agy    |
+      | claude: rolling 90 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 80 @-                     |             | gemini-3.8-flash-high high agy    |
+      | agy: other 99 @-, weekly 50 @2026-09-20T00:00:00.000Z                                              |             | gemini-3.8-flash-high high agy    |
       | claude: rolling 95 @-; claude-work: rolling 0 @-                                                   | claude-work | none                              |
       | kimi: rolling 90 @-; codex: weekly 0 @-; kilo: no windows                                          |             | none                              |
     And every 010, 011 and 012 unit row returns the line it did before, and the 012 --high rows are unchanged

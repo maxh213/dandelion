@@ -241,7 +241,22 @@ export function processZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-export function runLive(io: ProbeIo, env: Record<string, string | undefined>, keyboard: Keyboard, screen: Screen): Promise<void> {
+export function runLive(
+  io: ProbeIo,
+  env: Record<string, string | undefined>,
+  keyboard: Keyboard,
+  screen: Screen,
+  clock?: () => string
+): Promise<void> {
   registry.closed = false;
-  return startLive({ probes: providerProbes(io, env), env, keyboard, screen, stopChildren, eligibility: eligibilityOf(io, env), zone: processZone() });
+  return startLive({
+    probes: providerProbes(io, env),
+    env,
+    keyboard,
+    screen,
+    stopChildren,
+    eligibility: eligibilityOf(io, env),
+    zone: processZone(),
+    clock
+  });
 }

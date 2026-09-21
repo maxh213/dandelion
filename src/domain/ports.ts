@@ -32,3 +32,51 @@ export function successBody(outcome: FetchOutcome, request: string, timeoutMs: n
 export function unavailableReason(error: unknown): string {
   return error instanceof ProbeUnavailable ? error.message : USAGE_PARSE_FAILURE;
 }
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function fieldOf(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+export function parseJson(text: string): unknown {
+  const value: unknown = JSON.parse(text);
+  return value;
+}
+
+export function matchesOnJsonLine<T>(line: string, matchesOn: (value: unknown) => T[]): T[] {
+  try {
+    return matchesOn(parseJson(line));
+  } catch {
+    return [];
+  }
+}
+
+export function isCount(value: unknown): value is number {
+  return Number.isFinite(value) && Number(value) >= 0;
+}
+
+export function isFilled(value: unknown): value is string {
+  return typeof value === 'string' && value !== '';
+}
+
+const DATE_BEFORE_TIME = /\d-\d{2}-\d{2}T/;
+
+export function validInstant(value: unknown): string | undefined {
+  return typeof value === 'string' && DATE_BEFORE_TIME.test(value) && !Number.isNaN(Date.parse(value)) ? value : undefined;
+}
+
+function lineAround(log: string, at: number): string {
+  const end = log.indexOf('\n', at);
+  return log.slice(log.lastIndexOf('\n', at) + 1, end === -1 ? undefined : end);
+}
+
+export function newestLineMatch<T>(log: string, needle: string, matchesOn: (line: string) => T[]): T | undefined {
+  for (let at = log.length, hit = log.lastIndexOf(needle); hit !== at; at = hit, hit = log.lastIndexOf(needle, at - 1)) {
+    const [match] = matchesOn(lineAround(log, hit));
+    if (match !== undefined) return match;
+  }
+  return undefined;
+}

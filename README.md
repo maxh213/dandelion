@@ -1,6 +1,6 @@
 # Dandelion Dashboard
 
-Dandelion is a terminal dashboard that shows how much of your AI allowances you have left: subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, and the API balance for `kilo`.
+Dandelion is a terminal dashboard that shows how much of your AI allowances you have left: subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, the credits balance for `junie`, the Nous Portal credits for `hermes`, and the API balance for `kilo`.
 
 Called dandelion because dandelion seeds can lay dormant for a period of time before bursting into life. It's why they're such a prolific weed. But anyway this fits the naming convention I started with marestail and also it's sort of similar to you'll use up a session window for an llm then it will come back lol.
 
@@ -15,9 +15,11 @@ Panels always appear in this order. A provider whose CLI is missing, fails, time
 - `grok` - reads the newest billing snapshot from `<grok home>/logs/unified.jsonl` without running grok, and shows the credits window with a reset countdown, the subscription tier and the snapshot's age. A snapshot older than 48h is shown dim as stale. Without a snapshot the panel says to run grok once.
 - `codex` - runs `codex login status` (15s timeout). Logged in with an API key, it shows "api-key billing · no usage windows", because API usage has no windows. Logged in with ChatGPT, it starts `codex app-server` and reads `account/rateLimits/read` over JSON-RPC on stdio (30s timeout), then shows the primary and secondary windows with a reset countdown. The server is then shut down with SIGTERM, then SIGKILL after 5s.
 - `cursor` - reads the access token from the cursor-agent auth file without running cursor-agent, and POSTs to the dashboard API's `GetCurrentPeriodUsage` and `GetPlanInfo` (15s timeout each) to show the total, auto and api windows with a reset countdown and the plan name and price. The token is never printed or written.
+- `junie` - reads the newest completion snapshot from `<junie home>/sessions/<id>/events.jsonl` without running junie, visiting sessions from `<junie home>/sessions/index.jsonl` newest first, and shows the credits used against a reference, the balance and the snapshot's age. A snapshot older than 48h is shown dim as stale. Without a snapshot the panel says to run junie once.
+- `hermes` - reads the Nous Portal tokens from the hermes auth file without running hermes, GETs `/api/oauth/account` (15s timeout) for the credits window with a reset countdown and remaining versus the monthly grant, and never prints the tokens. Without a token the panel says to run `hermes portal login`; when the token is expired it says to run `hermes once`.
 - `kilo` (api balance) - runs `kilo profile` (20s timeout) and shows the balance against a reference.
 
-All eight probes run in parallel. Window gauges are coloured by usage: below 50% calm, 50-79% warm, 80-94% hot, 95% and above critical.
+All ten probes run in parallel. Window gauges are coloured by usage: below 50% calm, 50-79% warm, 80-94% hot, 95% and above critical.
 
 ## Run Commands
 
@@ -33,9 +35,9 @@ The app runs once when stdout or stdin is not a terminal, as if `--once` were gi
 
 ## Route
 
-`route` must be the first argument; later arguments are ignored, except that `--high` anywhere after it switches to the quality chain below. It routes among `claude`, `claude-work`, `agy`, `kimi`, `grok` and `cursor`, in dashboard order, taking each one that is ok and has at least one usage window. `kilo` is never routed, because it reports a balance rather than windows, and `codex` is never routed, because it has no subscription windows to route on.
+`route` must be the first argument; later arguments are ignored, except that `--high` anywhere after it switches to the quality chain below. It routes among `claude`, `claude-work`, `agy`, `kimi`, `grok`, `cursor`, `junie` and `hermes`, in dashboard order, taking each one that is ok and has at least one usage window. `kilo` is never routed, because it reports a balance rather than windows, and `codex` is never routed, because it has no subscription windows to route on.
 
-Each window is rolling (claude session, kimi 5h, agy Five Hour Limit), weekly (any other label containing "week", grok credits, cursor total, auto and api) or other, which route ignores. A window's left is 100 minus its used percent, compared without rounding.
+Each window is rolling (claude session, kimi 5h, agy Five Hour Limit), weekly (any other label containing "week", grok credits, cursor total, auto and api, junie credits, hermes credits) or other, which route ignores. A window's left is 100 minus its used percent, compared without rounding.
 
 1. Evaporation: a weekly window evaporates when it resets after now and before the next local midnight with less than 97% left. If any provider has one, route prints the max line of the provider whose evaporating window has the most left.
 2. Most headroom: otherwise each provider's binding is the lowest left over its rolling and weekly windows (100 when it has neither), and route prints the standard line of the provider with the highest binding.
@@ -50,10 +52,12 @@ Eligibility: ineligible providers are dropped before both rules, so an ineligibl
 |---|---|---|
 | claude | `claude-opus-5 high` | `claude-opus-5 max` |
 | claude-work | `claude-opus-5 high` | `claude-opus-5 max` |
-| agy | `gemini-3.1-pro-high medium` | `gemini-3.1-pro-high high` |
+| agy | `gemini-3.8-flash-high high` | `gemini-3.1-pro-high high` |
 | kimi | `kimi-code/kimi-for-coding-highspeed` | `kimi-code/kimi-for-coding-highspeed` |
 | grok | `grok-4.6 xhigh` | `grok-4.6 xhigh` |
 | cursor | `kimi-k3-max` | `kimi-k3-max` |
+| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |
+| hermes | `x-ai/grok-4.6 xhigh` | `x-ai/grok-4.6 xhigh` |
 
 Account token: both `route` and `route --high` print `<line> <provider id>`, such as `claude-opus-5 high claude-work` or `kimi-k3-max cursor`, because several providers share a line and the account decides how to launch it; `none` stays alone. `claude` launches claude as usual, `claude-work` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_WORK_CONFIG_DIR` (default `~/.claude-work`), and every other id launches its own CLI.
 
@@ -67,7 +71,7 @@ Route --high: quality first, with no evaporation rule and no headroom comparison
 | 4 | grok | (all) | `grok-4.6 xhigh` |
 | 5 | agy | (all) | `gemini-3.8-flash-high high` |
 
-An entry with a matcher is gated on the windows whose label contains the matcher in any case, plus every rolling window; a matched window the account does not report counts as 0% used. An (all) entry is gated on every window the provider reports, except the windows another entry of the same provider matches, so `claude-opus-5 max` ignores the Fable window. The 90% trip: an entry is available on an account only when the account is eligible, ok with at least one window, and every gating window is under 90% used; at 90% it pops down to the next entry. Ineligible, unavailable and failed providers are skipped, and `kimi`, `codex` and `kilo` are never in the chain. When both claude accounts are available at one rank, the one with more left (100 minus its highest gating used percent) wins, and a tie goes to `claude`. When no entry is available it prints `none` and exits 1.
+An entry with a matcher is gated on the windows whose label contains the matcher in any case, plus every rolling window; a matched window the account does not report counts as 0% used. An (all) entry is gated on every window the provider reports, except the windows another entry of the same provider matches, so `claude-opus-5 max` ignores the Fable window. The 90% trip: an entry is available on an account only when the account is eligible, ok with at least one window, and every gating window is under 90% used; at 90% it pops down to the next entry. Ineligible, unavailable and failed providers are skipped, and `kimi`, `codex`, `junie`, `hermes` and `kilo` are never in the chain, so `--high` does not use junie. `--high` does not use hermes. When both claude accounts are available at one rank, the one with more left (100 minus its highest gating used percent) wins, and a tie goes to `claude`. When no entry is available it prints `none` and exits 1.
 
 ## Env-var Ledger
 
@@ -77,6 +81,10 @@ An entry with a matcher is gated on the windows whose label contains the matcher
 - `DANDELION_GROK_HOME` - The grok home directory the `grok` probe reads `logs/unified.jsonl` from. Defaults to `~/.grok` when unset or empty. The app never writes to it.
 - `DANDELION_CURSOR_AUTH_FILE` - The cursor-agent auth file the `cursor` probe reads `accessToken` from. Defaults to `~/.config/cursor/auth.json` when unset or empty. Without a token the panel says to run `cursor-agent login`.
 - `DANDELION_CURSOR_API_BASE` - The base URL of the cursor dashboard API the `cursor` probe POSTs to. Defaults to `https://api2.cursor.sh` when unset or empty.
+- `DANDELION_JUNIE_HOME` - The junie home directory the `junie` probe reads `sessions/index.jsonl` and each session's `events.jsonl` from. Defaults to `~/.junie` when unset or empty. The app never writes to it.
+- `DANDELION_JUNIE_REFERENCE` - The number of credits a full junie balance holds, used for the `junie` credits window. Defaults to `1000000`. If set to an empty string, there is no reference: the panel shows the balance without a window and junie is not routed. Any other value that is not a positive number uses the default.
+- `DANDELION_HERMES_AUTH_FILE` - The hermes auth file the `hermes` probe reads Nous Portal tokens from. Defaults to `~/.hermes/auth.json` when unset or empty. Without a token the panel says to run `hermes portal login`. The tokens are never printed or written.
+- `DANDELION_HERMES_PORTAL_BASE` - The base URL of the Nous Portal the `hermes` probe GETs `/api/oauth/account` from. Defaults to `https://portal.nousresearch.com` when unset or empty.
 - `DANDELION_REFRESH_SECONDS` - Seconds the live dashboard waits after a round of probes settles before it probes again. Defaults to `300`; any value that is not a positive integer uses the default.
 - `DANDELION_STATE_FILE` - The route eligibility state file the live dashboard writes when space toggles a provider, and `route` and `--once` read. Defaults to `$XDG_STATE_HOME/dandelion/eligibility.json`, else `~/.local/state/dandelion/eligibility.json`, when unset or empty. Writes go to a temp file in the same directory, then rename over it.
 - `NO_COLOR` - If set, disables ANSI colors and uses ASCII fallback rendering.

@@ -28,8 +28,11 @@ if (me === 'claude') { const work = Boolean(process.env.CLAUDE_CONFIG_DIR), h = 
 if (me === 'agy') { const v = q('Q_AGY'); if (!v) process.exit(1);
   console.log('Gemini Models\\tFive Hour Limit Remaining\\t' + (100 - v[0]) + '%\\t' + iso(4) + '\\nGemini Models\\tWeekly Limit Remaining\\t' + (100 - v[1]) + '%\\t' + iso(Number(v[2]))); process.exit(0); }
 if (me === 'kimi') { const v = q('Q_KIMI'); if (!v) process.exit(1); const port = Number(a[a.indexOf('--port') + 1]);
-  const data = { summary: { used: v[1] * 10, limit: 1000, reset_at: iso(Number(v[2])) }, limits: [{ used: Number(v[0]), limit: 100, window: { unit: 'hour', value: 5 } }] };
-  http.createServer((req, res) => res.end(JSON.stringify({ data }))).listen(port, '127.0.0.1', () => console.log('kimi web ready: http://127.0.0.1:' + port + '/?token=t'));
+  const body = { code: 0, msg: 'success', data: { kind: 'ok', quota: { usages: {
+    limit5h: { usedRatio: v[0] / 100, resetAt: iso(5) },
+    limit7d: { usedRatio: v[1] / 100, resetAt: iso(Number(v[2])) }
+  }, extraUsage: null } }, request_id: 'qa-018' };
+  http.createServer((req, res) => res.end(JSON.stringify(body))).listen(port, '127.0.0.1', () => console.log('Local: http://127.0.0.1:' + port + '/#token=t'));
 } else process.exit(2);
 `;
 
@@ -59,8 +62,8 @@ const ARGUMENT_USAGES = { claude: [10, 50, '-'], agy: [0, 0, 72] };
 const ARGUMENT_ROWS = [
   ['route --high', 'claude-fable-5-1 max claude'],
   ['route extra --high', 'claude-fable-5-1 max claude'],
-  ['route', 'gemini-3.1-pro-high medium agy'],
-  ['route --High', 'gemini-3.1-pro-high medium agy']
+  ['route', 'gemini-3.8-flash-high high agy'],
+  ['route --High', 'gemini-3.8-flash-high high agy']
 ];
 
 const PLAIN_ROWS = [
@@ -159,6 +162,7 @@ async function envFor(ctx, usages, state, extraEnv) {
   return {
     HOME: home,
     DANDELION_STATE_FILE: join(home, 'state', 'eligibility.json'),
+    DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json'),
     TZ: ctx.zone,
     PATH: ctx.bin,
     DANDELION_KIMI_PORT: String(await freePort()),

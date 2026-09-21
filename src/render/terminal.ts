@@ -7,8 +7,6 @@ import {
   routeLine,
   summariseFleet,
   type Balance,
-  type FleetReset,
-  type FleetSummary,
   type ProviderUsage,
   type UsageWindow
 } from '../domain/index.ts';
@@ -112,7 +110,7 @@ export const STYLE_TOKENS = {
   warm: '\x1b[33m',
   hot: '\x1b[31m',
   critical: '\x1b[35m'
-} as const;
+} as const satisfies Record<string, string>;
 
 type StyleToken = keyof typeof STYLE_TOKENS;
 
@@ -161,9 +159,12 @@ function balanceLine(balance: Balance | undefined, noColor: boolean): string {
   return `${amount} ${balanceGauge(balance, noColor)}`.padEnd(WIDTH);
 }
 
+function taggedCaption(usage: ProviderUsage): string {
+  return usage.planLabel === undefined ? usage.displayName : `${usage.planLabel} · ${usage.displayName}`;
+}
+
 function caption(usage: ProviderUsage): string {
-  if (usage.planLabel === undefined) return usage.displayName;
-  return `${usage.planLabel} · ${usage.displayName}`;
+  return `${taggedCaption(usage)}${usage.captionSuffix ?? ''}`;
 }
 
 function captionLine(usage: ProviderUsage, marks: PanelMarks): string {
@@ -272,11 +273,11 @@ function liveBanner(view: LiveView, usages: ProviderUsage[], noColor: boolean, n
   return view.refreshing ? refreshingBanner(tail, noColor) : bannerLine(tail, noColor);
 }
 
-function hotSegment({ hot, windows }: FleetSummary): string {
+function hotSegment(hot: number, windows: number): string {
   return hot === 0 ? `all windows below ${HOT_PCT}%` : `${hot}/${windows} windows above ${HOT_PCT}%`;
 }
 
-function resetSegment(head: string, next: FleetReset, now: string): string {
+function resetSegment(head: string, next: { id: string; label: string; resetsAt: string }, now: string): string {
   const prefix = `${head}${next.id} `;
   const suffix = ` in ${formatCountdown(next.resetsAt, now)}`;
   return `${prefix}${cutCells(next.label, WIDTH - cellCount(prefix) - cellCount(suffix))}${suffix}`;
@@ -284,7 +285,7 @@ function resetSegment(head: string, next: FleetReset, now: string): string {
 
 function summaryLine(usages: ProviderUsage[], now: string): string {
   const fleet = summariseFleet(usages, now);
-  const head = `${hotSegment(fleet)} · next reset: `;
+  const head = `${hotSegment(fleet.hot, fleet.windows)} · next reset: `;
   return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now);
 }
 
@@ -348,19 +349,23 @@ function probingAnswer(spinner: number): BoxAnswer {
   return { model: probingLine(spinner), account: '', dimmed: true };
 }
 
-type MidnightCache = { zone: string; fromMs: number; midnightMs: number; midnight: string };
+let midnightZone: string | undefined;
+let midnightFromMs: number | undefined;
+let midnightUntilMs: number | undefined;
+let midnightInstant: string | undefined;
 
-let midnightCache: MidnightCache | undefined;
-
-function cacheHolds(cache: MidnightCache, zone: string, nowMs: number): boolean {
-  return cache.zone === zone && nowMs >= cache.fromMs && nowMs < cache.midnightMs;
+function cacheHolds(zone: string, nowMs: number): boolean {
+  return midnightZone === zone && nowMs >= Number(midnightFromMs) && nowMs < Number(midnightUntilMs);
 }
 
 function cachedMidnight(zone: string, now: string): string {
   const nowMs = Date.parse(now);
-  if (midnightCache !== undefined && cacheHolds(midnightCache, zone, nowMs)) return midnightCache.midnight;
+  if (cacheHolds(zone, nowMs)) return String(midnightInstant);
   const midnight = nextLocalMidnight(zone, now);
-  midnightCache = { zone, fromMs: nowMs, midnightMs: Date.parse(midnight), midnight };
+  midnightZone = zone;
+  midnightFromMs = nowMs;
+  midnightUntilMs = Date.parse(midnight);
+  midnightInstant = midnight;
   return midnight;
 }
 

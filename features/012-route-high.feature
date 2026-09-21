@@ -60,8 +60,8 @@ Feature: 012 - dandelion route --high picks the strongest model that has quota
       | args               | result                                                                      |
       | route --high       | stdout is exactly "claude-fable-5-1 max claude" and a newline, exit 0       |
       | route extra --high | stdout is exactly "claude-fable-5-1 max claude" and a newline, exit 0       |
-      | route              | stdout is exactly "gemini-3.1-pro-high medium agy" and a newline, exit 0    |
-      | route --High       | stdout is exactly "gemini-3.1-pro-high medium agy" and a newline, exit 0    |
+      | route              | stdout is exactly "gemini-3.8-flash-high high agy" and a newline, exit 0    |
+      | route --High       | stdout is exactly "gemini-3.8-flash-high high agy" and a newline, exit 0    |
       | --once route --high | the output is the 009 dashboard, its first line starts "DANDELION", exit 0 |
 
   Scenario: route --high on a terminal still prints one line

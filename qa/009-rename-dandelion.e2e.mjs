@@ -10,7 +10,7 @@ import { rootDir, NPM, startLive, completeFrames, waitWithin, assertClosed } fro
 
 const PREFIX = 'dandelion-qa-009-';
 const OUTER_TIMEOUT_MS = 60000;
-const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
 const NO_GROK = 'no grok billing snapshot — run grok once';
 const NO_CURSOR = 'no cursor auth — run cursor-agent login';
@@ -25,15 +25,14 @@ const a = process.argv.slice(2), port = Number(a[a.indexOf('--port') + 1]);
 fs.writeFileSync(path.join(__dirname, 'kimi.args'), a.join(' '));
 if (a[0] !== 'web' || !a.includes('--no-open') || !port) process.exit(2);
 const reset = new Date(Date.now() + 7205 * 60000).toISOString().replace(/\\.\\d{3}Z$/, 'Z');
-const body = JSON.stringify({ data: {
-  summary: { used: 590, limit: 1000, reset_at: reset },
-  limits: [{ used: 42, limit: 100, window: { unit: 'hour', value: 5 } }],
-} });
+const body = JSON.stringify({ code: 0, msg: 'success', data: { kind: 'ok', quota: { usages: {
+  limit5h: { usedRatio: 0.42, resetAt: reset }, limit7d: { usedRatio: 0.59, resetAt: reset }
+}, extraUsage: null } }, request_id: 'qa-018' });
 http.createServer((req, res) => {
   const ok = req.headers.authorization === 'Bearer test-token' && req.url === '/api/v1/oauth/usage';
   res.writeHead(ok ? 200 : 401, { 'content-type': 'application/json' });
   res.end(ok ? body : '{}');
-}).listen(port, '127.0.0.1', () => console.log('kimi web ready: http://127.0.0.1:' + port + '/?token=test-token'));
+}).listen(port, '127.0.0.1', () => console.log('Local: http://127.0.0.1:' + port + '/#token=test-token'));
 `;
 
 const temps = [];
@@ -159,7 +158,9 @@ async function everyEntryRunsTheDashboard(bin) {
     NO_COLOR: '1',
     DANDELION_KIMI_PORT: String(await freePort()),
     DANDELION_GROK_HOME: await tempDir(),
+    DANDELION_JUNIE_HOME: await tempDir(),
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
+    DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir()
   };
@@ -186,7 +187,9 @@ async function newNamesWork(bin) {
     DANDELION_KILO_REFERENCE: '10',
     DANDELION_KIMI_PORT: 'abc',
     DANDELION_GROK_HOME: await tempDir(),
+    DANDELION_JUNIE_HOME: await tempDir(),
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
+    DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'no-such-dir')
   };
@@ -242,6 +245,8 @@ async function oldNamesAreIgnored(bin) {
       ALLOWANCE_KIMI_PORT: 'abc',
       ALLOWANCE_GROK_HOME: grokHome,
       ALLOWANCE_CURSOR_AUTH_FILE: authFile,
+      DANDELION_JUNIE_HOME: grokHome,
+      DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
       DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
       ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: await tempDir()
     };
@@ -270,7 +275,9 @@ async function liveIgnoresOldRefreshName(bin) {
     ALLOWANCE_REFRESH_SECONDS: '1',
     DANDELION_KIMI_PORT: String(await freePort()),
     DANDELION_GROK_HOME: await tempDir(),
+    DANDELION_JUNIE_HOME: await tempDir(),
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
+    DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir()
   };

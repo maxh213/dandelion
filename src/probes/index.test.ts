@@ -14,8 +14,22 @@ async function* noLines(): AsyncIterable<string> {
 }
 
 describe('providerProbes', () => {
-  it('lists the eight probes in panel order', () => {
-    expect(providerProbes(IDLE_IO, {}).map(({ id }) => id)).toEqual(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
+  it('lists the ten probes in panel order', () => {
+    expect(providerProbes(IDLE_IO, {}).map(({ id }) => id)).toEqual(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo']);
+  });
+
+  it('probes junie from the junie home in env', async () => {
+    const read = vi.fn(IDLE_IO.reader.read);
+    const junie = providerProbes({ ...IDLE_IO, reader: { ...IDLE_IO.reader, read } }, { DANDELION_JUNIE_HOME: '/j' }).find(({ id }) => id === 'junie');
+    expect(await junie?.probe('now')).toMatchObject({ id: 'junie', status: 'unavailable', reason: 'no junie quota snapshot — run junie once' });
+    expect(read).toHaveBeenCalledWith('/j/sessions/index.jsonl');
+  });
+
+  it('probes hermes from the auth file in env', async () => {
+    const read = vi.fn(IDLE_IO.reader.read);
+    const hermes = providerProbes({ ...IDLE_IO, reader: { ...IDLE_IO.reader, read } }, { DANDELION_HERMES_AUTH_FILE: '/h' }).find(({ id }) => id === 'hermes');
+    expect(await hermes?.probe('now')).toMatchObject({ id: 'hermes', status: 'unavailable', reason: 'no hermes auth — run hermes portal login' });
+    expect(read).toHaveBeenCalledWith('/h');
   });
 
   it('never runs claude for the work account without its config dir', async () => {

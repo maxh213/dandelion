@@ -14,7 +14,7 @@ const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const KIMI_FIXTURE = '#!/bin/sh\nexit 0\n';
 const KILO_FIXTURE = "#!/bin/sh\n[ \"$1\" = \"profile\" ] || exit 2\necho 'Balance: $14.15'\n";
-const PANEL_ORDER = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+const PANEL_ORDER = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 const FIVE_HOUR_ROW = /^5h {34}#{8}-{12} {2}42% ↻ (2h30m|2h29m)$/;
 const WEEKLY_ROW = /^weekly {30}#{17}-{3} {2}86% ↻ (3d0h|2d23h)$/;
 
@@ -78,7 +78,7 @@ let workConfigDir = '';
 
 function startApp(pathDir, bin, grokHome, extraEnv) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CODEX_FIXTURE_MODE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${pathDir}:${bin}`, DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
+  const env = { ...inherited, PATH: `${pathDir}:${bin}`, DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: workConfigDir, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(grokHome, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
   const started = performance.now();
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   const elapsedMs = performance.now() - started;

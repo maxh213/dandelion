@@ -1,0 +1,305 @@
+#!/usr/bin/env node
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { VALUES, absent, bothNames, emit, perCall, perCallSync } from './timing.mjs';
+
+const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
+const main = join(tree, 'src', 'main.ts');
+const appEntry = join(tree, 'src', 'app', 'index.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
+const domainEntry = join(tree, 'src', 'domain', 'index.ts');
+const junieEntry = join(tree, 'src', 'probes', 'junie.ts');
+const liveEntry = join(tree, 'src', 'app', 'live.ts');
+const NOW = '2026-09-18T14:00:00.000Z';
+const MIDNIGHT = '2026-09-19T00:00:00.000Z';
+const ZONE = 'Europe/London';
+const ITERATIONS = 200;
+const FAST_ITERATIONS = 2000;
+const SESSIONS = VALUES;
+const BIG_LINES = 1320;
+const SNAPSHOT_FROM_END = 20;
+const NEWER_LINES = 700;
+const WALK_SESSIONS = 40;
+const WALK_LINES = 110;
+const INDEX_SESSIONS = 2000;
+const HIGH_LINE = 'claude-fable-5-1 max claude';
+
+const TARGETS = {
+  probeReal: 'probeJunie 1.6MB log, snapshot 20 lines from end, real reader (in-process, per call)',
+  probeFallbackReal: 'probeJunie newest 0.8MB session without snapshot, older 1.6MB, real reader (in-process, per call)',
+  probeEmptyReal: 'probeJunie empty home real reader (in-process, per call)',
+  probeStub: 'probeJunie 1.6MB log stub reader (in-process, per call)',
+  probeNoReference: 'probeJunie 1.6MB log no reference stub reader (in-process, per call)',
+  probeWalkReal: 'probeJunie 40 sessions 135KB each none with snapshot, real reader (in-process, per call)',
+  probeBigIndex: 'probeJunie 2000-session index, newest has snapshot, stub reader (in-process, per call)',
+  runApp: 'runApp nine providers junie 1.6MB log stub (in-process, per call)',
+  runRoute: 'runRoute nine providers junie 1.6MB log stub (in-process, per call)',
+  runRouteHigh: 'runRoute --high nine providers junie 1.6MB log stub (in-process, per call)',
+  renderFresh: 'renderDashboard nine providers junie fresh (in-process, per call)',
+  renderStale: 'renderDashboard nine providers junie stale (in-process, per call)',
+  renderNoReference: 'renderDashboard nine providers junie no reference (in-process, per call)',
+  renderLive: 'renderLiveFrame nine settled junie fresh (in-process, per call)',
+  fleet: 'summariseFleet nine providers (in-process, per call)',
+  route30: 'routeLine 014 live case plus junie 30% (in-process, per call)',
+  route0: 'routeLine 014 live case plus junie 0% (in-process, per call)',
+  routeIneligible: 'routeLine 014 live case junie 0% ineligible (in-process, per call)',
+  routeNoReference: 'routeLine 014 live case plus junie no reference (in-process, per call)',
+  highRoute: 'highRouteLine 014 live case plus junie 0% (in-process, per call)',
+  session: 'startLive nine stub probes first round then quit (in-process, per session)'
+};
+
+if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry) || !existsSync(domainEntry)) {
+  absent(...Object.values(TARGETS));
+  process.exit(0);
+}
+
+const QUOTA_TYPE = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
+
+function completion(endedAtMs, quota) {
+  return JSON.stringify({
+    kind: 'SessionA2uxEvent',
+    event: { state: 'IN_PROGRESS', agentEvent: { kind: 'ResultBlockUpdatedEvent', agent: { kind: 'MainAgent', id: 'main', name: 'main', type: 'LINEAR' }, stepId: 'ba8fc998-1b74-4ede-a146-bd311cd11ec0', cancelled: false, result: '### Summary\n- pong', title: 'Optimal Response: pong', changes: [], errorCode: 'Submit' } },
+    completion: { endedAtMs, taskCostUsd: 0.0334116, quota },
+    timestampMs: endedAtMs + 4
+  });
+}
+
+function jetBrains(endedAtMs, balanceLeft) {
+  return completion(endedAtMs, { type: `${QUOTA_TYPE}.JetBrains`, balanceUnit: 'CREDITS', balanceLeft });
+}
+
+function noise(i) {
+  return JSON.stringify({
+    kind: 'SessionA2uxEvent',
+    event: { state: 'IN_PROGRESS', agentEvent: { kind: 'ToolBlockUpdatedEvent', stepId: `step-${i}`, output: 'x'.repeat(1100) } },
+    timestampMs: 1789735551000 + i
+  });
+}
+
+function sessionLog(lines, snapshotLine) {
+  const out = [];
+  for (let i = 0; i < lines; i++) {
+    if (snapshotLine !== undefined && i === snapshotLine) out.push(snapshotLine === lines - SNAPSHOT_FROM_END ? jetBrains(1789736030118, 701512.73275) : jetBrains(1789735651253, 900000));
+    else if (i % 97 === 0) out.push(completion(1789735000000 + i, { type: `${QUOTA_TYPE}.Unknown` }));
+    else if (i % 211 === 0) out.push('not json at all');
+    else out.push(noise(i));
+  }
+  return out.join('\n') + '\n';
+}
+
+const bigLog = sessionLog(BIG_LINES, BIG_LINES - SNAPSHOT_FROM_END);
+const olderLog = sessionLog(BIG_LINES, 400);
+const newerNoSnapshot = sessionLog(NEWER_LINES, undefined);
+const indexLine = (sessionId, updatedAt) => JSON.stringify({ sessionId, createdAt: updatedAt - 5000, updatedAt, projectDir: '/home/max/workspace', taskName: 'Quota Management Task' });
+const SMALL = ['session-260902-141349-1p1o', 'session-260912-232341-4bmo', 'session-260918-133428-6ss5', 'session-260918-133514-13cf'];
+function indexOf(newest, older) {
+  return [...SMALL.map((id, i) => indexLine(id, 1789000000000 + i)), indexLine(older, 1789735400000), indexLine(newest, 1789736040000), '{"broken"'].join('\n') + '\n';
+}
+
+const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
+const CLAUDE_OUT = 'Current session: 2% used · resets Sep 18, 5:40pm (Europe/London)\nCurrent week (all models): 13% used · resets Sep 19, 11pm (Europe/London)\n';
+const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t83%\t2026-09-23T18:39:00Z\n';
+const OUTPUTS = { claude: CLAUDE_OUT, agy: AGY_OUT, kilo: KILO_OUT };
+
+const fixture = mkdtempSync(join(tmpdir(), 'bench-junie-'));
+const happyHome = join(fixture, 'happy');
+const fallbackHome = join(fixture, 'fallback');
+const walkHome = join(fixture, 'walk');
+const emptyHome = join(fixture, 'empty');
+mkdirSync(emptyHome);
+
+function writeHome(home, files) {
+  for (const [relative, text] of Object.entries(files)) {
+    mkdirSync(join(home, relative, '..'), { recursive: true });
+    writeFileSync(join(home, relative), text);
+  }
+  for (const id of SMALL) mkdirSync(join(home, 'sessions', id), { recursive: true });
+}
+
+const NEWEST = 'session-260918-142254-1bzg';
+const OLDER = 'session-260912-232358-evb0';
+const happyFiles = { 'sessions/index.jsonl': indexOf(NEWEST, OLDER), [`sessions/${NEWEST}/events.jsonl`]: bigLog, [`sessions/${OLDER}/events.jsonl`]: olderLog };
+const fallbackFiles = { 'sessions/index.jsonl': indexOf(NEWEST, OLDER), [`sessions/${NEWEST}/events.jsonl`]: newerNoSnapshot, [`sessions/${OLDER}/events.jsonl`]: bigLog };
+const walkLog = sessionLog(WALK_LINES, undefined);
+const walkIds = Array.from({ length: WALK_SESSIONS }, (_, i) => `session-260801-${100000 + i}-walk`);
+const walkFiles = { 'sessions/index.jsonl': walkIds.map((id, i) => indexLine(id, 1788000000000 + i * 60000)).join('\n') + '\n', ...Object.fromEntries(walkIds.map((id) => [`sessions/${id}/events.jsonl`, walkLog])) };
+const indexIds = Array.from({ length: INDEX_SESSIONS - 1 }, (_, i) => `session-250101-${100000 + i}-many`);
+const bigIndexFiles = { 'sessions/index.jsonl': [...indexIds.map((id, i) => indexLine(id, 1780000000000 + i * 60000)), indexLine(NEWEST, 1789736040000)].join('\n') + '\n', [`sessions/${NEWEST}/events.jsonl`]: `${jetBrains(1789736030118, 701512.73275)}\n` };
+writeHome(happyHome, happyFiles);
+writeHome(fallbackHome, fallbackFiles);
+writeHome(walkHome, walkFiles);
+
+function keyboardStub() {
+  const listeners = [];
+  return {
+    setRawMode: () => undefined,
+    setEncoding: () => undefined,
+    on: (_event, listener) => listeners.push(listener),
+    pause: () => undefined,
+    press: (key) => listeners.forEach((listener) => listener(key))
+  };
+}
+
+async function liveSession(startLive, probes) {
+  const keyboard = keyboardStub();
+  let bytes = 0;
+  const screen = { write: (text) => (bytes += text.length) };
+  const settled = [];
+  const tracked = probes.map(({ id, probe }) => ({ id, probe: (now) => { const p = probe(now); settled.push(p); return p; } }));
+  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, zone: ZONE });
+  await Promise.allSettled(settled);
+  await new Promise((resolve) => setImmediate(resolve));
+  keyboard.press('q');
+  await ended;
+  return bytes;
+}
+
+const STUB_HOME = '/bench-junie-stub';
+function stubIo(files) {
+  const byPath = new Map(Object.entries(files).map(([relative, text]) => [`${STUB_HOME}/.junie/${relative}`, text]));
+  const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
+  return {
+    ...runner,
+    runner,
+    launcher: { launch: async () => undefined },
+    spawner: { spawn: () => undefined },
+    fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
+    reader: { homeDir: () => STUB_HOME, read: async (path) => byPath.get(path), isDirectory: async () => false }
+  };
+}
+const appEnv = bothNames({ ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), ALLOWANCE_GROK_HOME: emptyHome, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+const at = (ms) => new Date(Date.parse(NOW) + ms).toISOString();
+const win = (label, kind, usedPct, resetsAt) => (resetsAt === undefined ? { label, kind, usedPct } : { label, kind, usedPct, resetsAt });
+const ok = (id, windows) => ({ id, displayName: id, planLabel: id, fetchedAt: NOW, status: 'ok', windows });
+function junieUsage(usedPct, snapshotAt) {
+  const windows = usedPct === undefined ? [] : [win('credits', 'weekly', usedPct)];
+  return { ...ok('junie', windows), planLabel: '701513 credits', snapshotAt, ...(usedPct === undefined ? { note: 'balance without a reference' } : {}) };
+}
+function fleet(junie) {
+  return [
+    ok('claude', [win('session', 'rolling', 2, at(5 * HOUR)), win('weekly', 'weekly', 13, at(5 * DAY + 10 * HOUR)), win('weekly Fable', 'weekly', 2, at(5 * DAY + 10 * HOUR))]),
+    ok('claude-work', [win('session', 'rolling', 100, at(3 * HOUR + 11 * 60000)), win('weekly', 'weekly', 72, at(5 * HOUR + 21 * 60000)), win('weekly Fable', 'weekly', 52, at(5 * HOUR + 20 * 60000))]),
+    ok('agy', [win('Gemini Models · Weekly Limit', 'weekly', 17, at(5 * DAY + 6 * HOUR)), win('Claude and GPT models · Five Hour Limit', 'rolling', 0, at(5 * HOUR))]),
+    ok('kimi', [win('weekly', 'weekly', 95, at(3 * DAY + HOUR)), win('5h', 'rolling', 0, at(5 * HOUR))]),
+    { ...ok('grok', [win('credits', 'weekly', 9, at(5 * DAY + 10 * HOUR))]), snapshotAt: at(-6 * HOUR) },
+    { ...ok('codex', []), status: 'unavailable', reason: 'not found' },
+    ok('cursor', [win('total', 'weekly', 36, at(15 * DAY + 5 * HOUR)), win('auto', 'weekly', 36, at(15 * DAY + 5 * HOUR)), win('api', 'weekly', 33, at(15 * DAY + 5 * HOUR))]),
+    junie,
+    { ...ok('kilo', []), planLabel: 'api balance', balance: { amount: 14.15, currency: '$', reference: 20 } }
+  ];
+}
+const FRESH = at(-6 * HOUR - 6 * 60000);
+const STALE = at(-50 * HOUR);
+const fleet30 = fleet(junieUsage(30, FRESH));
+const fleet0 = fleet(junieUsage(0, FRESH));
+const fleetStale = fleet(junieUsage(30, STALE));
+const fleetNoReference = fleet(junieUsage(undefined, FRESH));
+
+function expectOneOf(actual, wanted, what) {
+  if (!wanted.includes(actual)) throw new Error(`${what}: got ${JSON.stringify(actual)}, wanted one of ${JSON.stringify(wanted)}`);
+}
+
+try {
+  const app = await import(pathToFileURL(appEntry).href);
+  const render = await import(pathToFileURL(renderEntry).href);
+  const { renderDashboard } = render;
+  const domain = await import(pathToFileURL(domainEntry).href);
+  const hasHigh = typeof domain.highRouteLine === 'function';
+
+  for (const usages of [fleet30, fleetStale, fleetNoReference]) renderDashboard(usages, false, NOW, []);
+  emit(TARGETS.renderFresh, perCallSync(FAST_ITERATIONS, () => renderDashboard(fleet30, false, NOW, [])), 'us');
+  emit(TARGETS.renderStale, perCallSync(FAST_ITERATIONS, () => renderDashboard(fleetStale, false, NOW, [])), 'us');
+  emit(TARGETS.renderNoReference, perCallSync(FAST_ITERATIONS, () => renderDashboard(fleetNoReference, false, NOW, [])), 'us');
+
+  if (typeof render.renderLiveFrame === 'function') {
+    const liveView = { slots: fleet30.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: ZONE, settled: fleet30 };
+    const settledOnce = render.renderLiveFrame(liveView, false, NOW);
+    if (render.renderLiveFrame(liveView, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
+    emit(TARGETS.renderLive, perCallSync(FAST_ITERATIONS, () => render.renderLiveFrame(liveView, false, NOW)), 'us');
+  } else {
+    absent(TARGETS.renderLive);
+  }
+
+  domain.summariseFleet(fleet30, NOW);
+  emit(TARGETS.fleet, perCallSync(FAST_ITERATIONS, () => domain.summariseFleet(fleet30, NOW)), 'us');
+
+  const GROK = ['grok-4.6 xhigh grok', 'grok-4.6 grok'];
+  expectOneOf(domain.routeLine(fleet30, NOW, MIDNIGHT, []), GROK, 'junie 30%');
+  expectOneOf(domain.routeLine(fleet0, NOW, MIDNIGHT, []), ['gemini-3.8-flash high junie', ...GROK], 'junie 0%');
+  expectOneOf(domain.routeLine(fleet0, NOW, MIDNIGHT, ['junie']), GROK, 'junie ineligible');
+  expectOneOf(domain.routeLine(fleetNoReference, NOW, MIDNIGHT, []), GROK, 'junie no reference');
+  emit(TARGETS.route30, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet30, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.route0, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeIneligible, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, NOW, MIDNIGHT, ['junie'])), 'us');
+  emit(TARGETS.routeNoReference, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleetNoReference, NOW, MIDNIGHT, [])), 'us');
+
+  if (hasHigh) {
+    expectOneOf(domain.highRouteLine(fleet0, []), [HIGH_LINE], 'high plus junie 0%');
+    emit(TARGETS.highRoute, perCallSync(FAST_ITERATIONS, () => domain.highRouteLine(fleet0, [])), 'us');
+  } else {
+    absent(TARGETS.highRoute);
+  }
+
+  if (existsSync(liveEntry)) {
+    const { startLive } = await import(pathToFileURL(liveEntry).href);
+    const probes = fleet30.map((usage) => ({ id: usage.id, probe: async () => usage }));
+    const bytes = await liveSession(startLive, probes);
+    if (bytes < 1000) throw new Error(`live session drew too little: ${bytes}`);
+    emit(TARGETS.session, await perCall(SESSIONS, () => liveSession(startLive, probes)), 'us');
+  } else {
+    absent(TARGETS.session);
+  }
+
+  const stub = stubIo(happyFiles);
+  const request = { mode: 'headroom', now: NOW, zone: ZONE };
+  const highRequest = { mode: 'high', now: NOW, zone: ZONE };
+  await app.runApp(stub, appEnv, NOW);
+  await app.runRoute(stub, appEnv, request);
+  emit(TARGETS.runApp, await perCall(ITERATIONS, () => app.runApp(stub, appEnv, NOW)), 'us');
+  emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stub, appEnv, request)), 'us');
+  if (hasHigh) {
+    const high = await app.runRoute(stub, appEnv, highRequest);
+    if (high.line !== HIGH_LINE) throw new Error(`runRoute --high printed ${JSON.stringify(high.line)}`);
+    emit(TARGETS.runRouteHigh, await perCall(ITERATIONS, () => app.runRoute(stub, appEnv, highRequest)), 'us');
+  } else {
+    absent(TARGETS.runRouteHigh);
+  }
+
+  if (existsSync(junieEntry)) {
+    const { probeJunie } = await import(pathToFileURL(junieEntry).href);
+    const real = { reader: app.realIo.reader };
+    const happyEnv = { DANDELION_JUNIE_HOME: happyHome };
+    const fallbackEnv = { DANDELION_JUNIE_HOME: fallbackHome };
+    const emptyEnv = { DANDELION_JUNIE_HOME: emptyHome };
+    const walkEnv = { DANDELION_JUNIE_HOME: walkHome };
+    const bigIndexStub = stubIo(bigIndexFiles);
+    const checks = [
+      [await probeJunie(real, happyEnv, NOW), 'ok', 30],
+      [await probeJunie(real, fallbackEnv, NOW), 'ok', 30],
+      [await probeJunie(real, emptyEnv, NOW), 'unavailable', undefined],
+      [await probeJunie(stub, {}, NOW), 'ok', 30],
+      [await probeJunie(stub, { DANDELION_JUNIE_REFERENCE: '' }, NOW), 'ok', undefined],
+      [await probeJunie(real, walkEnv, NOW), 'unavailable', undefined],
+      [await probeJunie(bigIndexStub, {}, NOW), 'ok', 30]
+    ];
+    for (const [usage, status, pct] of checks) {
+      if (usage.status !== status || usage.windows[0]?.usedPct !== pct) throw new Error(`probeJunie gave ${JSON.stringify(usage)}`);
+    }
+    emit(TARGETS.probeReal, await perCall(ITERATIONS, () => probeJunie(real, happyEnv, NOW)), 'us');
+    emit(TARGETS.probeFallbackReal, await perCall(ITERATIONS, () => probeJunie(real, fallbackEnv, NOW)), 'us');
+    emit(TARGETS.probeEmptyReal, await perCall(FAST_ITERATIONS, () => probeJunie(real, emptyEnv, NOW)), 'us');
+    emit(TARGETS.probeStub, await perCall(ITERATIONS, () => probeJunie(stub, {}, NOW)), 'us');
+    emit(TARGETS.probeNoReference, await perCall(ITERATIONS, () => probeJunie(stub, { DANDELION_JUNIE_REFERENCE: '' }, NOW)), 'us');
+    emit(TARGETS.probeWalkReal, await perCall(ITERATIONS, () => probeJunie(real, walkEnv, NOW)), 'us');
+    emit(TARGETS.probeBigIndex, await perCall(ITERATIONS, () => probeJunie(bigIndexStub, {}, NOW)), 'us');
+  } else {
+    absent(TARGETS.probeReal, TARGETS.probeFallbackReal, TARGETS.probeEmptyReal, TARGETS.probeStub, TARGETS.probeNoReference, TARGETS.probeWalkReal, TARGETS.probeBigIndex);
+  }
+} finally {
+  rmSync(fixture, { recursive: true, force: true });
+}

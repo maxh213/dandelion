@@ -83,7 +83,7 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
     delete env.DANDELION_KIMI_PORT;
     delete env.DANDELION_CURSOR_API_BASE;
     delete env.CLAUDE_CONFIG_DIR;
-    Object.assign(env, { DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') }, extraEnv);
+    Object.assign(env, { DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') }, extraEnv);
     return spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -243,7 +243,7 @@ describe('main', () => {
       writeFixture(dir, 'claude', "[ -z \"$CLAUDE_CONFIG_DIR\" ] || exit 1\nprintf '%s\\n' 'Current week (all models): 86% used'");
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
-      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const routed = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
       expect([routed.stdout, routed.stderr, routed.status]).toEqual(['claude-opus-5 high claude\n', '', 0]);
       rmSync(join(dir, 'claude'));
@@ -270,7 +270,7 @@ describe('main', () => {
       writeFixture(dir, 'claude', "[ -z \"$CLAUDE_CONFIG_DIR\" ] || exit 1\nprintf '%s\\n' 'Current session: 10% used' 'Current week (all models): 50% used' 'Current week (Fable): 100% used'");
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
-      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const high = spawnSync(process.execPath, ['src/main.ts', 'route', '--high'], { env, encoding: 'utf-8', timeout: 60000 });
       expect([high.stdout, high.stderr, high.status]).toEqual(['claude-opus-5 max claude\n', '', 0]);
       const plain = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
@@ -291,10 +291,18 @@ describe('main', () => {
 
   it('declares the dandelion bin with a shebang on an executable main.ts and no dependencies', () => {
     const pkg = JSON.parse(readFileSync('package.json', 'utf-8'));
-    expect([pkg.name, pkg.bin, pkg.dependencies]).toEqual(['dandelion', { dandelion: 'src/main.ts' }, undefined]);
+    expect([pkg.name, pkg.bin, pkg.scripts, pkg.dependencies]).toEqual([
+      'dandelion',
+      { dandelion: 'src/main.ts' },
+      { start: 'node src/main.ts', test: 'vitest run', qa: 'node qa/e2e.mjs' },
+      undefined
+    ]);
     expect(readFileSync(MAIN, 'utf-8').split('\n')[0]).toBe('#!/usr/bin/env node');
     const index = spawnSync('git', ['ls-files', '-s', '--', ':/src/main.ts'], { encoding: 'utf-8' });
     expect(index.stdout).toMatch(/^100755 /);
+    const readme = readFileSync('README.md', 'utf-8');
+    expect(readme.startsWith('# Dandelion Dashboard\n\nDandelion is a terminal dashboard')).toBe(true);
+    expect(readme).toContain('All ten probes run in parallel');
   });
 
   it('prints the same DANDELION dashboard through node src/main.ts and a dandelion symlink', () => {
@@ -307,7 +315,7 @@ describe('main', () => {
       writeFixture(dir, 'kimi', 'exit 0');
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
-      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const runs = ['src/main.ts', join(dir, 'dandelion')].map((entry) => spawnSync(process.execPath, [entry, '--once'], { env, encoding: 'utf-8', timeout: 60000 }));
       const panelOrder = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
       for (const run of runs) {
@@ -329,7 +337,7 @@ describe('main', () => {
     try {
       linkNodeAndShell(dir);
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8', timeout: 60000 });
       expect(result.status).toBe(0);
       expect(result.stdout).toMatch(/\ngrok\n[^]*\ncodex\napi-key billing · no usage windows\ncodex · codex\n[^]*\ncursor\n[^]*\nkilo\n/);
@@ -339,9 +347,9 @@ describe('main', () => {
     }
   });
 
-  it('prints eight dim unavailable panels in order when no CLI is on PATH, grok home is empty and cursor auth is missing', () => {
+  it('prints ten dim unavailable panels in order when no CLI is on PATH, grok and junie homes are empty and cursor auth is missing', () => {
     const grokHome = mkdtempSync(join(tmpdir(), 'dandelion-grok-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_GROK_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome, DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json') };
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome, DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json') };
     delete env.NO_COLOR;
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
     rmSync(grokHome, { recursive: true, force: true });
@@ -355,6 +363,8 @@ describe('main', () => {
       ['grok', 'no grok billing snapshot — run grok once', 'grok · grok'],
       ['codex', 'codex CLI not found in PATH', 'codex · codex'],
       ['cursor', 'no cursor auth — run cursor-agent login', 'cursor · cursor'],
+      ['junie', 'no junie quota snapshot — run junie once', 'junie · junie'],
+      ['hermes', 'no hermes auth — run hermes portal login', 'hermes · hermes'],
       ['kilo', 'kilo CLI not found in PATH', 'api balance · kilo']
     ].map((lines) => `\x1b[90m${'━'.repeat(72)}\n${lines.join('\n')}\x1b[0m`);
     expect(result.stdout).toBe(`${result.stdout.split('\n')[0]}\n${panels.join('\n')}\n`);
@@ -406,7 +416,7 @@ describe('main', () => {
 
   it('README documents cursor', () => {
     const readme = readFileSync('README.md', 'utf-8');
-    expect(readme).toContain('subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, and the API balance for `kilo`');
+    expect(readme).toContain('subscription usage windows for `claude`, `agy`, `kimi`, `grok`, `codex` and `cursor`, the credits balance for `junie`, the Nous Portal credits for `hermes`, and the API balance for `kilo`');
     const providers = readme.split('\n').filter((line) => /^- `(claude|agy|kimi|grok|codex|cursor|kilo)` /.test(line));
     expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
     const cursor = providers[5];
@@ -420,6 +430,52 @@ describe('main', () => {
     expect(readme).toMatch(/^- `DANDELION_CURSOR_API_BASE` - .*Defaults to `https:\/\/api2\.cursor\.sh`/m);
   });
 
+  it('README documents junie', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    expect(readme).toContain('`codex` and `cursor`, the credits balance for `junie`, the Nous Portal credits for `hermes`, and the API balance for `kilo`');
+    const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy|kimi|grok|codex|cursor|junie|kilo)` /.test(line));
+    expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo']);
+    const junie = providers[7];
+    expect(junie).toContain('newest completion snapshot from `<junie home>/sessions/<id>/events.jsonl` without running junie');
+    expect(junie).toContain('credits used against a reference');
+    expect(junie).toContain("the snapshot's age");
+    expect(junie).toContain('older than 48h is shown dim as stale');
+    expect(junie).toContain('says to run junie once');
+    expect(readme).toContain('All ten probes run in parallel');
+    expect(readme).not.toContain('All nine probes run in parallel');
+    expect(readme).toMatch(/^- `DANDELION_JUNIE_HOME` - .*Defaults to `~\/\.junie`.*never writes to it/m);
+    expect(readme).toMatch(/^- `DANDELION_JUNIE_REFERENCE` - .*Defaults to `1000000`.*empty string, there is no reference.*not a positive number uses the default/m);
+    const route = readme.split('## Route')[1].split('## ')[0];
+    expect(route).toContain('`grok`, `cursor`, `junie` and `hermes`, in dashboard order');
+    expect(route).toContain('junie credits, hermes credits)');
+    expect(route).toContain('| cursor | `kimi-k3-max` | `kimi-k3-max` |\n| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |\n');
+    expect(route).toContain('so `--high` does not use junie');
+  });
+
+  it('README documents hermes', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    expect(readme).toContain('the credits balance for `junie`, the Nous Portal credits for `hermes`, and the API balance for `kilo`');
+    const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy|kimi|grok|codex|cursor|junie|hermes|kilo)` /.test(line));
+    expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo']);
+    const hermes = providers[8];
+    expect(hermes).toContain('Nous Portal tokens from the hermes auth file without running hermes');
+    expect(hermes).toContain('GETs `/api/oauth/account` (15s timeout)');
+    expect(hermes).toContain('credits window with a reset countdown');
+    expect(hermes).toContain('remaining versus the monthly grant');
+    expect(hermes).toContain('never prints the tokens');
+    expect(hermes).toContain('hermes portal login');
+    expect(hermes).toContain('hermes once');
+    expect(readme).toContain('All ten probes run in parallel');
+    expect(readme).not.toContain('All nine probes run in parallel');
+    expect(readme).toMatch(/^- `DANDELION_HERMES_AUTH_FILE` - .*Defaults to `~\/\.hermes\/auth\.json`/m);
+    expect(readme).toMatch(/^- `DANDELION_HERMES_PORTAL_BASE` - .*Defaults to `https:\/\/portal\.nousresearch\.com`/m);
+    const route = readme.split('## Route')[1].split('## ')[0];
+    expect(route).toContain('`junie` and `hermes`, in dashboard order');
+    expect(route).toContain('hermes credits)');
+    expect(route).toContain('| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |\n| hermes | `x-ai/grok-4.6 xhigh` | `x-ai/grok-4.6 xhigh` |\n');
+    expect(route).toContain('`--high` does not use hermes');
+  });
+
   it('README documents the work claude account', () => {
     const readme = readFileSync('README.md', 'utf-8');
     const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy)` /.test(line));
@@ -428,7 +484,6 @@ describe('main', () => {
     expect(providers[1]).toContain('(claude · work)');
     expect(providers[1]).toContain('same command with `CLAUDE_CONFIG_DIR` set to the work config dir');
     expect(providers[1]).toContain('Without that dir it is unavailable');
-    expect(readme).toContain('All eight probes run in parallel');
     expect(readme).not.toContain('All seven probes run in parallel');
     expect(readme).toMatch(/^- `DANDELION_CLAUDE_WORK_CONFIG_DIR` - .*Defaults to `~\/\.claude-work`/m);
   });
@@ -445,7 +500,7 @@ describe('main', () => {
     for (const row of [
       '| claude | `claude-opus-5 high` | `claude-opus-5 max` |',
       '| claude-work | `claude-opus-5 high` | `claude-opus-5 max` |',
-      '| agy | `gemini-3.1-pro-high medium` | `gemini-3.1-pro-high high` |',
+      '| agy | `gemini-3.8-flash-high high` | `gemini-3.1-pro-high high` |',
       '| kimi | `kimi-code/kimi-for-coding-highspeed` | `kimi-code/kimi-for-coding-highspeed` |',
       '| grok | `grok-4.6 xhigh` | `grok-4.6 xhigh` |',
       '| cursor | `kimi-k3-max` | `kimi-k3-max` |'

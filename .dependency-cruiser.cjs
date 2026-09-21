@@ -33,14 +33,14 @@ module.exports = {
     {
       name: 'port-probes-stand-alone',
       severity: 'error',
-      comment: 'Probes that own an IO port (kimi launcher/fetcher, grok file reader, cursor fetcher/reader) are not CLI probes; they know domain only, not the cli skeleton',
-      from: { path: '^src/probes/(kimi|grok|cursor)\\.ts$' },
+      comment: 'Probes that own an IO port (kimi launcher/fetcher, grok and junie file readers, cursor and hermes fetcher/reader) are not CLI probes; they know domain only, not the cli skeleton',
+      from: { path: '^src/probes/(kimi|grok|junie|cursor|hermes)\\.ts$' },
       to: { path: '^src/probes/' }
     },
     {
       name: 'domain-ports-behind-index',
       severity: 'error',
-      comment: 'The shared Fetcher and FileReader ports and the request-failure reasons live in domain/ports.ts; everything, tests included, reaches them only through domain/index.ts',
+      comment: 'The shared Fetcher and FileReader ports, request-failure reasons, and unknown-payload reading (parseJson, fieldOf, newestLineMatch) live in domain/ports.ts; everything, tests included, reaches them only through domain/index.ts',
       from: { path: '^src/', pathNot: '^src/domain/index\\.ts$' },
       to: { path: '^src/domain/', pathNot: '^src/domain/index\\.ts$' }
     },
@@ -54,7 +54,7 @@ module.exports = {
     {
       name: 'domain-entry-lists-its-files',
       severity: 'error',
-      comment: 'domain/index.ts fronts exactly four leaves, each hiding one piece of knowledge: ports (IO contracts), route (both route policies and the one shared trip), midnight (local calendar search), eligibility (the state file toggle); a new domain file is a deliberate contract change',
+      comment: 'domain/index.ts fronts exactly four leaves, each hiding one piece of knowledge: ports (IO contracts and unknown-payload reading), route (both route policies and the one shared trip), midnight (local calendar search), eligibility (the state file toggle); a new domain file is a deliberate contract change',
       from: { path: '^src/domain/index\\.ts$' },
       to: { path: '^src/domain/', pathNot: '^src/domain/(index|ports|route|midnight|eligibility)\\.ts$' }
     },
@@ -78,6 +78,13 @@ module.exports = {
       comment: 'claude.ts declares both accounts as CliProbe data (the work config dir is a requiresDirectory the cli skeleton checks); it reaches nothing in domain, so it cannot run IO checks itself',
       from: { path: '^src/probes/claude\\.ts$' },
       to: { path: '^src/domain/' }
+    },
+    {
+      name: 'kilo-is-a-cli-declaration',
+      severity: 'error',
+      comment: 'kilo.ts is CliProbe data (balance from CLI stdout); it takes only types from domain, so it cannot run JSON or IO checks itself',
+      from: { path: '^src/probes/kilo\\.ts$' },
+      to: { path: '^src/domain/', dependencyTypesNot: ['type-only'] }
     },
     {
       name: 'app-imported-only-by-main',

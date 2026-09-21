@@ -79,7 +79,7 @@ for (const [name, out] of Object.entries(OUTPUTS)) {
 }
 
 function timeCli(grokHome) {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_CURSOR_AUTH_FILE: join(tmpdir(), 'bench-grok-missing-cursor-auth.json') });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, ALLOWANCE_GROK_HOME: grokHome, ALLOWANCE_JUNIE_HOME: emptyHome, ALLOWANCE_CURSOR_AUTH_FILE: join(tmpdir(), 'bench-grok-missing-cursor-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(tmpdir(), 'bench-grok-missing-cursor-auth.json') });
   delete env.NO_COLOR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
   delete env.DANDELION_CURSOR_API_BASE;
@@ -95,7 +95,7 @@ function ioWith(log) {
     runner,
     launcher: { launch: async () => undefined },
     fetcher: { get: async () => ({ failure: 'network' }) },
-    reader: { homeDir: () => fixture, read: async () => log, isDirectory: async () => false }
+    reader: { homeDir: () => fixture, read: async (path) => (path.endsWith('/logs/unified.jsonl') ? log : undefined), isDirectory: async () => false }
   };
 }
 
@@ -128,11 +128,12 @@ try {
     await probeGrok(recentIo, {}, NOW);
     await probeGrok(worstIo, {}, NOW);
     await probeGrok(missingIo, {}, NOW);
-    await runApp(recentIo, {}, NOW);
+    const appEnv = bothNames({ ALLOWANCE_JUNIE_HOME: emptyHome });
+    await runApp(recentIo, appEnv, NOW);
     emit(TARGETS.probeRecent, await perCall(ITERATIONS, () => probeGrok(recentIo, {}, NOW)), 'us');
     emit(TARGETS.probeWorst, await perCall(ITERATIONS, () => probeGrok(worstIo, {}, NOW)), 'us');
     emit(TARGETS.probeMissing, await perCall(RENDER_ITERATIONS, () => probeGrok(missingIo, {}, NOW)), 'us');
-    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(recentIo, {}, NOW)), 'us');
+    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(recentIo, appEnv, NOW)), 'us');
   } else {
     absent(TARGETS.probeRecent, TARGETS.probeWorst, TARGETS.probeMissing, TARGETS.runApp);
   }

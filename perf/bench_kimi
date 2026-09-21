@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -20,20 +20,72 @@ const TARGETS = {
   cliNoToken: 'cli one-shot kimi exits without token',
   probe: 'probeKimi ok (in-process, per call)',
   runApp: 'runApp claude+agy+kimi+kilo ok (in-process, per call)',
-  render: 'renderDashboard four providers with kimi (in-process, per call)'
+  render: 'renderDashboard four providers with kimi (in-process, per call)',
+  probeLive0: 'probeKimi 2.0 live usedRatio 0 (in-process, per call)',
+  probeEnvelope: 'probeKimi 2.0 envelope code 1 (in-process, per call)'
 };
+
+const KIMI2_TARGETS = [TARGETS.probeLive0, TARGETS.probeEnvelope];
 
 if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
   absent(...Object.values(TARGETS));
   process.exit(0);
 }
 
-const BODY = JSON.stringify({
+const BODY_V1 = JSON.stringify({
   data: {
     summary: { used: 590, limit: 1000, reset_at: '2026-09-18T10:00:00Z' },
     limits: [{ used: 42, limit: 100, window: { unit: 'hour', value: 5 } }]
   }
 });
+const BODY_V2 = JSON.stringify({
+  code: 0,
+  msg: 'success',
+  data: {
+    kind: 'ok',
+    quota: {
+      usages: {
+        limit5h: { usedRatio: 0.42, resetAt: '2026-09-13T15:00:00Z' },
+        limit7d: { usedRatio: 0.59, resetAt: '2026-09-18T10:00:00Z' }
+      },
+      extraUsage: null
+    }
+  },
+  request_id: '01M2WR59QVZ5WJFMF4A6TWESJB'
+});
+const LIVE_BODY = JSON.stringify({
+  code: 0,
+  msg: 'success',
+  data: {
+    kind: 'ok',
+    quota: {
+      usages: {
+        limit5h: { usedRatio: 0, resetAt: '2026-09-19T14:58:50Z' },
+        limit7d: { usedRatio: 0, resetAt: '2026-09-25T12:58:50Z' }
+      },
+      extraUsage: null
+    }
+  },
+  request_id: '01M2WR59QVZ5WJFMF4A6TWESJB'
+});
+const ENVELOPE_BODY = JSON.stringify({
+  code: 1,
+  msg: 'quota denied',
+  data: {
+    kind: 'ok',
+    quota: {
+      usages: {
+        limit5h: { usedRatio: 0.42, resetAt: '2026-09-13T15:00:00Z' },
+        limit7d: { usedRatio: 0.59, resetAt: '2026-09-18T10:00:00Z' }
+      },
+      extraUsage: null
+    }
+  }
+});
+
+const kimiSrc = existsSync(kimiEntry) ? readFileSync(kimiEntry, 'utf8') : '';
+const kimi2 = kimiSrc.includes("'usedRatio'") && kimiSrc.includes("'limit7d'");
+const BODY = kimi2 ? BODY_V2 : BODY_V1;
 const KILO_OUT = 'Name: Max\nEmail: a@b.c\nTeam: Personal\nBalance: $14.15\n';
 const CLAUDE_OUT = 'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)\nCurrent week (all models): 86% used · resets Sep 13, 11pm (Europe/London)\n';
 const AGY_OUT = 'Gemini Models\tWeekly Limit Remaining\t100%\t2026-09-20T17:13:45Z\n';
@@ -71,7 +123,7 @@ function freePort() {
 }
 
 async function timeCli(fixture) {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_KIMI_PORT: String(await freePort()), ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${fixture}:${dirname(process.execPath)}:/usr/bin:/bin`, ALLOWANCE_KIMI_PORT: String(await freePort()), ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(fixture, 'missing-auth.json') });
   delete env.NO_COLOR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
   delete env.DANDELION_CURSOR_API_BASE;
@@ -82,13 +134,16 @@ async function timeCli(fixture) {
 
 const runner = { run: async (command) => ({ stdout: OUTPUTS[command] ?? '', stderr: '' }) };
 const child = { output: async () => 'kimi web ready: /?token=test-token', hasExited: () => false, stop: async () => {} };
-const io = {
-  ...runner,
-  runner,
-  launcher: { launch: async () => child },
-  fetcher: { get: async () => ({ status: 200, body: BODY }) },
-  reader: { homeDir: () => tmpdir(), read: async () => undefined, isDirectory: async () => false }
-};
+function kimiIo(body) {
+  return {
+    ...runner,
+    runner,
+    launcher: { launch: async () => child },
+    fetcher: { get: async () => ({ status: 200, body }) },
+    reader: { homeDir: () => tmpdir(), read: async () => undefined, isDirectory: async () => false }
+  };
+}
+const io = kimiIo(BODY);
 const usages = [
   { id: 'claude', displayName: 'claude', planLabel: 'claude code', fetchedAt: NOW, status: 'ok', windows: [{ label: 'session', usedPct: 3, resetsAt: '2026-09-13T18:40:00.000Z' }] },
   { id: 'agy', displayName: 'agy', planLabel: 'agy', fetchedAt: NOW, status: 'ok', windows: [{ label: 'Gemini Models · Weekly Limit', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' }] },
@@ -106,14 +161,32 @@ try {
     const { probeKimi } = await import(pathToFileURL(kimiEntry).href);
     await timeCli(okFixture);
     await timeCli(noTokenFixture);
-    await probeKimi(io, {}, NOW);
-    await runApp(io, {}, NOW);
+    const appEnv = bothNames({ ALLOWANCE_JUNIE_HOME: okFixture });
+    const probed = await probeKimi(io, {}, NOW);
+    if (probed.status !== 'ok') throw new Error(`probeKimi ok: ${probed.reason}`);
+    await runApp(io, appEnv, NOW);
     emit(TARGETS.cliOk, await repeat(VALUES, () => timeCli(okFixture)), 'ms');
     emit(TARGETS.cliNoToken, await repeat(VALUES, () => timeCli(noTokenFixture)), 'ms');
     emit(TARGETS.probe, await perCall(ITERATIONS, () => probeKimi(io, {}, NOW)), 'us');
-    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(io, {}, NOW)), 'us');
+    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(io, appEnv, NOW)), 'us');
+    if (kimi2) {
+      const liveIo = kimiIo(LIVE_BODY);
+      const envelopeIo = kimiIo(ENVELOPE_BODY);
+      const live = await probeKimi(liveIo, {}, NOW);
+      if (live.status !== 'ok' || live.windows[0]?.usedPct !== 0 || live.windows[1]?.usedPct !== 0) {
+        throw new Error(`probeKimi live 0: ${JSON.stringify(live)}`);
+      }
+      const failed = await probeKimi(envelopeIo, {}, NOW);
+      if (failed.status !== 'unavailable' || !String(failed.reason).includes('kimi usage request failed')) {
+        throw new Error(`probeKimi envelope: ${JSON.stringify(failed)}`);
+      }
+      emit(TARGETS.probeLive0, await perCall(ITERATIONS, () => probeKimi(liveIo, {}, NOW)), 'us');
+      emit(TARGETS.probeEnvelope, await perCall(ITERATIONS, () => probeKimi(envelopeIo, {}, NOW)), 'us');
+    } else {
+      absent(...KIMI2_TARGETS);
+    }
   } else {
-    absent(TARGETS.cliOk, TARGETS.cliNoToken, TARGETS.probe, TARGETS.runApp);
+    absent(TARGETS.cliOk, TARGETS.cliNoToken, TARGETS.probe, TARGETS.runApp, ...KIMI2_TARGETS);
   }
   renderDashboard(usages, false, NOW, []);
   emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW, [])), 'us');

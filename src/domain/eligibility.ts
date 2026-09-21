@@ -1,12 +1,12 @@
-export type StateFile = {
+export interface StateFile {
   read(path: string): string;
   replace(path: string, text: string): boolean;
-};
+}
 
-export type Eligibility = {
+export interface Eligibility {
   ineligible(): string[];
   toggle(id: string): boolean;
-};
+}
 
 type State = Record<string, unknown>;
 

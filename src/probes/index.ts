@@ -5,6 +5,8 @@ import { probeCli, type CliProbe } from './cli.ts';
 import { probeCodex, type CodexIo } from './codex.ts';
 import { probeCursor, type CursorIo } from './cursor.ts';
 import { probeGrok, type GrokIo } from './grok.ts';
+import { probeHermes, type HermesIo } from './hermes.ts';
+import { probeJunie, type JunieIo } from './junie.ts';
 import { kiloProbe } from './kilo.ts';
 import { probeKimi, type KimiIo } from './kimi.ts';
 
@@ -13,7 +15,7 @@ export type { RpcChild, RpcSpawner } from './codex.ts';
 export type { LaunchedProcess, Launcher } from './kimi.ts';
 export type { Fetcher, FileReader };
 
-export type ProbeIo = KimiIo & GrokIo & CodexIo & CursorIo & { fetcher: Fetcher; reader: FileReader };
+export type ProbeIo = KimiIo & GrokIo & JunieIo & CodexIo & CursorIo & HermesIo & { fetcher: Fetcher; reader: FileReader };
 
 export type ProviderProbe = { id: string; probe(now: string): Promise<ProviderUsage> };
 
@@ -30,6 +32,8 @@ export function providerProbes(io: ProbeIo, env: Record<string, string | undefin
     { id: 'grok', probe: (now) => probeGrok(io, env, now) },
     { id: 'codex', probe: (now) => probeCodex(io, now) },
     { id: 'cursor', probe: (now) => probeCursor(io, env, now) },
+    { id: 'junie', probe: (now) => probeJunie(io, env, now) },
+    { id: 'hermes', probe: (now) => probeHermes(io, env, now) },
     cliProbe(io, kiloProbe(env))
   ];
 }
