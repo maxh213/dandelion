@@ -8,12 +8,11 @@ import {
   renderPanelUnavailable,
   renderDashboard,
   renderWindowRow,
-  renderLiveFrame,
   styleToken,
   STYLE_TOKENS,
-  type LiveView,
   type PanelMarks
 } from './terminal.ts';
+import { renderLiveFrame, type LiveView } from './live-frame.ts';
 import { highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 vi.mock('../domain/index.ts', async (importOriginal) => {
