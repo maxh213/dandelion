@@ -138,7 +138,7 @@ const turn = () => new Promise((resolve) => setImmediate(resolve));
 async function liveSession() {
   const keyboard = keyboardStub();
   let last = '';
-  const screen = { write: (text) => { last = text; } };
+  const screen = { rows: 60, write: (text) => { last = text; } };
   const ended = app.runLive(stubIo, liveEnv, keyboard, screen);
   const deadline = Date.now() + 10000;
   while (!(last.includes('api balance') && !last.includes('probing…'))) {
