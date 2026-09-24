@@ -3,7 +3,8 @@ Feature: 020 - route kimi as kimi-code/k3 max and grok as grok-4.7 xhigh, hermes
   Assumptions:
   - `kimi-code/k3` is configured with default effort max; printing the effort token `max` is belt-and-braces, so a consumer that drops it still launches K3 at max.
   - Only the three model lines and the strings that assert them move. Decision logic, window kinds, the 90% trip, eligibility, dashboard order, panel captions and probe recipes are unchanged.
-  - Coder owns production, unit tests, README and perf. QA owns living surfaces under `features/010`–`018` and `qa/010`–`018` (procedures and e2e); the coder cannot edit `qa/`.
+  - Coder owns production, unit tests, README and perf. The runner freezes `features/010`–`018` and `qa/010`–`018` for coder/specifier, so those living surfaces keep pre-020 route strings until QA can edit them after unfreeze. Hardener acceptance for this task does not require those frozen files to already hold the new strings.
+  - Historical `tasks/001`–`019` keep the strings that were true when they ran.
 
   Background:
     Given the fixtures, HOME, TZ and DANDELION_* variables of features/018-kimi-usage.feature
@@ -59,17 +60,17 @@ Feature: 020 - route kimi as kimi-code/k3 max and grok as grok-4.7 xhigh, hermes
       | hermes   | `x-ai/grok-4.7 xhigh`| `x-ai/grok-4.7 xhigh`|
     And the `--high` chain table has rank 4 line `grok-4.7 xhigh`
     And the unit tests in "src/domain/index.test.ts" assert the new kimi, grok and hermes routing-table rows, the new routeLine rows, and the new highRouteLine rank-4 row
-    And the unit tests in "src/main.test.ts" that pin the README tables assert the new strings
     And the unit tests in "src/app/index.test.ts" that pin the route boxes and routeOf expectations assert the new strings
+    And "src/main.test.ts" has a test named exactly "README, unit tests and perf expectations reflect the new lines" that pins only the README tables and the perf benches below (it does not read features/010–018)
     And the perf expectations in "perf/bench_route", "perf/bench_trip", "perf/bench_eligibility", "perf/bench_junie" and "perf/bench_hermes" assert the new lines
 
-  Scenario: Living surfaces under features and qa assert the new lines
-    Then every expected kimi, grok and hermes route line in features/010, 012, 014, 015, 016, 017 and 018 is the new string
-    And every matching expected string in qa/010, 012, 014, 015, 016, 017 and 018 (procedures and e2e) is the new string
-    And `node qa/e2e.mjs` exits 0 with every `*.e2e.mjs` printing PASS
-    And QA performs those living-surface edits; the coder does not
+  Scenario: Living-surface string moves wait for QA after unfreeze
+    Then features/010, 012, 014, 015, 016, 017 and 018 and qa/010–018 may still contain `kimi-for-coding-highspeed`, `grok-4.6 xhigh` and `x-ai/grok-4.6 xhigh`
+    And no unit test is required to fail on those frozen living-surface strings
+    And after the runner makes those paths writable, QA applies the three replacements and `node qa/e2e.mjs` exits 0
+    And until then, hardener treats production, README, unit tests and perf as the in-scope living surfaces for this task
 
   Scenario: Nothing else changes
-    Then every line of features/010, 012, 014, 015, 016, 017 and 018 that did not contain `kimi-for-coding-highspeed`, `grok-4.6` or `x-ai/grok-4.6` is unchanged,
-      the claude, claude-work, agy, cursor, junie and kilo lines are unchanged, decision logic is unchanged,
+    Then the claude, claude-work, agy, cursor, junie and kilo lines are unchanged, decision logic is unchanged,
       the dashboard order, panel captions and probe recipes are unchanged, and `none` with exit 1 still works
+    And when QA later edits features/010–018, every line that did not contain `kimi-for-coding-highspeed`, `grok-4.6` or `x-ai/grok-4.6` stays unchanged
