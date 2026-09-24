@@ -49,7 +49,7 @@ const HIGH_ROWS = [
   ['both Fable windows tripped', { claude: [10, 10, 90], work: [10, 10, 95], cursor: cursor(50) }, undefined, 'kimi-k3-max cursor', 0],
   ['one cursor window trips cursor', { claude: [10, 40, 95], work: [10, 95, 95], cursor: [10, 90, 10, 72] }, undefined, 'claude-opus-5 max claude', 0],
   ['opus: higher left wins', { claude: [10, 70, 95], work: [10, 40, 90], cursor: cursor(90) }, undefined, 'claude-opus-5 max claude-work', 0],
-  ['claude and cursor tripped, grok 60', { claude: [95, 10, 10], cursor: cursor(95), grok: [60, 72] }, undefined, 'grok-4.7 xhigh grok', 0],
+  ['claude and cursor tripped, grok 60', { claude: [95, 10, 10], cursor: cursor(95), grok: [60, 72] }, undefined, 'grok-4.6 xhigh grok', 0],
   ['grok tripped, agy left', { grok: [90, 72], agy: [10, 20, 72] }, undefined, 'gemini-3.8-flash-high high agy', 0],
   ['quality before headroom', { claude: [10, 50, '-'], agy: [0, 0, 72] }, undefined, 'claude-fable-5-1 max claude', 0],
   ['ineligible work skipped', { claude: [10, 10, 95], work: [10, 10, 10], cursor: cursor(50) }, '{"claude-work": false}', 'kimi-k3-max cursor', 0],
@@ -70,8 +70,8 @@ const PLAIN_ROWS = [
   [{ qclaude: [0, 86, 2], agy: [0, 0, 72] }, 'claude-opus-5 max claude'],
   [{ qclaude: [20, 30, 72], qwork: [10, 5, 72], agy: [15, 20, 72] }, 'claude-opus-5 high claude-work'],
   [{ agy: [0, 90, 2], kimi: [0, 90, 2] }, 'gemini-3.1-pro-high high agy'],
-  [{ kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/k3 max kimi'],
-  [{ kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.7 xhigh grok'],
+  [{ kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/kimi-for-coding-highspeed kimi'],
+  [{ kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.6 xhigh grok'],
   [{ qclaude: [0, 86, 2], cursor: [60, 60, 60, 2] }, 'kimi-k3-max cursor']
 ];
 

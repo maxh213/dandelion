@@ -24,8 +24,8 @@ Feature: 010 - dandelion route picks the subscription to burn
     | claude      | claude-opus-5 high                  | claude-opus-5 max                   |
     | claude-work | claude-opus-5 high                  | claude-opus-5 max                   |
     | agy         | gemini-3.8-flash-high high          | gemini-3.1-pro-high high            |
-    | kimi        | kimi-code/k3 max | kimi-code/k3 max |
-    | grok        | grok-4.7 xhigh                            | grok-4.7 xhigh                            |
+    | kimi        | kimi-code/kimi-for-coding-highspeed | kimi-code/kimi-for-coding-highspeed |
+    | grok        | grok-4.6 xhigh                            | grok-4.6 xhigh                            |
     | cursor      | kimi-k3-max                         | kimi-k3-max                         |
 
   Background:
@@ -52,8 +52,8 @@ Feature: 010 - dandelion route picks the subscription to burn
       | most headroom, claude-work highest             | route       | claude 20/30@72, claude-work 10/5@72, agy 15/20@72 | claude-opus-5 high                  |
       | most headroom, agy highest                     | route       | claude 20/30@72, agy 5/5@72                        | gemini-3.8-flash-high high          |
       | kimi bound by its 5h window                    | route       | kimi 90/10@72, agy 50/50@72                        | gemini-3.8-flash-high high          |
-      | a missing rolling kind counts as 100           | route       | kimi 90/10@72, grok 50@72                          | grok-4.7 xhigh                      |
-      | kimi free on both                              | route       | kimi 10/10@72, grok 50@72                          | kimi-code/k3 max |
+      | a missing rolling kind counts as 100           | route       | kimi 90/10@72, grok 50@72                          | grok-4.6 xhigh                      |
+      | kimi free on both                              | route       | kimi 10/10@72, grok 50@72                          | kimi-code/kimi-for-coding-highspeed |
       | headroom tie goes to dashboard order           | route       | agy 20/20@72, kimi 20/20@72                        | gemini-3.8-flash-high high          |
       | an unavailable candidate is skipped            | route       | claude unavailable, cursor 40@72                   | kimi-k3-max                         |
       | later arguments are ignored                    | route extra | claude 0/86@2                                      | claude-opus-5 max                   |
@@ -92,7 +92,7 @@ Feature: 010 - dandelion route picks the subscription to burn
       | reset already past never evaporates     | claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.8-flash-high high          |
       | reset exactly at now never evaporates   | claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.8-flash-high high          |
       | reset 1 ms after now evaporates         | claude: weekly 50 @2026-09-14T11:00:00.001Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | claude-opus-5 max                   |
-      | a past reset still binds (stale grok)   | grok: weekly 10 @2026-09-14T10:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z                          | grok-4.7 xhigh                      |
+      | a past reset still binds (stale grok)   | grok: weekly 10 @2026-09-14T10:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z                          | grok-4.6                            |
       | weekly without resetsAt                 | claude: weekly 50 @-; agy: rolling 0 @-, weekly 40 @2026-09-20T00:00:00.000Z                                                | gemini-3.8-flash-high high          |
       | reset exactly at local midnight         | claude: weekly 50 @2026-09-15T00:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | gemini-3.8-flash-high high          |
       | reset 1 ms before local midnight        | claude: weekly 50 @2026-09-14T23:59:59.999Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z                        | claude-opus-5 max                   |
@@ -100,7 +100,7 @@ Feature: 010 - dandelion route picks the subscription to burn
       | ok with zero windows is excluded        | claude: no windows; cursor: weekly 60 @2026-09-20T00:00:00.000Z                                                             | kimi-k3-max                         |
       | only ok with zero windows               | claude: no windows                                                                                                          | none                                |
       | only other windows bind at 100          | claude-work: other 99 @-; agy: rolling 1 @-                                                                                 | claude-opus-5 high                  |
-      | unavailable and error are excluded      | claude: unavailable; claude-work: error; kimi: weekly 90 @2026-09-20T00:00:00.000Z                                          | kimi-code/k3 max |
+      | unavailable and error are excluded      | claude: unavailable; claude-work: error; kimi: weekly 90 @2026-09-20T00:00:00.000Z                                          | kimi-code/kimi-for-coding-highspeed |
       | codex never routes, even evaporating    | codex: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-                                                              | gemini-3.8-flash-high high          |
       | codex as the only ok provider           | codex: weekly 10 @2026-09-20T00:00:00.000Z                                                                                  | none                                |
       | kilo as the only ok provider            | kilo: no windows                                                                                                            | none                                |

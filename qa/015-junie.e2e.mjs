@@ -368,12 +368,12 @@ async function emptyHomeUnchanged(ctx) {
 async function routeCases(ctx) {
   const rows = [
     ['junie beats grok 50', 'route', { grok: [50, 72] }, {}, 'gemini-3.8-flash high junie', 0],
-    ['empty reference skips junie', 'route', { grok: [50, 72] }, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'grok-4.7 xhigh grok', 0],
+    ['empty reference skips junie', 'route', { grok: [50, 72] }, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'grok-4.6 xhigh grok', 0],
     ['empty reference alone', 'route', {}, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'none', 1],
-    ['live case junie 30%', 'route', liveCase(100), {}, 'grok-4.7 xhigh grok', 0],
+    ['live case junie 30%', 'route', liveCase(100), {}, 'grok-4.6 xhigh grok', 0],
     ['live case junie 0%', 'route', liveCase(100), { junieHome: ctx.full }, 'gemini-3.8-flash high junie', 0],
-    ['live case empty reference', 'route', liveCase(100), { junieHome: ctx.full, extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'grok-4.7 xhigh grok', 0],
-    ['live case junie ineligible', 'route', liveCase(100), { junieHome: ctx.full, state: '{"junie": false}' }, 'grok-4.7 xhigh grok', 0],
+    ['live case empty reference', 'route', liveCase(100), { junieHome: ctx.full, extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'grok-4.6 xhigh grok', 0],
+    ['live case junie ineligible', 'route', liveCase(100), { junieHome: ctx.full, state: '{"junie": false}' }, 'grok-4.6 xhigh grok', 0],
     ['live case --high', 'route --high', liveCase(100), {}, 'claude-fable-5-1 max claude', 0],
     ['--high never uses junie', 'route --high', {}, { junieHome: ctx.full }, 'none', 1]
   ];
@@ -402,7 +402,7 @@ async function liveToggleAndFlash(ctx) {
     const off = `▸ junie${' '.repeat(54)}routing off`;
     await waitFor(session, () => panelLines(lastFrame(session), 'junie')[0] === off, 10000, 'junie routing off');
     assert.equal([...off].length, 72);
-    assert.ok(lastFrame(session).includes('grok-4.7 xhigh'), lastFrame(session));
+    assert.ok(lastFrame(session).includes('grok-4.6 xhigh'), lastFrame(session));
     assert.deepEqual(JSON.parse(await readFile(env.DANDELION_STATE_FILE, 'utf8')), { junie: false });
     await quit(session);
   } finally {

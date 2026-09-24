@@ -497,10 +497,10 @@ async function panelBadPort(ctx) {
 
 async function routeRows(ctx) {
   const rows = [
-    ['kimi headroom', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/k3 max kimi', 0],
-    ['5h at 90 trips', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.7 xhigh grok', 0],
-    ['weekly 95 evaporates', 'route', { kimi: [0, 95, 2], agy: [0, 0, 72] }, 'kimi-code/k3 max kimi', 0],
-    ['kimi only', 'route', { kimi: [0, 0, 72] }, 'kimi-code/k3 max kimi', 0],
+    ['kimi headroom', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/kimi-for-coding-highspeed kimi', 0],
+    ['5h at 90 trips', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.6 xhigh grok', 0],
+    ['weekly 95 evaporates', 'route', { kimi: [0, 95, 2], agy: [0, 0, 72] }, 'kimi-code/kimi-for-coding-highspeed kimi', 0],
+    ['kimi only', 'route', { kimi: [0, 0, 72] }, 'kimi-code/kimi-for-coding-highspeed kimi', 0],
     ['--high skips kimi', 'route --high', { kimi: [0, 0, 72] }, 'none', 1]
   ];
   for (const [label, args, usages, line, code] of rows) {
@@ -519,7 +519,7 @@ async function liveCaseRows(ctx) {
   const grok = await runRoute(ctx, 'route', liveCase(100), { junieHome: ctx.junie, authFile: ctx.auth });
   assert.deepEqual(
     { stdout: grok.stdout, stderr: grok.stderr, status: grok.status },
-    { stdout: 'grok-4.7 xhigh grok\n', stderr: '', status: 0 },
+    { stdout: 'grok-4.6 xhigh grok\n', stderr: '', status: 0 },
     describe('014 live case', grok)
   );
   assertNoToken(grok);
@@ -528,7 +528,7 @@ async function liveCaseRows(ctx) {
   const hermes = await runRoute(ctx, 'route', liveCase(100), { junieHome: ctx.junie, authFile: ctx.auth });
   assert.deepEqual(
     { stdout: hermes.stdout, stderr: hermes.stderr, status: hermes.status },
-    { stdout: 'x-ai/grok-4.7 xhigh hermes\n', stderr: '', status: 0 },
+    { stdout: 'x-ai/grok-4.6 xhigh hermes\n', stderr: '', status: 0 },
     describe('014 live case hermes 0%', hermes)
   );
   assertNoToken(hermes);

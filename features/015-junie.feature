@@ -2,8 +2,8 @@ Feature: 015 - Junie credits from its session log, routed as gemini-3.8-flash hi
 
   Assumptions (the task is silent here):
   - Env names follow the repo's rename: DANDELION_JUNIE_HOME (default "~/.junie" when unset or empty) and DANDELION_JUNIE_REFERENCE.
-  - The task's "grok-4.7 grok" predates commit a81d626; grok's route line is "grok-4.7 xhigh" today, so the grok cases print
-    "grok-4.7 xhigh grok".
+  - The task's "grok-4.6 grok" predates commit a81d626; grok's route line is "grok-4.6 xhigh" today, so the grok cases print
+    "grok-4.6 xhigh grok".
   - Index lines without a string "sessionId" or a finite number "updatedAt" are skipped. A snapshot line also needs "endedAtMs" to be a
     finite number; otherwise it is skipped like any other unusable line. Within one events file the line nearest the end wins.
   - usedPct is rounded half-up, then clamped to 0..100. The unavailable plan label is "junie", so the caption is "junie · junie".
@@ -109,10 +109,10 @@ Feature: 015 - Junie credits from its session log, routed as gemini-3.8-flash hi
       | none                 | 30%                    | missing          | gemini-3.8-flash high junie   | 0    |
       | none                 | 100%                   | missing          | gemini-3.8-flash high junie   | 0    |
       | grok 50@72           | 30%                    | missing          | gemini-3.8-flash high junie   | 0    |
-      | grok 0@72            | 0%                     | missing          | grok-4.7 xhigh grok           | 0    |
+      | grok 0@72            | 0%                     | missing          | grok-4.6 xhigh grok           | 0    |
       | cursor 0@72          | 0%                     | missing          | kimi-k3-max cursor            | 0    |
       | claude 0/86@2        | 0%                     | missing          | claude-opus-5 max claude      | 0    |
-      | grok 50@72           | with reference ""      | missing          | grok-4.7 xhigh grok           | 0    |
+      | grok 50@72           | with reference ""      | missing          | grok-4.6 xhigh grok           | 0    |
       | none                 | with reference ""      | missing          | none                          | 1    |
       | none                 | 0%                     | {"junie": false} | none                          | 1    |
       | none                 | unavailable            | missing          | none                          | 1    |
@@ -120,13 +120,13 @@ Feature: 015 - Junie credits from its session log, routed as gemini-3.8-flash hi
   Scenario: The 014 live case with junie
     Given the usages of "The live case that prompted the task" in features/014-route-session-trip.feature
     When junie is 30% and the user runs `node src/main.ts route`
-    Then stdout is exactly "grok-4.7 xhigh grok" and a newline, exit 0 (grok 91 left beats junie 70)
+    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, exit 0 (grok 91 left beats junie 70)
     When junie is 0% instead
     Then stdout is exactly "gemini-3.8-flash high junie" and a newline, exit 0
     When junie is 0% and DANDELION_JUNIE_REFERENCE is ""
-    Then stdout is exactly "grok-4.7 xhigh grok" and a newline, exit 0
+    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, exit 0
     When junie is 0% and the state file holds {"junie": false}
-    Then stdout is exactly "grok-4.7 xhigh grok" and a newline, exit 0
+    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, exit 0
     When junie is 0% and the user runs `node src/main.ts route --high`
     Then stdout is exactly "claude-fable-5-1 max claude" and a newline, exit 0
 

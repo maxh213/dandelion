@@ -443,8 +443,8 @@ async function dandelionOnceMatches(ctx, nodeOnce) {
 
 async function routeCases(ctx) {
   const rows = [
-    ['live case junie 30% hermes 75%', 'route', liveCase(100), { junieHome: ctx.junie }, 5.5, 72, 'grok-4.7 xhigh grok', 0],
-    ['live case hermes 0%', 'route', liveCase(100), { junieHome: ctx.junie }, 22, 72, 'x-ai/grok-4.7 xhigh hermes', 0],
+    ['live case junie 30% hermes 75%', 'route', liveCase(100), { junieHome: ctx.junie }, 5.5, 72, 'grok-4.6 xhigh grok', 0],
+    ['live case hermes 0%', 'route', liveCase(100), { junieHome: ctx.junie }, 22, 72, 'x-ai/grok-4.6 xhigh hermes', 0],
     ['live case junie 0% hermes 0%', 'route', liveCase(100), { junieHome: ctx.full }, 22, 72, 'gemini-3.8-flash high junie', 0],
     ['live case --high', 'route --high', liveCase(100), { junieHome: ctx.junie }, 5.5, 72, 'claude-fable-5-1 max claude', 0],
     ['--high never uses hermes', 'route --high', {}, {}, 22, 72, 'none', 1],
@@ -470,7 +470,7 @@ async function dashboardNotRoute(ctx) {
     const first = result.stdout.split('\n')[0];
     assert.match(first, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/, describe(args, result));
     assert.ok(!result.stdout.includes(ENTER), describe(`${args} wrote alternate screen`, result));
-    assert.ok(!result.stdout.startsWith('grok-4.7'), describe(args, result));
+    assert.ok(!result.stdout.startsWith('grok-4.6'), describe(args, result));
     assert.ok(!result.stdout.startsWith('claude-fable'), describe(args, result));
     assert.ok(!result.stdout.startsWith('none\n'), describe(args, result));
   }
@@ -484,7 +484,7 @@ async function liveBoxesKeysKiloAndClaude(ctx) {
     await waitSettled(session);
     const settled = frames(session).find((frame) => !frame.includes('probing…'));
     assert.ok(settled.split('\n')[0].startsWith('DANDELION'), settled);
-    assert.equal(boxLinesOf(settled), boxPair('grok-4.7 xhigh', 'grok', 'claude-fable-5-1 max', 'claude'), settled);
+    assert.equal(boxLinesOf(settled), boxPair('grok-4.6 xhigh', 'grok', 'claude-fable-5-1 max', 'claude'), settled);
     session.child.stdin.write('?');
     await waitFor(session, () => lastFrame(session).includes(HELP), 10000, 'help footer');
     session.child.stdin.write('k');
@@ -536,7 +536,7 @@ async function hermesOnlyFleet(ctx) {
     const settled = frames(hot).find((frame) => !frame.includes('probing…'));
     assertCredits(panelLines(settled, 'hermes')[1], 85);
     assert.match(settled.split('\n')[1], /^1\/1 windows above 80% · next reset: hermes credits in (3d0h|2d23h)$/, settled);
-    assert.equal(boxLinesOf(settled), boxPair('x-ai/grok-4.7 xhigh', 'hermes', 'none', 'no subscription available'), settled);
+    assert.equal(boxLinesOf(settled), boxPair('x-ai/grok-4.6 xhigh', 'hermes', 'none', 'no subscription available'), settled);
     await quit(hot);
   } finally {
     hot.child.kill();

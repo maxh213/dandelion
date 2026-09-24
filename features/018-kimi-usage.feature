@@ -20,7 +20,7 @@ Feature: 018 - Parse kimi 2.0 usage so the panel shows the live windows
     is unchanged. `#token=` in `Local: http://127.0.0.1:<port>/#token=…` matches the existing `token=` scrape.
     The 003 `{ data: { summary, limits } }` shape is not a 2.0 body and is parse failure.
   - Row layout is still 35-cell label, 20-cell gauge, 4-cell percent. `kimi H/W@R` is still 5h H% and weekly
-    W% resetting in R hours. Grok still prints `grok-4.7 xhigh grok`.
+    W% resetting in R hours. Grok still prints `grok-4.6 xhigh grok`.
 
   Background:
     Given the current time is "2026-09-13T10:00:00Z"
@@ -168,22 +168,22 @@ Feature: 018 - Parse kimi 2.0 usage so the panel shows the live windows
 
     Examples:
       | args         | usages                                      | line                                      | code |
-      | route        | kimi 10/10@72, grok 50@72                   | kimi-code/k3 max kimi  | 0    |
-      | route        | kimi 90/10@72, grok 50@72                   | grok-4.7 xhigh grok                       | 0    |
-      | route        | kimi 95/0@72, grok 97@72                    | grok-4.7 xhigh grok                       | 0    |
-      | route        | kimi 0/95@2, agy 0/0@72                     | kimi-code/k3 max kimi  | 0    |
-      | route        | kimi 0/0@72                                 | kimi-code/k3 max kimi  | 0    |
+      | route        | kimi 10/10@72, grok 50@72                   | kimi-code/kimi-for-coding-highspeed kimi  | 0    |
+      | route        | kimi 90/10@72, grok 50@72                   | grok-4.6 xhigh grok                       | 0    |
+      | route        | kimi 95/0@72, grok 97@72                    | grok-4.6 xhigh grok                       | 0    |
+      | route        | kimi 0/95@2, agy 0/0@72                     | kimi-code/kimi-for-coding-highspeed kimi  | 0    |
+      | route        | kimi 0/0@72                                 | kimi-code/kimi-for-coding-highspeed kimi  | 0    |
       | route --high | kimi 0/0@72                                 | none                                      | 1    |
 
   Scenario: The 014 live case and later route rows stay
     Given the usages of "The live case that prompted the task" in features/014-route-session-trip.feature,
       with junie 30% and hermes 75%
     When the user runs `node src/main.ts route`
-    Then stdout is exactly "grok-4.7 xhigh grok" and a newline, exit 0
+    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, exit 0
     When the user runs `node src/main.ts route --high`
     Then stdout is exactly "claude-fable-5-1 max claude" and a newline, exit 0
     When only hermes is available, at 0%, and the user runs `node src/main.ts route`
-    Then stdout is exactly "x-ai/grok-4.7 xhigh hermes" and a newline, exit 0
+    Then stdout is exactly "x-ai/grok-4.6 xhigh hermes" and a newline, exit 0
 
   Scenario: Nothing else changes
     Then claude, claude-work, agy, grok, cursor, junie, hermes and kilo probes, captions, panel order and

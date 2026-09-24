@@ -20,7 +20,7 @@ ha; hs; jh "$JH" 701512.73275
    - **Expected:** `dandelion --once` prints `exit=0`. `diff` is empty, or only the banner clock and `↻` countdowns that ticked. Empty output from `dandelion` is a failure.
 
 4. Run `hs; hx`, then `hs ok 22; hx`, then `jh "$JH" 1000000; hx`, then `jh "$JH" 701512.73275`.
-   - **Expected:** `grok-4.7 xhigh grok` with `exit=0`, then `x-ai/grok-4.7 xhigh hermes` with `exit=0`, then `gemini-3.8-flash high junie` with `exit=0`.
+   - **Expected:** `grok-4.6 xhigh grok` with `exit=0`, then `x-ai/grok-4.6 xhigh hermes` with `exit=0`, then `gemini-3.8-flash high junie` with `exit=0`.
 
 5. Run `hs; hx A='route --high'`, then `he A='route --high'`, then `AUTH="$HF/missing.json" he A=route`.
    - **Expected:** `claude-fable-5-1 max claude` with `exit=0`, then `none` with `exit=1` (`--high` never uses hermes), then `none` with `exit=1` (nothing windowed is available).
@@ -29,10 +29,10 @@ ha; hs; jh "$JH" 701512.73275
    - **Expected:** twice a line starting `DANDELION` followed by a time: only a first argument of `route` routes.
 
 7. Run `hs; mkdir -p "$RX/state"; hx A= NO_COLOR=1`. Once settled, press `?`, then `k`, then space. Wait 2s. Press `q`. Run it again, press `j`, space, `q`. Run `cat "$ST"; rm -r "$RX/state"`.
-   - **Expected:** the left box shows `grok-4.7 xhigh` over `grok`, the right `claude-fable-5-1 max` over `claude`. `?` adds the footer `keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help`. First `k` puts `▸` on kilo; space flashes `not routable (no usage windows)` for about 2s, then `api balance · kilo`. Second run: `j` then space shows `routing off` on claude, and the file holds `"claude": false`. Each run ends `exit=0`.
+   - **Expected:** the left box shows `grok-4.6 xhigh` over `grok`, the right `claude-fable-5-1 max` over `claude`. `?` adds the footer `keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help`. First `k` puts `▸` on kilo; space flashes `not routable (no usage windows)` for about 2s, then `api balance · kilo`. Second run: `j` then space shows `routing off` on claude, and the file holds `"claude": false`. Each run ends `exit=0`.
 
 8. Run `hs ok 3.3; rq A= NO_COLOR=1 DANDELION_HERMES_AUTH_FILE="$HA" DANDELION_HERMES_PORTAL_BASE=http://127.0.0.1:48016`, look at the fleet summary and the boxes, press `q`. Run it again after `hs ok 5.5`.
-   - **Expected:** only hermes has a window. First: hermes `credits` at `85%`, summary exactly `1/1 windows above 80% · next reset: hermes credits in 3d0h` (or `2d23h`), left box `x-ai/grok-4.7 xhigh` / `hermes`, right box `none` / `no subscription available`. Second: summary exactly `all windows below 80% · next reset: hermes credits in 3d0h` (or `2d23h`).
+   - **Expected:** only hermes has a window. First: hermes `credits` at `85%`, summary exactly `1/1 windows above 80% · next reset: hermes credits in 3d0h` (or `2d23h`), left box `x-ai/grok-4.6 xhigh` / `hermes`, right box `none` / `no subscription available`. Second: summary exactly `all windows below 80% · next reset: hermes credits in 3d0h` (or `2d23h`).
 
 9. Run `bare 2>&1 | tee /tmp/017.bare`.
    - **Expected:** `exit=0` within 5s. Ten dim panels in order, no gauges: `claude CLI not found in PATH` / `claude · personal · claude`; `claude CLI not found in PATH` / `claude · work · claude-work`; `agy CLI not found in PATH` / `agy · agy`; `kimi CLI not found in PATH` / `kimi code · kimi`; `no grok billing snapshot — run grok once` / `grok · grok`; `codex CLI not found in PATH` / `codex · codex`; `no cursor auth — run cursor-agent login` / `cursor · cursor`; `no junie quota snapshot — run junie once` / `junie · junie`; `no hermes auth — run hermes portal login` / `hermes · hermes`; `kilo CLI not found in PATH` / `api balance · kilo`.

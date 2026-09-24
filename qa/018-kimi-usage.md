@@ -92,10 +92,10 @@ kr() { echo "$1" > "$K2/mode"; rm -f "$K2/kimi.pid"; time timeout "$2" env -i HO
    - **Expected:** `exit=0` and `GONE`, even though the fixture ignores SIGTERM. The run takes about 5s longer than step 2. The kimi panel is ok at 59% and 42%.
 
 9. Run `rt Q_KIMI=10,10,72 Q_GROK=50,72`, then `rt Q_KIMI=90,10,72 Q_GROK=50,72`, then `rt Q_KIMI=0,95,2 Q_AGY=0,0,72`, then `rt Q_KIMI=0,0,72`, then `rt A='route --high' Q_KIMI=0,0,72`.
-   - **Expected:** `kimi-code/k3 max kimi` `exit=0`, then `grok-4.7 xhigh grok` `exit=0` (5h at 90% trips), then `kimi-code/k3 max kimi` `exit=0` (weekly 95% evaporates; weekly does not trip), then `kimi-code/k3 max kimi` `exit=0`, then `none` `exit=1` (`--high` never uses kimi).
+   - **Expected:** `kimi-code/kimi-for-coding-highspeed kimi` `exit=0`, then `grok-4.6 xhigh grok` `exit=0` (5h at 90% trips), then `kimi-code/kimi-for-coding-highspeed kimi` `exit=0` (weekly 95% evaporates; weekly does not trip), then `kimi-code/kimi-for-coding-highspeed kimi` `exit=0`, then `none` `exit=1` (`--high` never uses kimi).
 
 10. Run `hx`, then `hs ok 22; hx`, then `jh "$JH" 701512.73275`.
-    - **Expected:** `grok-4.7 xhigh grok` `exit=0` (014 live case: kimi weekly 95% / 5h 0% from the 2.0 `Q_KIMI` body, junie 30%, hermes 75%), then `x-ai/grok-4.7 xhigh hermes` `exit=0`.
+    - **Expected:** `grok-4.6 xhigh grok` `exit=0` (014 live case: kimi weekly 95% / 5h 0% from the 2.0 `Q_KIMI` body, junie 30%, hermes 75%), then `x-ai/grok-4.6 xhigh hermes` `exit=0`.
 
 11. Run `echo ok > "$K2/mode"; rm -f "$K2/kimi.pid"; DANDELION_KIMI_PORT=abc kiso node src/main.ts --once; echo "exit=$?"; ls "$K2/kimi.pid"`.
     - **Expected:** `exit=0`. The kimi panel is dim with `DANDELION_KIMI_PORT must be an integer from 1 to 65535`. `ls` reports no such file.
