@@ -232,6 +232,20 @@ describe('routeLine', () => {
     expect(routeOf('kimi: rolling 20 @-; agy: rolling 20 @-')).toBe('gemini-3.8-flash-high high agy');
     expect(routeOf('kimi: weekly 10 @2026-09-14T20:00:00.000Z; agy: weekly 10 @2026-09-14T20:00:00.000Z')).toBe('gemini-3.1-pro-high high agy');
   });
+
+  it('route prints the moved model lines', () => {
+    expect(routeOf('kimi: weekly 10 @2026-09-17T11:00:00.000Z; grok: weekly 50 @2026-09-17T11:00:00.000Z')).toBe('kimi-code/k3 max kimi');
+    expect(routeOf('grok: weekly 50 @2026-09-17T11:00:00.000Z')).toBe('grok-4.7 xhigh grok');
+    expect(routeOf('hermes: weekly 75 @2026-09-20T00:00:00.000Z')).toBe('x-ai/grok-4.7 xhigh hermes');
+    expect(routeOf('junie: weekly 30 @-')).toBe('gemini-3.8-flash high junie');
+  });
+
+  it('Affected earlier rows keep working with the new strings', () => {
+    expect(routeLine(`${liveCase('100')}; junie: weekly 30 @-; hermes: weekly 75 @2026-09-20T00:00:00.000Z`.split('; ').map(usageOf), LIVE_NOW, MIDNIGHT, [])).toBe('grok-4.7 xhigh grok');
+    expect(routeOf('hermes: weekly 60 @2026-09-14T13:39:00.000Z')).toBe('x-ai/grok-4.7 xhigh hermes');
+    expect(routeOf('kimi: rolling 90 @-, weekly 10 @2026-09-17T11:00:00.000Z; grok: weekly 50 @2026-09-17T11:00:00.000Z')).toBe('grok-4.7 xhigh grok');
+    expect(routeOf('kimi: rolling 0 @-, weekly 95 @2026-09-14T13:00:00.000Z; agy: rolling 0 @-, weekly 0 @2026-09-17T11:00:00.000Z')).toBe('kimi-code/k3 max kimi');
+  });
 });
 
 describe('highRouteLine', () => {

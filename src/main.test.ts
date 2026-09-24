@@ -563,4 +563,17 @@ describe('main', () => {
     const commands = readme.split('## Run Commands')[1].split('## ')[0];
     expect(commands).toMatch(/^- `npm start` - .*Two boxes at the top show the answers `dandelion route` and `dandelion route --high` would print; they update when a round settles or routing is toggled/m);
   });
+
+  it('README, tests, feature files and perf expectations reflect the new lines', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const route = readme.split('## Route')[1].split('## ')[0];
+    expect(route).toContain('| kimi | `kimi-code/k3 max` | `kimi-code/k3 max` |');
+    expect(route).toContain('| grok | `grok-4.7 xhigh` | `grok-4.7 xhigh` |');
+    expect(route).toContain('| hermes | `x-ai/grok-4.7 xhigh` | `x-ai/grok-4.7 xhigh` |');
+    expect(route).toContain('| 4 | grok | (all) | `grok-4.7 xhigh` |');
+    for (const bench of ['perf/bench_route', 'perf/bench_trip', 'perf/bench_eligibility', 'perf/bench_junie', 'perf/bench_hermes']) {
+      const text = readFileSync(bench, 'utf-8');
+      expect(text).toMatch(/kimi-code\/k3 max|grok-4\.7 xhigh|x-ai\/grok-4\.7 xhigh/);
+    }
+  });
 });
