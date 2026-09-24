@@ -228,7 +228,7 @@ try {
   domain.summariseFleet(fleet30, NOW);
   emit(TARGETS.fleet, perCallSync(FAST_ITERATIONS, () => domain.summariseFleet(fleet30, NOW)), 'us');
 
-  const GROK = ['grok-4.7 xhigh grok', 'grok-4.7 grok'];
+  const GROK = ['grok-4.6 xhigh grok', 'grok-4.6 grok'];
   expectOneOf(domain.routeLine(fleet30, NOW, MIDNIGHT, []), GROK, 'junie 30%');
   expectOneOf(domain.routeLine(fleet0, NOW, MIDNIGHT, []), ['gemini-3.8-flash high junie', ...GROK], 'junie 0%');
   expectOneOf(domain.routeLine(fleet0, NOW, MIDNIGHT, ['junie']), GROK, 'junie ineligible');
