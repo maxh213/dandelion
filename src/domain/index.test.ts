@@ -157,6 +157,11 @@ describe('routeLine', () => {
     expect(routeLine(liveCase(session).split('; ').map(usageOf), LIVE_NOW, MIDNIGHT, [])).toBe(line);
   });
 
+  it('inclusive trip at exactly 90 skips the rolling account', () => {
+    expect(routeOf('claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z')).toBe('grok-4.7 xhigh grok');
+    expect(routeOf('claude: rolling 89.999 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z')).toBe('claude-opus-5 high claude');
+  });
+
   it.each([
     ['a tripped account loses rule 2', 'claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z', [], 'grok-4.7 xhigh grok'],
     ['just under the trip is not tripped', 'claude: rolling 89.9 @-; agy: rolling 89.95 @-', [], 'claude-opus-5 high claude'],
@@ -277,6 +282,11 @@ describe('highRouteLine', () => {
       { rank: 4, providers: ['grok'], line: 'grok-4.7 xhigh' },
       { rank: 5, providers: ['agy'], line: 'gemini-3.8-flash-high high' }
     ]);
+  });
+
+  it('inclusive trip at exactly 90 skips the gated account', () => {
+    expect(highOf('claude: session rolling 90, weekly Fable weekly 10; cursor: total weekly 10')).toBe('kimi-k3-max cursor');
+    expect(highOf('claude: session rolling 89.999, weekly Fable weekly 10; cursor: total weekly 10')).toBe('claude-fable-5-1 max claude');
   });
 
   it.each([

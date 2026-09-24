@@ -25,6 +25,7 @@ vi.mock('./app/index.ts', async (importOriginal) => {
 
 const { main, runIfMain } = await import('./main.ts');
 const { runRoute } = await import('./app/index.ts');
+const { highRouteLine, routeLine } = await import('./domain/index.ts');
 
 const routeIo: ProbeIo = {
   runner: { run: async (command) => ({ stdout: command === 'claude' ? 'Current week (all models): 86% used' : '', stderr: '' }) },
@@ -91,6 +92,30 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
 }
 
 describe('main', () => {
+  it('trips a rolling window at exactly 90 percent', () => {
+    const now = '2026-09-14T11:00:00.000Z';
+    const midnight = '2026-09-15T00:00:00.000Z';
+    const tripped = {
+      id: 'claude',
+      displayName: 'claude',
+      fetchedAt: now,
+      status: 'ok' as const,
+      windows: [{ label: 'session', kind: 'rolling' as const, usedPct: 90 }]
+    };
+    const free = {
+      id: 'grok',
+      displayName: 'grok',
+      fetchedAt: now,
+      status: 'ok' as const,
+      windows: [{ label: 'credits', kind: 'weekly' as const, usedPct: 95, resetsAt: '2026-09-20T00:00:00.000Z' }]
+    };
+    expect(routeLine([tripped, free], now, midnight, [])).toBe('grok-4.7 xhigh grok');
+    expect(highRouteLine([
+      { ...tripped, windows: [{ label: 'session', kind: 'rolling' as const, usedPct: 90 }, { label: 'Fable', kind: 'weekly' as const, usedPct: 10 }] },
+      { id: 'cursor', displayName: 'cursor', fetchedAt: now, status: 'ok' as const, windows: [{ label: 'total', kind: 'weekly' as const, usedPct: 10 }] }
+    ], [])).toBe('kimi-k3-max cursor');
+  });
+
   it('prints the kilo panel with a 14 of 20 gauge from a fixture kilo on PATH', () => {
     const result = runWithFixtureKilo({});
     expect(result.status).toBe(0);
@@ -564,7 +589,7 @@ describe('main', () => {
     expect(commands).toMatch(/^- `npm start` - .*Two boxes at the top show the answers `dandelion route` and `dandelion route --high` would print; they update when a round settles or routing is toggled/m);
   });
 
-  it('README, tests, feature files and perf expectations reflect the new lines', () => {
+  it('README, unit tests and perf expectations reflect the new lines', () => {
     const readme = readFileSync('README.md', 'utf-8');
     const route = readme.split('## Route')[1].split('## ')[0];
     expect(route).toContain('| kimi | `kimi-code/k3 max` | `kimi-code/k3 max` |');
