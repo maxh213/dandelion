@@ -58,8 +58,9 @@ Feature: 020 - route kimi as kimi-code/k3 max and grok as grok-4.7 xhigh, hermes
       | hermes   | `x-ai/grok-4.7 xhigh`| `x-ai/grok-4.7 xhigh`|
     And the `--high` chain table has rank 4 line `grok-4.7 xhigh`
     And the unit tests in "src/domain/index.test.ts" assert the new kimi, grok and hermes routing-table rows, the new routeLine rows, and the new highRouteLine rank-4 row
-    And the unit tests in "src/main.test.ts" that pin the README tables and the route boxes assert the new strings
-    And the perf expectations in "perf/bench_route", "perf/bench_trip" and "perf/bench_eligibility" assert the new lines
+    And the unit tests in "src/main.test.ts" that pin the README tables assert the new strings
+    And the unit tests in "src/app/index.test.ts" that pin the route boxes and routeOf expectations assert the new strings
+    And the perf expectations in "perf/bench_route", "perf/bench_trip", "perf/bench_eligibility", "perf/bench_junie" and "perf/bench_hermes" assert the new lines
 
   Scenario: Nothing else changes
     Then every line of the 010 to 018 features that did not contain `kimi-for-coding-highspeed`, `grok-4.6` or `x-ai/grok-4.6` is unchanged,

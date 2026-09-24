@@ -16,11 +16,11 @@ Set up once in the repo root, in a real terminal. Run the set-up blocks of `qa/0
 4. Run `rt Q_CLAUDE=95,10,10 Q_CURSOR=95,72 Q_GROK=60,72 A='route --high'`.
    - **Expected:** `grok-4.7 xhigh grok`, then `exit=0`.
 
-5. Run `rt Q_KIMI=90,10,72 Q_GROK=50@72`, then `rt Q_KIMI=0,95,2 Q_AGY=0,0,72`.
-   - **Expected:** `grok-4.7 xhigh grok`, then `kimi-code/k3 max kimi`, each with `exit=0`.
+5. Run `rt Q_KIMI=90,10,72 Q_GROK=50,72`, then `rt Q_KIMI=0,95,2 Q_AGY=0,0,72`.
+   - **Expected:** `grok-4.7 xhigh grok` (kimi's 5h window is tripped), then `kimi-code/k3 max kimi` (weekly 95% evaporates before midnight), each with `exit=0`.
 
-6. Run `rt NO_COLOR=1 A=--once Q_CLAUDE=0,20,72 Q_GROK=9,130 DANDELION_JUNIE_HOME="$H0/empty" DANDELION_HERMES_AUTH_FILE="$H0/missing-hermes.json" | head -15`.
-   - **Expected:** the first two route boxes show `kimi-code/k3 max` over `kimi` and `grok-4.7 xhigh` over `grok` (or whichever provider wins); no box contains `kimi-for-coding-highspeed` or `grok-4.6`.
+6. Run `rt NO_COLOR=1 A=--once Q_KIMI=0,0,72 Q_CLAUDE=0,20,72 Q_GROK=9,130 DANDELION_JUNIE_HOME="$H0/empty" DANDELION_HERMES_AUTH_FILE="$H0/missing-hermes.json" | head -15`.
+   - **Expected:** the first two route boxes show `kimi-code/k3 max` over `kimi` for plain route and `claude-fable-5-1 max` over `claude` for `--high`; no box contains `kimi-for-coding-highspeed` or `grok-4.6`.
 
 7. Run `grep -n 'kimi-code/k3 max\|grok-4.7 xhigh\|x-ai/grok-4.7 xhigh' README.md`.
    - **Expected:** the README Route routing table shows `kimi-code/k3 max` for kimi, `grok-4.7 xhigh` for grok, and `x-ai/grok-4.7 xhigh` for hermes; the `--high` chain shows `grok-4.7 xhigh` at rank 4.
