@@ -3,6 +3,7 @@ Feature: 020 - route kimi as kimi-code/k3 max and grok as grok-4.7 xhigh, hermes
   Assumptions:
   - `kimi-code/k3` is configured with default effort max; printing the effort token `max` is belt-and-braces, so a consumer that drops it still launches K3 at max.
   - Only the three model lines and the strings that assert them move. Decision logic, window kinds, the 90% trip, eligibility, dashboard order, panel captions and probe recipes are unchanged.
+  - Coder owns production, unit tests, README and perf. QA owns living surfaces under `features/010`–`018` and `qa/010`–`018` (procedures and e2e); the coder cannot edit `qa/`.
 
   Background:
     Given the fixtures, HOME, TZ and DANDELION_* variables of features/018-kimi-usage.feature
@@ -49,7 +50,7 @@ Feature: 020 - route kimi as kimi-code/k3 max and grok as grok-4.7 xhigh, hermes
     When the user runs `npm start -- --once` with NO_COLOR set
     Then the route boxes at the top show `grok-4.7 xhigh` over `grok` for plain route and `claude-fable-5-1 max` over `claude` for `--high`
 
-  Scenario: README, tests, feature files and perf expectations reflect the new lines
+  Scenario: README, unit tests and perf expectations reflect the new lines
     When I read "README.md"
     Then the Route routing table has the rows
       | provider | standard line        | max line             |
@@ -60,8 +61,13 @@ Feature: 020 - route kimi as kimi-code/k3 max and grok as grok-4.7 xhigh, hermes
     And the unit tests in "src/domain/index.test.ts" assert the new kimi, grok and hermes routing-table rows, the new routeLine rows, and the new highRouteLine rank-4 row
     And the unit tests in "src/main.test.ts" that pin the README tables assert the new strings
     And the unit tests in "src/app/index.test.ts" that pin the route boxes and routeOf expectations assert the new strings
-    And the affected scenarios in features/010, 012, 014, 015, 016, 017 and 018 assert the new kimi, grok and hermes lines
     And the perf expectations in "perf/bench_route", "perf/bench_trip", "perf/bench_eligibility", "perf/bench_junie" and "perf/bench_hermes" assert the new lines
+
+  Scenario: Living surfaces under features and qa assert the new lines
+    Then every expected kimi, grok and hermes route line in features/010, 012, 014, 015, 016, 017 and 018 is the new string
+    And every matching expected string in qa/010, 012, 014, 015, 016, 017 and 018 (procedures and e2e) is the new string
+    And `node qa/e2e.mjs` exits 0 with every `*.e2e.mjs` printing PASS
+    And QA performs those living-surface edits; the coder does not
 
   Scenario: Nothing else changes
     Then every line of features/010, 012, 014, 015, 016, 017 and 018 that did not contain `kimi-for-coding-highspeed`, `grok-4.6` or `x-ai/grok-4.6` is unchanged,
