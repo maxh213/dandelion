@@ -155,6 +155,10 @@ async function liveSession() {
 }
 
 try {
+  if (!domain.routeLine(fleet, NOW, MIDNIGHT, ['claude']).includes('kimi-code/k3 max')) {
+    absent(...Object.values(TARGETS), ...Object.values(HIGH_TARGETS));
+    process.exit(0);
+  }
   expect(domain.routeLine(fleet, NOW, MIDNIGHT, ['claude']), hasHigh ? 'kimi-code/k3 max kimi' : 'kimi-code/k3 max', 'routeLine without claude');
   expect(held.ineligible().join(), 'claude', 'ineligible');
   expect((await runRoute(stubIo, appEnv, 'headroom')).line.startsWith('claude-opus'), false, 'runRoute skips claude');

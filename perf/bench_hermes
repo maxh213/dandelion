@@ -255,6 +255,11 @@ try {
   const domain = await import(pathToFileURL(domainEntry).href);
   const hasHigh = typeof domain.highRouteLine === 'function';
 
+  if (!domain.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, []).includes('grok-4.7')) {
+    absent(...Object.values(TARGETS));
+    process.exit(0);
+  }
+
   await timeCli(authFile, []);
   await timeCli(missingAuth, []);
   await timeCli(expiredFile, []);

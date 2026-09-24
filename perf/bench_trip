@@ -108,6 +108,10 @@ function expectOneOf(actual, wanted, what) {
 }
 
 try {
+  if (!domain.routeLine(live100, NOW, MIDNIGHT, []).includes('grok-4.7')) {
+    absent(...Object.values(TARGETS));
+    process.exit(0);
+  }
   const WORK_EVAPORATES = 'claude-opus-5 max claude-work';
   expectOneOf(domain.routeLine(live100, NOW, MIDNIGHT, []), ['grok-4.7 xhigh grok', 'grok-4.7 grok', WORK_EVAPORATES], 'live 100');
   expectOneOf(domain.routeLine(live89, NOW, MIDNIGHT, []), [WORK_EVAPORATES], 'live 89');

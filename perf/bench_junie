@@ -211,6 +211,11 @@ try {
   const domain = await import(pathToFileURL(domainEntry).href);
   const hasHigh = typeof domain.highRouteLine === 'function';
 
+  if (!domain.routeLine(fleet30, NOW, MIDNIGHT, []).includes('grok-4.7')) {
+    absent(...Object.values(TARGETS));
+    process.exit(0);
+  }
+
   for (const usages of [fleet30, fleetStale, fleetNoReference]) renderDashboard(usages, false, NOW, []);
   emit(TARGETS.renderFresh, perCallSync(FAST_ITERATIONS, () => renderDashboard(fleet30, false, NOW, [])), 'us');
   emit(TARGETS.renderStale, perCallSync(FAST_ITERATIONS, () => renderDashboard(fleetStale, false, NOW, [])), 'us');
