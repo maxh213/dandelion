@@ -53,6 +53,7 @@ export async function appEnv(pathDir) {
   const bin = await tempDir();
   await symlink(process.execPath, join(bin, 'node'));
   await symlink('/bin/sh', join(bin, 'sh'));
+  await symlink('/usr/bin/stty', join(bin, 'stty'));
   const grokHome = await tempDir();
   const workConfigDir = await tempDir();
   const { DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
@@ -79,8 +80,9 @@ export function launch(command, args, env) {
   return run;
 }
 
-export function startLive(env) {
-  return launch('/usr/bin/script', ['-qfec', `'${NPM}' start --silent`, '/dev/null'], env);
+export function startLive(env, rows = 60, cols = 80) {
+  const path = env.PATH ? `${env.PATH}:/usr/bin` : '/usr/bin';
+  return launch('/usr/bin/script', ['-qfec', `stty rows ${rows} cols ${cols}; '${NPM}' start --silent`, '/dev/null'], { ...env, PATH: path });
 }
 
 export function completeFrames(run) {
