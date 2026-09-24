@@ -49,7 +49,7 @@ bv() { env -i HOME="$RH" TZ="$TZQ" PATH="${PRE:+$PRE:}$RX/h:$RX:$NODEBIN" TERM="
      ```
 
 7. Run `NC=1 bv Q_KIMI=10,10,72`. Once settled, read the boxes. Then `q`.
-   - **Expected:** the route box shows `kimi-code/kimi-for-coding-high…` (31 cells, ending in `…`) over `kimi`; the `route --high` box shows `none` over `no subscription available`.
+   - **Expected:** the route box shows `kimi-code/k3 max` over `kimi`; the `route --high` box shows `none` over `no subscription available`.
 
 8. Run `NC=1 script -qfc 'bv H_CLAUDE=3,86,100 H_WORK=0,12,23 Q_AGY=50,50,72 Q_KIMI=85,85,72 Q_GROK=90,72 Q_CURSOR=80,72' "$CAP"`, wait for the boxes, then press `q`. Run `grep -ao $'\e\[[0-9;?]*[a-zA-Z]' "$CAP" | sort -u`, then `grep -c '+- route --high' "$CAP"`.
    - **Expected:** the first command lists only the screen control sequences `ESC[H`, `ESC[2J`, `ESC[?25h`, `ESC[?25l`, `ESC[?1049h` and `ESC[?1049l` — no colour or bold escapes. The count is at least `1`.

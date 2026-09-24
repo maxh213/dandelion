@@ -1,6 +1,6 @@
 # QA Procedure: 015 - Junie credits panel and route line
 
-After 015, a `junie` panel sits between `cursor` and `kilo` in every earlier procedure. Where junie home has no snapshot it is dim with the reason `no junie quota snapshot — run junie once`. The task's `grok-4.6 grok` is written `grok-4.6 xhigh grok` here, as grok routes since commit a81d626.
+After 015, a `junie` panel sits between `cursor` and `kilo` in every earlier procedure. Where junie home has no snapshot it is dim with the reason `no junie quota snapshot — run junie once`. The task's `grok-4.6 grok` is written `grok-4.7 xhigh grok` here, as grok routes since commit a81d626.
 
 Set up once in the repo root, in a real terminal (bash, GNU tools). First run the set-up blocks of `qa/010-route-command.md`, `qa/011-route-eligibility-toggle.md` and `qa/014-route-session-trip.md`, so `$RX`, `$ST`, `rt`, `rq` and `live` exist. `jh DIR BAL` writes a junie home: an older session with a snapshot of `900000` credits 3 hours ago, and a newer one with noise, an `Unknown` completion, a bad line and the `BAL` snapshot 1 hour ago. `snap` fingerprints a tree.
 
@@ -39,16 +39,16 @@ jh "$JH" 701512.73275
    - **Expected:** each exits 0 within 5s. The junie panel is dim with no gauge and no snapshot line and reads `junie`, `no junie quota snapshot — run junie once`, `junie · junie`. The other panels render around it. `SAME` is printed.
 
 8. Run `rt Q_GROK=50,72 DANDELION_JUNIE_HOME="$JH"`, then `rt Q_GROK=50,72 DANDELION_JUNIE_HOME="$JH" DANDELION_JUNIE_REFERENCE=`, then `rt DANDELION_JUNIE_HOME="$JH" DANDELION_JUNIE_REFERENCE=`.
-   - **Expected:** `gemini-3.8-flash high junie` (70 left beats 50), then `grok-4.6 xhigh grok` (junie not routable), each with `exit=0`. Then `none`, `exit=1`.
+   - **Expected:** `gemini-3.8-flash high junie` (70 left beats 50), then `grok-4.7 xhigh grok` (junie not routable), each with `exit=0`. Then `none`, `exit=1`.
 
 9. Run `live Q_WORK=100,72,5.35 DANDELION_JUNIE_HOME="$JH"`, then `jh "$JH" 1000000` and the same `live`, then that `live` with `DANDELION_JUNIE_REFERENCE=`.
-   - **Expected:** `grok-4.6 xhigh grok` (91 beats 70), then `gemini-3.8-flash high junie` (100 left), then `grok-4.6 xhigh grok`, each with `exit=0`.
+   - **Expected:** `grok-4.7 xhigh grok` (91 beats 70), then `gemini-3.8-flash high junie` (100 left), then `grok-4.7 xhigh grok`, each with `exit=0`.
 
 10. Run `mkdir -p "$RX/state"; echo '{"junie": false}' > "$ST"; live Q_WORK=100,72,5.35 DANDELION_JUNIE_HOME="$JH"; rm -r "$RX/state"`, then `live A='route --high' Q_WORK=100,72,5.35 DANDELION_JUNIE_HOME="$JH"`, then `rt A='route --high' DANDELION_JUNIE_HOME="$JH"`.
-    - **Expected:** `grok-4.6 xhigh grok` with `exit=0` (junie skipped), then `claude-fable-5-1 max claude` with `exit=0`, then `none` with `exit=1`: `--high` never uses junie.
+    - **Expected:** `grok-4.7 xhigh grok` with `exit=0` (junie skipped), then `claude-fable-5-1 max claude` with `exit=0`, then `none` with `exit=1`: `--high` never uses junie.
 
 11. Run `mkdir -p "$RX/state"; rq A= DANDELION_JUNIE_HOME="$JH" Q_GROK=9,130`. Select the junie panel with `j`, press space, then `q`. Run `cat "$ST"`. Run it again with `DANDELION_JUNIE_REFERENCE=` added, select junie, press space, `q`, then `rm -r "$RX/state"`.
-    - **Expected:** first the junie panel shows `routing off`, the route box shows `grok-4.6 xhigh grok`, and the file holds `"junie": false`. The second time the junie caption flashes `not routable (no usage windows)` for about 2s and the route box does not change.
+    - **Expected:** first the junie panel shows `routing off`, the route box shows `grok-4.7 xhigh grok`, and the file holds `"junie": false`. The second time the junie caption flashes `not routable (no usage windows)` for about 2s and the route box does not change.
 
 12. Run `jh "$JH" 150000; rq A= NO_COLOR=1 DANDELION_JUNIE_HOME="$JH"`, look at the fleet summary line, press `q`. Run it again with `DANDELION_JUNIE_REFERENCE=` added, then `jh "$JH" 701512.73275`.
     - **Expected:** only junie is available. First junie shows `credits` at `85%` and the summary line reads exactly `1/1 windows above 80% · next reset: none`. The second time it reads exactly `all windows below 80% · next reset: none`.

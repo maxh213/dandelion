@@ -53,7 +53,7 @@ const SETTLED_BLOCK = [
 ].join('\n');
 const TOGGLED_BLOCK = block('gemini-3.8-flash-high high', 'agy', 'kimi-k3-max', 'cursor');
 const NONE_BLOCK = block('none', 'no subscription available', 'none', 'no subscription available');
-const KIMI_BLOCK = block('kimi-code/kimi-for-coding-high…', 'kimi', 'none', 'no subscription available');
+const KIMI_BLOCK = block('kimi-code/k3 max', 'kimi', 'none', 'no subscription available');
 const probingBlock = (spinner) => block(`${spinner} probing…`, '', `${spinner} probing…`, '');
 
 const ESCAPES_ONLY = ['\x1b[2J', '\x1b[H', '\x1b[?1049h', '\x1b[?1049l', '\x1b[?25h', '\x1b[?25l'];
