@@ -109,7 +109,7 @@ function expectOneOf(actual, wanted, what) {
 
 try {
   const WORK_EVAPORATES = 'claude-opus-5 max claude-work';
-  expectOneOf(domain.routeLine(live100, NOW, MIDNIGHT, []), ['grok-4.6 xhigh grok', 'grok-4.6 grok', WORK_EVAPORATES], 'live 100');
+  expectOneOf(domain.routeLine(live100, NOW, MIDNIGHT, []), ['grok-4.7 xhigh grok', 'grok-4.7 grok', WORK_EVAPORATES], 'live 100');
   expectOneOf(domain.routeLine(live89, NOW, MIDNIGHT, []), [WORK_EVAPORATES], 'live 89');
   expectOneOf(domain.routeLine(allTripped, NOW, MIDNIGHT, []), ['none', WORK_EVAPORATES], 'all tripped');
   expectOneOf(domain.highRouteLine(live100, []), ['claude-fable-5-1 max claude'], 'high live 100');

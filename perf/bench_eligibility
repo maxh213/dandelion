@@ -155,7 +155,7 @@ async function liveSession() {
 }
 
 try {
-  expect(domain.routeLine(fleet, NOW, MIDNIGHT, ['claude']), hasHigh ? 'kimi-code/kimi-for-coding-highspeed kimi' : 'kimi-code/kimi-for-coding-highspeed', 'routeLine without claude');
+  expect(domain.routeLine(fleet, NOW, MIDNIGHT, ['claude']), hasHigh ? 'kimi-code/k3 max kimi' : 'kimi-code/k3 max', 'routeLine without claude');
   expect(held.ineligible().join(), 'claude', 'ineligible');
   expect((await runRoute(stubIo, appEnv, 'headroom')).line.startsWith('claude-opus'), false, 'runRoute skips claude');
   expect((await app.runApp(stubIo, appEnv, NOW)).includes('routing off'), true, 'runApp tags claude');
