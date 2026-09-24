@@ -5,7 +5,7 @@ Feature: 017 - TypeScript practices pass with no user-visible change
     eligibility toggle, session-trip, README meaning, package.json scripts, the vitest runner, and the
     001-016 QA fixtures and e2es stay as 016 left them. No new runtime dependencies. kilo is never routed.
   - React (TS-27 to TS-39) and Next.js (TS-40 to TS-48) do not apply: this is a Node TUI. Grok still
-    prints "grok-4.6 xhigh grok". "hermes U%" and dummy tokens are those of features/016-hermes.feature;
+    prints "grok-4.7 xhigh grok". "hermes U%" and dummy tokens are those of features/016-hermes.feature;
     "junie U%" is that of features/015-junie.feature. The 014 live case is the table in
     features/014-route-session-trip.feature at local time near 11:00. `dandelion` is a symlink to
     src/main.ts first on PATH, as `npm link` creates.
@@ -59,9 +59,9 @@ Feature: 017 - TypeScript practices pass with no user-visible change
 
     Examples:
       | command                       | line                          |
-      | node src/main.ts route        | grok-4.6 xhigh grok           |
-      | npm start -- route            | grok-4.6 xhigh grok           |
-      | dandelion route               | grok-4.6 xhigh grok           |
+      | node src/main.ts route        | grok-4.7 xhigh grok           |
+      | npm start -- route            | grok-4.7 xhigh grok           |
+      | dandelion route               | grok-4.7 xhigh grok           |
       | node src/main.ts route --high | claude-fable-5-1 max claude   |
       | npm start -- route --high     | claude-fable-5-1 max claude   |
       | dandelion route --high        | claude-fable-5-1 max claude   |
@@ -71,7 +71,7 @@ Feature: 017 - TypeScript practices pass with no user-visible change
       with junie 30% and hermes 75%, and DANDELION_STATE_FILE names a missing file in a temp dir
     When the user runs `npm start` on a terminal with NO_COLOR set and the first round has settled
     Then the frame's line 1 starts "DANDELION"
-    And lines 3 to 6 are the 013 boxes, the left showing "grok-4.6 xhigh" over "grok" and the right
+    And lines 3 to 6 are the 013 boxes, the left showing "grok-4.7 xhigh" over "grok" and the right
       showing "claude-fable-5-1 max" over "claude"
     And pressing "?" shows the footer "keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help"
     And the first "k" puts "▸" on kilo; space then makes kilo's caption "not routable (no usage windows)"
@@ -85,7 +85,7 @@ Feature: 017 - TypeScript practices pass with no user-visible change
     When credits_remaining is 3.3 and the user runs `npm start` in a terminal with NO_COLOR set
     Then the hermes panel shows "credits" at 85%
     And the fleet summary line reads exactly "1/1 windows above 80% · next reset: hermes credits in 3d0h"
-    And the route boxes show "x-ai/grok-4.6 xhigh" over "hermes" and "none" over "no subscription available"
+    And the route boxes show "x-ai/grok-4.7 xhigh" over "hermes" and "none" over "no subscription available"
     When the user selects hermes (first "k" then "k") and presses space
     Then the hermes panel shows "routing off" and the state file holds {"hermes": false}
     And both boxes show "none" over "no subscription available"
@@ -170,10 +170,10 @@ Feature: 017 - TypeScript practices pass with no user-visible change
 
     Examples:
       | args         | usages     | junie | hermes      | state             | line                          | code |
-      | route        | none       | none  | 75%         | missing           | x-ai/grok-4.6 xhigh hermes    | 0    |
-      | route        | none       | none  | 0%          | missing           | x-ai/grok-4.6 xhigh hermes    | 0    |
-      | route        | none       | none  | 100%        | missing           | x-ai/grok-4.6 xhigh hermes    | 0    |
-      | route        | grok 50@72 | none  | 75%         | missing           | grok-4.6 xhigh grok           | 0    |
+      | route        | none       | none  | 75%         | missing           | x-ai/grok-4.7 xhigh hermes    | 0    |
+      | route        | none       | none  | 0%          | missing           | x-ai/grok-4.7 xhigh hermes    | 0    |
+      | route        | none       | none  | 100%        | missing           | x-ai/grok-4.7 xhigh hermes    | 0    |
+      | route        | grok 50@72 | none  | 75%         | missing           | grok-4.7 xhigh grok           | 0    |
       | route        | none       | 0%    | 0%          | missing           | gemini-3.8-flash high junie   | 0    |
       | route        | none       | none  | 75%         | {"hermes": false} | none                          | 1    |
       | route        | none       | none  | unavailable | missing           | none                          | 1    |
@@ -183,15 +183,15 @@ Feature: 017 - TypeScript practices pass with no user-visible change
   Scenario: The 014 live case with junie and hermes is unchanged
     Given the usages of "The live case that prompted the task" in features/014-route-session-trip.feature
     When junie is 30%, hermes is 75% and the user runs `node src/main.ts route`
-    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, exit 0
+    Then stdout is exactly "grok-4.7 xhigh grok" and a newline, exit 0
     When hermes is 0% instead, junie still 30%
-    Then stdout is exactly "x-ai/grok-4.6 xhigh hermes" and a newline, exit 0
+    Then stdout is exactly "x-ai/grok-4.7 xhigh hermes" and a newline, exit 0
     When hermes is 0% and junie is 0%
     Then stdout is exactly "gemini-3.8-flash high junie" and a newline, exit 0
     When hermes is 60% with current_period_end one hour from now and before local midnight, junie 30%
-    Then stdout is exactly "x-ai/grok-4.6 xhigh hermes" and a newline, exit 0
+    Then stdout is exactly "x-ai/grok-4.7 xhigh hermes" and a newline, exit 0
     When hermes is 0%, junie 30%, and the state file holds {"hermes": false}
-    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, exit 0
+    Then stdout is exactly "grok-4.7 xhigh grok" and a newline, exit 0
     When hermes is 0% and the user runs `node src/main.ts route --high`
     Then stdout is exactly "claude-fable-5-1 max claude" and a newline, exit 0
 

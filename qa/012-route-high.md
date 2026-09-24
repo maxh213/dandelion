@@ -32,7 +32,7 @@ rh() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX/h:$RX:$NODEBIN" DANDELION_KIMI_PORT
    - **Expected:** `claude-opus-5 max claude`, `exit=0`. Cursor is tripped. Opus ignores the Fable window, and work's all-models window is tripped.
 
 6. Run `rh H_CLAUDE=95,10,10 Q_CURSOR=95,72 Q_GROK=60,72`, then `rh Q_GROK=90,72 Q_AGY=10,20,72`.
-   - **Expected:** `grok-4.6 xhigh grok`, then `gemini-3.8-flash-high high agy`, each with `exit=0`.
+   - **Expected:** `grok-4.7 xhigh grok`, then `gemini-3.8-flash-high high agy`, each with `exit=0`.
 
 7. Run `rh H_CLAUDE=90,90,90 Q_CURSOR=99,72 Q_GROK=90,72 Q_AGY=10,90,72 Q_KIMI=0,0,72 2>/tmp/012.err; wc -c < /tmp/012.err`.
    - **Expected:** `none`, `exit=1`, then `0`. kimi is healthy but is never in the chain.
@@ -47,7 +47,7 @@ rh() { env -i HOME="$RH" TZ="$TZQ" PATH="$RX/h:$RX:$NODEBIN" DANDELION_KIMI_PORT
      `0000040   =   0  \n` Then `gemini-3.8-flash-high high agy` (plain route still picks the most headroom). Then `claude-fable-5-1 max claude`. Then a line starting `DANDELION`.
 
 10. Run `rt Q_CLAUDE=0,86,2 Q_AGY=0,0,72`, then `rt Q_KIMI=10,10,72 Q_GROK=50,72`, then `rt Q_CLAUDE=20,30,72 Q_WORK=10,5,72 Q_AGY=15,20,72`.
-    - **Expected:** `claude-opus-5 max claude`, then `kimi-code/kimi-for-coding-highspeed kimi`, then `claude-opus-5 high claude-work`, each with `exit=0`. The lines match 010 plus the token.
+    - **Expected:** `claude-opus-5 max claude`, then `kimi-code/k3 max kimi`, then `claude-opus-5 high claude-work`, each with `exit=0`. The lines match 010 plus the token.
 
 11. Run `env -i HOME="$RH" TZ="$TZQ" PATH="$RB:$RX/h:$RX:$NODEBIN" DANDELION_KIMI_PORT=$KQ DANDELION_CURSOR_API_BASE=http://127.0.0.1:48010 DANDELION_STATE_FILE="$ST" H_CLAUDE=10,50,- sh -c 'q prep && dandelion route --high; echo "exit=$?"'` without redirecting.
     - **Expected:** the screen does not clear, no dashboard appears, and the only output is `claude-fable-5-1 max claude` then `exit=0`.

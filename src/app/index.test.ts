@@ -552,11 +552,11 @@ describe('kimi panel', () => {
         GROK_ENV,
         { mode: 'headroom', now: NOW, zone: 'UTC' }
       );
-    expect(await routeOf(0.1, 0.1, 50)).toEqual({ line: 'kimi-code/kimi-for-coding-highspeed kimi', routed: true });
-    expect(await routeOf(0.95, 0, 97)).toEqual({ line: 'grok-4.6 xhigh grok', routed: true });
+    expect(await routeOf(0.1, 0.1, 50)).toEqual({ line: 'kimi-code/k3 max kimi', routed: true });
+    expect(await routeOf(0.95, 0, 97)).toEqual({ line: 'grok-4.7 xhigh grok', routed: true });
     const onlyKimi = { ...ioOf(missing, HAPPY_KIMI, grokReader(undefined)) };
     expect(await runRoute(onlyKimi, {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({
-      line: 'kimi-code/kimi-for-coding-highspeed kimi',
+      line: 'kimi-code/k3 max kimi',
       routed: true
     });
     expect(await runRoute(onlyKimi, {}, { mode: 'high', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
@@ -1718,7 +1718,7 @@ describe('route eligibility state file', () => {
   });
 
   it.each<[string, string, string]>([
-    ['claude and claude-work off', '{"claude": false, "claude-work": false}', 'kimi-code/kimi-for-coding-highspeed kimi'],
+    ['claude and claude-work off', '{"claude": false, "claude-work": false}', 'kimi-code/k3 max kimi'],
     ['claude off, true and other values eligible', '{"claude": false, "claude-work": true, "kimi": "no"}', 'claude-opus-5 high claude-work'],
     ['corrupt bytes', '{not json', 'claude-opus-5 max claude'],
     ['JSON null', 'null', 'claude-opus-5 max claude'],
@@ -1748,7 +1748,7 @@ describe('route eligibility state file', () => {
     expect((await runRoute(homed, envOf(scratch), { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('claude-opus-5 max claude');
     mkdirSync(join(pathOf(scratch), '..'), { recursive: true });
     writeFileSync(pathOf(scratch), '{"claude": false}');
-    expect((await runRoute(homed, envOf(scratch), { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('kimi-code/kimi-for-coding-highspeed kimi');
+    expect((await runRoute(homed, envOf(scratch), { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('kimi-code/k3 max kimi');
   });
 
   it('tags ineligible panels in --once output, changes no other line and never writes', async () => {
@@ -2353,9 +2353,9 @@ describe('hermes panel', () => {
     });
 
     it.each<[string, Outcome, Record<string, string>, string, boolean]>([
-      ['headroom at 75%', { status: 200, body: JSON.stringify(account()) }, { '/auth.json': authJson() }, 'x-ai/grok-4.6 xhigh hermes', true],
-      ['headroom at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'x-ai/grok-4.6 xhigh hermes', true],
-      ['headroom at 100%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 0 } })) }, { '/auth.json': authJson() }, 'x-ai/grok-4.6 xhigh hermes', true],
+      ['headroom at 75%', { status: 200, body: JSON.stringify(account()) }, { '/auth.json': authJson() }, 'x-ai/grok-4.7 xhigh hermes', true],
+      ['headroom at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'x-ai/grok-4.7 xhigh hermes', true],
+      ['headroom at 100%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 0 } })) }, { '/auth.json': authJson() }, 'x-ai/grok-4.7 xhigh hermes', true],
       ['headroom without auth', { status: 200, body: JSON.stringify(account()) }, {}, 'none', false],
       ['high at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'none', false]
     ])('routes %s with only hermes available', async (mode, accountAnswer, files, line, routed) => {
@@ -2368,7 +2368,7 @@ describe('hermes panel', () => {
       const { io } = onlyHermes();
       const dashboard = await settledHermes(io, {});
       const lines = dashboard.lastFrame().split('\n');
-      expect(lines.slice(3, 5)).toEqual([`| ${'x-ai/grok-4.6 xhigh'.padEnd(31)} |  | ${'none'.padEnd(31)} |`, `| ${'hermes'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`]);
+      expect(lines.slice(3, 5)).toEqual([`| ${'x-ai/grok-4.7 xhigh'.padEnd(31)} |  | ${'none'.padEnd(31)} |`, `| ${'hermes'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`]);
       dashboard.press('q');
       await dashboard.finished;
     });

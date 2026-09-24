@@ -558,11 +558,11 @@ describe('route boxes', () => {
     expect(coloured[2]).toBe(`${DIM}│ no subscription available${' '.repeat(7)}│${RESET}  ${DIM}│ no subscription available${' '.repeat(7)}│${RESET}`);
   });
 
-  it('cuts a long model line with an ellipsis like a window label', () => {
+  it('shows the route model line and account for a routable provider', () => {
     const kimi = ok('kimi', [{ label: 'weekly', kind: 'weekly', usedPct: 10 }]);
     expect(boxLines(boxView([kimi]), true, NOW)).toEqual([
       TOP,
-      `| kimi-code/kimi-for-coding-high… |  | ${'none'.padEnd(31)} |`,
+      `| ${'kimi-code/k3 max'.padEnd(31)} |  | ${'none'.padEnd(31)} |`,
       `| ${'kimi'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`,
       BOTTOM
     ]);

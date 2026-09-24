@@ -16,7 +16,7 @@ Feature: 012 - dandelion route --high picks the strongest model that has quota
     | 1    | claude, claude-work | fable   | claude-fable-5-1 max        |
     | 2    | cursor              | (all)   | kimi-k3-max                 |
     | 3    | claude, claude-work | (all)   | claude-opus-5 max           |
-    | 4    | grok                | (all)   | grok-4.6 xhigh              |
+    | 4    | grok                | (all)   | grok-4.7 xhigh              |
     | 5    | agy                 | (all)   | gemini-3.8-flash-high high  |
     kimi, codex and kilo are never in the chain.
 
@@ -44,7 +44,7 @@ Feature: 012 - dandelion route --high picks the strongest model that has quota
       | both Fable windows tripped                    | claude 10/10/90, work 10/10/95, cursor 50      | missing                | kimi-k3-max cursor               | 0    |
       | one cursor window trips cursor                | claude 10/40/95, work 10/95/95, cursor 10/90/10 | missing               | claude-opus-5 max claude         | 0    |
       | opus: higher left wins                        | claude 10/70/95, work 10/40/90, cursor 90      | missing                | claude-opus-5 max claude-work    | 0    |
-      | claude and cursor tripped, grok 60            | claude 95/10/10, cursor 95, grok 60            | missing                | grok-4.6 xhigh grok              | 0    |
+      | claude and cursor tripped, grok 60            | claude 95/10/10, cursor 95, grok 60            | missing                | grok-4.7 xhigh grok              | 0    |
       | grok tripped, agy left                        | grok 90, agy 10/20                             | missing                | gemini-3.8-flash-high high agy   | 0    |
       | quality before headroom                       | claude 10/50/-, agy 0/0                        | missing                | claude-fable-5-1 max claude      | 0    |
       | ineligible work skipped                       | claude 10/10/95, work 10/10/10, cursor 50      | {"claude-work": false} | kimi-k3-max cursor               | 0    |
@@ -78,8 +78,8 @@ Feature: 012 - dandelion route --high picks the strongest model that has quota
       | claude 0/86@2, agy 0/0@72                          | claude-opus-5 max claude                 |
       | claude 20/30@72, claude-work 10/5@72, agy 15/20@72 | claude-opus-5 high claude-work           |
       | agy 0/90@2, kimi 0/90@2                            | gemini-3.1-pro-high high agy             |
-      | kimi 10/10@72, grok 50@72                          | kimi-code/kimi-for-coding-highspeed kimi |
-      | kimi 90/10@72, grok 50@72                          | grok-4.6 xhigh grok                            |
+      | kimi 10/10@72, grok 50@72                          | kimi-code/k3 max kimi |
+      | kimi 90/10@72, grok 50@72                          | grok-4.7 xhigh grok                            |
       | claude 0/86@2, cursor 60@2                         | kimi-k3-max cursor                       |
     And every other 010 and 011 route row prints its old line plus " " and the chosen provider id, and "none" rows still print "none"
 
@@ -92,8 +92,8 @@ Feature: 012 - dandelion route --high picks the strongest model that has quota
       | claude: session rolling 10, weekly FABLE weekly 90; cursor: total weekly 10                             |             | kimi-k3-max cursor               |
       | claude: session rolling 10, weekly weekly 50, weekly Fable weekly 100                                   |             | claude-opus-5 max claude         |
       | agy: Gemini Models · Daily Limit other 90, Gemini Models · Weekly Limit weekly 10                       |             | none                             |
-      | cursor: ok with no windows; grok: credits weekly 50                                                     |             | grok-4.6 xhigh grok              |
-      | claude: error; claude-work: unavailable; grok: credits weekly 89                                        |             | grok-4.6 xhigh grok              |
+      | cursor: ok with no windows; grok: credits weekly 50                                                     |             | grok-4.7 xhigh grok              |
+      | claude: error; claude-work: unavailable; grok: credits weekly 89                                        |             | grok-4.7 xhigh grok              |
       | claude-work: session rolling 0, weekly Fable weekly 0; cursor: total weekly 0                           | claude-work | kimi-k3-max cursor               |
       | kimi: 5h rolling 0; codex: weekly weekly 0; kilo: no windows                                            |             | none                             |
       | grok: credits weekly 50 resetting 1 h from now; cursor: total weekly 60                                 |             | kimi-k3-max cursor               |

@@ -105,7 +105,7 @@ describe('routeLine', () => {
     ['reset already past never evaporates', 'claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.8-flash-high high agy'],
     ['reset exactly at now never evaporates', 'claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.8-flash-high high agy'],
     ['reset 1 ms after now evaporates', 'claude: weekly 50 @2026-09-14T11:00:00.001Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'claude-opus-5 max claude'],
-    ['a past reset still binds (stale grok)', 'grok: weekly 10 @2026-09-14T10:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z', 'grok-4.6 xhigh grok'],
+    ['a past reset still binds (stale grok)', 'grok: weekly 10 @2026-09-14T10:00:00.000Z; agy: rolling 20 @-, weekly 20 @2026-09-20T00:00:00.000Z', 'grok-4.7 xhigh grok'],
     ['weekly without resetsAt', 'claude: weekly 50 @-; agy: rolling 0 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.8-flash-high high agy'],
     ['reset exactly at local midnight', 'claude: weekly 50 @2026-09-15T00:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'gemini-3.8-flash-high high agy'],
     ['reset 1 ms before local midnight', 'claude: weekly 50 @2026-09-14T23:59:59.999Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'claude-opus-5 max claude'],
@@ -113,7 +113,7 @@ describe('routeLine', () => {
     ['ok with zero windows is excluded', 'claude: no windows; cursor: weekly 60 @2026-09-20T00:00:00.000Z', 'kimi-k3-max cursor'],
     ['only ok with zero windows', 'claude: no windows', 'none'],
     ['only other windows bind at 100', 'claude-work: other 99 @-; agy: rolling 1 @-', 'claude-opus-5 high claude-work'],
-    ['unavailable and error are excluded', 'claude: unavailable; claude-work: error; kimi: weekly 90 @2026-09-20T00:00:00.000Z', 'kimi-code/kimi-for-coding-highspeed kimi'],
+    ['unavailable and error are excluded', 'claude: unavailable; claude-work: error; kimi: weekly 90 @2026-09-20T00:00:00.000Z', 'kimi-code/k3 max kimi'],
     ['codex never routes, even evaporating', 'codex: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', 'gemini-3.8-flash-high high agy'],
     ['codex as the only ok provider', 'codex: weekly 10 @2026-09-20T00:00:00.000Z', 'none'],
     ['kilo as the only ok provider', 'kilo: no windows', 'none']
@@ -125,11 +125,11 @@ describe('routeLine', () => {
     ['claude', 'claude-opus-5 high', 'claude-opus-5 max'],
     ['claude-work', 'claude-opus-5 high', 'claude-opus-5 max'],
     ['agy', 'gemini-3.8-flash-high high', 'gemini-3.1-pro-high high'],
-    ['kimi', 'kimi-code/kimi-for-coding-highspeed', 'kimi-code/kimi-for-coding-highspeed'],
-    ['grok', 'grok-4.6 xhigh', 'grok-4.6 xhigh'],
+    ['kimi', 'kimi-code/k3 max', 'kimi-code/k3 max'],
+    ['grok', 'grok-4.7 xhigh', 'grok-4.7 xhigh'],
     ['cursor', 'kimi-k3-max', 'kimi-k3-max'],
     ['junie', 'gemini-3.8-flash high', 'gemini-3.8-flash high'],
-    ['hermes', 'x-ai/grok-4.6 xhigh', 'x-ai/grok-4.6 xhigh']
+    ['hermes', 'x-ai/grok-4.7 xhigh', 'x-ai/grok-4.7 xhigh']
   ])('routes %s alone to its standard line, and to its max line when its weekly evaporates', (id, standard, max) => {
     expect(routeOf(`${id}: weekly 50 @2026-09-20T00:00:00.000Z`)).toBe(`${standard} ${id}`);
     expect(routeOf(`${id}: weekly 50 @2026-09-14T20:00:00.000Z`)).toBe(`${max} ${id}`);
@@ -149,8 +149,8 @@ describe('routeLine', () => {
   }
 
   it.each([
-    ['100', 'grok-4.6 xhigh grok'],
-    ['90', 'grok-4.6 xhigh grok'],
+    ['100', 'grok-4.7 xhigh grok'],
+    ['90', 'grok-4.7 xhigh grok'],
     ['89.9', 'claude-opus-5 max claude-work'],
     ['89', 'claude-opus-5 max claude-work']
   ])('routes the live case with claude-work session at %s', (session, line) => {
@@ -158,7 +158,7 @@ describe('routeLine', () => {
   });
 
   it.each([
-    ['a tripped account loses rule 2', 'claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 xhigh grok'],
+    ['a tripped account loses rule 2', 'claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z', [], 'grok-4.7 xhigh grok'],
     ['just under the trip is not tripped', 'claude: rolling 89.9 @-; agy: rolling 89.95 @-', [], 'claude-opus-5 high claude'],
     ['an untripped evaporator still wins', 'claude: rolling 89.9 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', [], 'claude-opus-5 max claude'],
     ['a tripped evaporator is ignored', 'claude: rolling 90 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 80 @-', [], 'gemini-3.8-flash-high high agy'],
@@ -170,11 +170,11 @@ describe('routeLine', () => {
   });
 
   it.each([
-    ['kimi 10/10@72 beats grok 50', 'kimi: rolling 10 @-, weekly 10 @2026-09-17T11:00:00.000Z; grok: weekly 50 @2026-09-17T11:00:00.000Z', 'kimi-code/kimi-for-coding-highspeed kimi'],
-    ['kimi 90/10@72 trips to grok', 'kimi: rolling 90 @-, weekly 10 @2026-09-17T11:00:00.000Z; grok: weekly 50 @2026-09-17T11:00:00.000Z', 'grok-4.6 xhigh grok'],
-    ['kimi 95/0@72 trips to grok 97', 'kimi: rolling 95 @-, weekly 0 @2026-09-17T11:00:00.000Z; grok: weekly 97 @2026-09-17T11:00:00.000Z', 'grok-4.6 xhigh grok'],
-    ['kimi 0/95@2 evaporates past agy and does not trip', 'kimi: rolling 0 @-, weekly 95 @2026-09-14T13:00:00.000Z; agy: rolling 0 @-, weekly 0 @2026-09-17T11:00:00.000Z', 'kimi-code/kimi-for-coding-highspeed kimi'],
-    ['kimi 0/0@72 alone', 'kimi: rolling 0 @-, weekly 0 @2026-09-17T11:00:00.000Z', 'kimi-code/kimi-for-coding-highspeed kimi']
+    ['kimi 10/10@72 beats grok 50', 'kimi: rolling 10 @-, weekly 10 @2026-09-17T11:00:00.000Z; grok: weekly 50 @2026-09-17T11:00:00.000Z', 'kimi-code/k3 max kimi'],
+    ['kimi 90/10@72 trips to grok', 'kimi: rolling 90 @-, weekly 10 @2026-09-17T11:00:00.000Z; grok: weekly 50 @2026-09-17T11:00:00.000Z', 'grok-4.7 xhigh grok'],
+    ['kimi 95/0@72 trips to grok 97', 'kimi: rolling 95 @-, weekly 0 @2026-09-17T11:00:00.000Z; grok: weekly 97 @2026-09-17T11:00:00.000Z', 'grok-4.7 xhigh grok'],
+    ['kimi 0/95@2 evaporates past agy and does not trip', 'kimi: rolling 0 @-, weekly 95 @2026-09-14T13:00:00.000Z; agy: rolling 0 @-, weekly 0 @2026-09-17T11:00:00.000Z', 'kimi-code/k3 max kimi'],
+    ['kimi 0/0@72 alone', 'kimi: rolling 0 @-, weekly 0 @2026-09-17T11:00:00.000Z', 'kimi-code/k3 max kimi']
   ])('018: %s', (_case, candidates, line) => {
     expect(routeOf(candidates)).toBe(line);
   });
@@ -183,10 +183,10 @@ describe('routeLine', () => {
     ['junie alone at 30%', 'junie: weekly 30 @-', [], 'gemini-3.8-flash high junie'],
     ['junie alone at 100%', 'junie: weekly 100 @-', [], 'gemini-3.8-flash high junie'],
     ['junie with more left than grok', 'grok: weekly 50 @2026-09-17T11:00:00.000Z; junie: weekly 30 @-', [], 'gemini-3.8-flash high junie'],
-    ['a tie with grok goes to grok', 'junie: weekly 0 @-; grok: weekly 0 @2026-09-17T11:00:00.000Z', [], 'grok-4.6 xhigh grok'],
+    ['a tie with grok goes to grok', 'junie: weekly 0 @-; grok: weekly 0 @2026-09-17T11:00:00.000Z', [], 'grok-4.7 xhigh grok'],
     ['a tie with cursor goes to cursor', 'junie: weekly 0 @-; cursor: weekly 0 @2026-09-17T11:00:00.000Z', [], 'kimi-k3-max cursor'],
     ['an evaporating claude beats an untouched junie', 'claude: rolling 0 @-, weekly 86 @2026-09-14T13:00:00.000Z; junie: weekly 0 @-', [], 'claude-opus-5 max claude'],
-    ['junie without a reference is not routed', 'grok: weekly 50 @2026-09-17T11:00:00.000Z; junie: no windows', [], 'grok-4.6 xhigh grok'],
+    ['junie without a reference is not routed', 'grok: weekly 50 @2026-09-17T11:00:00.000Z; junie: no windows', [], 'grok-4.7 xhigh grok'],
     ['junie without a reference alone', 'junie: no windows', [], 'none'],
     ['an ineligible junie', 'junie: weekly 0 @-', ['junie'], 'none'],
     ['an unavailable junie', 'junie: unavailable', [], 'none']
@@ -195,11 +195,11 @@ describe('routeLine', () => {
   });
 
   it.each([
-    ['hermes alone at 75%', 'hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
-    ['hermes alone at 0%', 'hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
-    ['hermes alone at 100%', 'hermes: weekly 100 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
-    ['grok at 50 beats hermes at 75', 'grok: weekly 50 @2026-09-17T11:00:00.000Z; hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 xhigh grok'],
-    ['a tie with grok goes to grok', 'grok: weekly 0 @2026-09-17T11:00:00.000Z; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 xhigh grok'],
+    ['hermes alone at 75%', 'hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.7 xhigh hermes'],
+    ['hermes alone at 0%', 'hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.7 xhigh hermes'],
+    ['hermes alone at 100%', 'hermes: weekly 100 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.7 xhigh hermes'],
+    ['grok at 50 beats hermes at 75', 'grok: weekly 50 @2026-09-17T11:00:00.000Z; hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'grok-4.7 xhigh grok'],
+    ['a tie with grok goes to grok', 'grok: weekly 0 @2026-09-17T11:00:00.000Z; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'grok-4.7 xhigh grok'],
     ['a tie with junie goes to junie', 'junie: weekly 0 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'gemini-3.8-flash high junie'],
     ['an ineligible hermes', 'hermes: weekly 75 @2026-09-20T00:00:00.000Z', ['hermes'], 'none'],
     ['an unavailable hermes', 'hermes: unavailable', [], 'none']
@@ -208,21 +208,21 @@ describe('routeLine', () => {
   });
 
   it.each<[string, string[], string]>([
-    ['junie: weekly 30 @-', [], 'grok-4.6 xhigh grok'],
+    ['junie: weekly 30 @-', [], 'grok-4.7 xhigh grok'],
     ['junie: weekly 0 @-', [], 'gemini-3.8-flash high junie'],
-    ['junie: no windows', [], 'grok-4.6 xhigh grok'],
-    ['junie: weekly 0 @-', ['junie'], 'grok-4.6 xhigh grok']
+    ['junie: no windows', [], 'grok-4.7 xhigh grok'],
+    ['junie: weekly 0 @-', ['junie'], 'grok-4.7 xhigh grok']
   ])('routes the 014 live case with %s, ineligible %j', (junie, ineligible, line) => {
     const usages = `${liveCase('100')}; ${junie}`;
     expect(routeLine(usages.split('; ').map(usageOf), LIVE_NOW, MIDNIGHT, ineligible)).toBe(line);
   });
 
   it.each<[string, string[], string]>([
-    ['junie: weekly 30 @-; hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'grok-4.6 xhigh grok'],
-    ['junie: weekly 30 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
+    ['junie: weekly 30 @-; hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'grok-4.7 xhigh grok'],
+    ['junie: weekly 30 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'x-ai/grok-4.7 xhigh hermes'],
     ['junie: weekly 0 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'gemini-3.8-flash high junie'],
-    ['junie: weekly 30 @-; hermes: weekly 60 @2026-09-14T13:39:00.000Z', [], 'x-ai/grok-4.6 xhigh hermes'],
-    ['junie: weekly 30 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', ['hermes'], 'grok-4.6 xhigh grok']
+    ['junie: weekly 30 @-; hermes: weekly 60 @2026-09-14T13:39:00.000Z', [], 'x-ai/grok-4.7 xhigh hermes'],
+    ['junie: weekly 30 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', ['hermes'], 'grok-4.7 xhigh grok']
   ])('routes the 014 live case with junie and hermes as %s, ineligible %j', (extra, ineligible, line) => {
     const usages = `${liveCase('100')}; ${extra}`;
     expect(routeLine(usages.split('; ').map(usageOf), LIVE_NOW, MIDNIGHT, ineligible)).toBe(line);
@@ -260,7 +260,7 @@ describe('highRouteLine', () => {
       { rank: 1, providers: ['claude', 'claude-work'], matcher: 'fable', line: 'claude-fable-5-1 max' },
       { rank: 2, providers: ['cursor'], line: 'kimi-k3-max' },
       { rank: 3, providers: ['claude', 'claude-work'], line: 'claude-opus-5 max' },
-      { rank: 4, providers: ['grok'], line: 'grok-4.6 xhigh' },
+      { rank: 4, providers: ['grok'], line: 'grok-4.7 xhigh' },
       { rank: 5, providers: ['agy'], line: 'gemini-3.8-flash-high high' }
     ]);
   });
@@ -270,8 +270,8 @@ describe('highRouteLine', () => {
     ['90 trips, matched in any case', 'claude: session rolling 10, weekly FABLE weekly 90; cursor: total weekly 10', [], 'kimi-k3-max cursor'],
     ['opus ignores the Fable window', 'claude: session rolling 10, weekly weekly 50, weekly Fable weekly 100', [], 'claude-opus-5 max claude'],
     ['an other window gates an (all) entry', 'agy: Gemini Models · Daily Limit other 90, Gemini Models · Weekly Limit weekly 10', [], 'none'],
-    ['ok with no windows is skipped', 'cursor: ok with no windows; grok: credits weekly 50', [], 'grok-4.6 xhigh grok'],
-    ['error and unavailable are skipped', 'claude: error; claude-work: unavailable; grok: credits weekly 89', [], 'grok-4.6 xhigh grok'],
+    ['ok with no windows is skipped', 'cursor: ok with no windows; grok: credits weekly 50', [], 'grok-4.7 xhigh grok'],
+    ['error and unavailable are skipped', 'claude: error; claude-work: unavailable; grok: credits weekly 89', [], 'grok-4.7 xhigh grok'],
     ['an ineligible account is skipped', 'claude-work: session rolling 0, weekly Fable weekly 0; cursor: total weekly 0', ['claude-work'], 'kimi-k3-max cursor'],
     ['kimi, codex and kilo are never in the chain', 'kimi: 5h rolling 0; codex: weekly weekly 0; kilo: no windows', [], 'none'],
     ['resetsAt is ignored', 'grok: credits weekly 50 resetting 1 h from now; cursor: total weekly 60', [], 'kimi-k3-max cursor'],
@@ -281,7 +281,7 @@ describe('highRouteLine', () => {
     ['higher left on gating windows wins', 'claude: session rolling 85, weekly weekly 10, weekly Fable weekly 40; claude-work: session rolling 10, weekly weekly 10, weekly Fable weekly 70', [], 'claude-fable-5-1 max claude-work'],
     ['equal left goes to personal', 'claude-work: session rolling 20, weekly weekly 60, weekly Fable weekly 0; claude: session rolling 20, weekly weekly 10, weekly Fable weekly 20', [], 'claude-fable-5-1 max claude'],
     ['opus: higher left wins', 'claude: session rolling 10, weekly weekly 70, weekly Fable weekly 95; claude-work: session rolling 10, weekly weekly 40, weekly Fable weekly 90; cursor: total weekly 90', [], 'claude-opus-5 max claude-work'],
-    ['an (all) entry of a provider with no matcher is gated on a Fable-named window', 'claude: session rolling 95; cursor: total weekly 10, Fable weekly 95; grok: credits weekly 50', [], 'grok-4.6 xhigh grok'],
+    ['an (all) entry of a provider with no matcher is gated on a Fable-named window', 'claude: session rolling 95; cursor: total weekly 10, Fable weekly 95; grok: credits weekly 50', [], 'grok-4.7 xhigh grok'],
     ['the 014 live case keeps Fable on the untripped personal account', 'claude: session rolling 2, weekly weekly 13, weekly Fable weekly 2; claude-work: session rolling 100, weekly weekly 72, weekly Fable weekly 52; agy: Weekly Limit weekly 17, Five Hour Limit rolling 0; kimi: weekly weekly 95, 5h rolling 0; grok: credits weekly 9; cursor: total weekly 36, auto weekly 36, api weekly 33', [], 'claude-fable-5-1 max claude'],
     ['junie is never in the chain', 'junie: credits weekly 0', [], 'none'],
     ['junie leaves the 014 live case on Fable', 'claude: session rolling 2, weekly weekly 13, weekly Fable weekly 2; claude-work: session rolling 100, weekly weekly 72, weekly Fable weekly 52; grok: credits weekly 9; junie: credits weekly 0', [], 'claude-fable-5-1 max claude'],

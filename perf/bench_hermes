@@ -284,8 +284,8 @@ try {
   domain.summariseFleet(dashboardFleet, NOW);
   emit(TARGETS.fleet, perCallSync(FAST_ITERATIONS, () => domain.summariseFleet(dashboardFleet, NOW)), 'us');
 
-  const GROK = ['grok-4.6 xhigh grok', 'grok-4.6 grok'];
-  const HERMES = ['x-ai/grok-4.6 xhigh hermes'];
+  const GROK = ['grok-4.7 xhigh grok', 'grok-4.7 grok'];
+  const HERMES = ['x-ai/grok-4.7 xhigh hermes'];
   const JUNIE = ['gemini-3.8-flash high junie'];
   expectOneOf(domain.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, []), GROK, 'hermes 75%');
   expectOneOf(domain.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, []), [...HERMES, ...GROK], 'hermes 0%');

@@ -53,11 +53,11 @@ Eligibility: ineligible providers are dropped before both rules, so an ineligibl
 | claude | `claude-opus-5 high` | `claude-opus-5 max` |
 | claude-work | `claude-opus-5 high` | `claude-opus-5 max` |
 | agy | `gemini-3.8-flash-high high` | `gemini-3.1-pro-high high` |
-| kimi | `kimi-code/kimi-for-coding-highspeed` | `kimi-code/kimi-for-coding-highspeed` |
-| grok | `grok-4.6 xhigh` | `grok-4.6 xhigh` |
+| kimi | `kimi-code/k3 max` | `kimi-code/k3 max` |
+| grok | `grok-4.7 xhigh` | `grok-4.7 xhigh` |
 | cursor | `kimi-k3-max` | `kimi-k3-max` |
 | junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |
-| hermes | `x-ai/grok-4.6 xhigh` | `x-ai/grok-4.6 xhigh` |
+| hermes | `x-ai/grok-4.7 xhigh` | `x-ai/grok-4.7 xhigh` |
 
 Account token: both `route` and `route --high` print `<line> <provider id>`, such as `claude-opus-5 high claude-work` or `kimi-k3-max cursor`, because several providers share a line and the account decides how to launch it; `none` stays alone. `claude` launches claude as usual, `claude-work` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_WORK_CONFIG_DIR` (default `~/.claude-work`), and every other id launches its own CLI.
 
@@ -68,7 +68,7 @@ Route --high: quality first, with no evaporation rule and no headroom comparison
 | 1 | claude, claude-work | `fable`: the Fable weekly window plus session | `claude-fable-5-1 max` |
 | 2 | cursor | (all) | `kimi-k3-max` |
 | 3 | claude, claude-work | (all) | `claude-opus-5 max` |
-| 4 | grok | (all) | `grok-4.6 xhigh` |
+| 4 | grok | (all) | `grok-4.7 xhigh` |
 | 5 | agy | (all) | `gemini-3.8-flash-high high` |
 
 An entry with a matcher is gated on the windows whose label contains the matcher in any case, plus every rolling window; a matched window the account does not report counts as 0% used. An (all) entry is gated on every window the provider reports, except the windows another entry of the same provider matches, so `claude-opus-5 max` ignores the Fable window. The 90% trip: an entry is available on an account only when the account is eligible, ok with at least one window, and every gating window is under 90% used; at 90% it pops down to the next entry. Ineligible, unavailable and failed providers are skipped, and `kimi`, `codex`, `junie`, `hermes` and `kilo` are never in the chain, so `--high` does not use junie. `--high` does not use hermes. When both claude accounts are available at one rank, the one with more left (100 minus its highest gating used percent) wins, and a tie goes to `claude`. When no entry is available it prints `none` and exits 1.

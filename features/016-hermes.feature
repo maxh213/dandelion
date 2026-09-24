@@ -1,4 +1,4 @@
-Feature: 016 - Hermes credits from the Nous Portal, routed as x-ai/grok-4.6 xhigh
+Feature: 016 - Hermes credits from the Nous Portal, routed as x-ai/grok-4.7 xhigh
 
   Assumptions (the task is silent here):
   - Env names are DANDELION_HERMES_AUTH_FILE (default "~/.hermes/auth.json" when unset or empty) and
@@ -15,8 +15,8 @@ Feature: 016 - Hermes credits from the Nous Portal, routed as x-ai/grok-4.6 xhig
   - Plan name is subscription.plan when it is a non-empty string, else the plan label is "hermes" (no "$x of $y").
     Remaining is shown with two fraction digits ($5.5 -> $5.50); monthly_credits is shown as the number ($22).
     paid_service_access.paid_access is exactly false to put " · no paid access" at the end of the caption line.
-  - The task's "grok-4.6 grok" predates commit a81d626; grok prints "grok-4.6 xhigh grok". Hermes prints
-    "x-ai/grok-4.6 xhigh hermes". GET uses the injected Fetcher.get with a 15s timeout.
+  - The task's "grok-4.7 grok" predates commit a81d626; grok prints "grok-4.7 xhigh grok". Hermes prints
+    "x-ai/grok-4.7 xhigh hermes". GET uses the injected Fetcher.get with a 15s timeout.
   - "hermes U%" below means an account JSON whose subscription has monthly_credits 22, credits_remaining
     22 - 0.22 * U (75% uses 5.5, 85% uses 3.3, 60% uses 8.8, 0% uses 22) and current_period_end three days
     after now, unless a scenario sets the end.
@@ -147,11 +147,11 @@ Feature: 016 - Hermes credits from the Nous Portal, routed as x-ai/grok-4.6 xhig
 
     Examples:
       | usages     | junie | hermes      | state              | line                          | code |
-      | none       | none  | 75%         | missing            | x-ai/grok-4.6 xhigh hermes    | 0    |
-      | none       | none  | 0%          | missing            | x-ai/grok-4.6 xhigh hermes    | 0    |
-      | none       | none  | 100%        | missing            | x-ai/grok-4.6 xhigh hermes    | 0    |
-      | grok 50@72 | none  | 75%         | missing            | grok-4.6 xhigh grok           | 0    |
-      | grok 0@72  | none  | 0%          | missing            | grok-4.6 xhigh grok           | 0    |
+      | none       | none  | 75%         | missing            | x-ai/grok-4.7 xhigh hermes    | 0    |
+      | none       | none  | 0%          | missing            | x-ai/grok-4.7 xhigh hermes    | 0    |
+      | none       | none  | 100%        | missing            | x-ai/grok-4.7 xhigh hermes    | 0    |
+      | grok 50@72 | none  | 75%         | missing            | grok-4.7 xhigh grok           | 0    |
+      | grok 0@72  | none  | 0%          | missing            | grok-4.7 xhigh grok           | 0    |
       | none       | 0%    | 0%          | missing            | gemini-3.8-flash high junie   | 0    |
       | none       | none  | 75%         | {"hermes": false}  | none                          | 1    |
       | none       | none  | unavailable | missing            | none                          | 1    |
@@ -159,15 +159,15 @@ Feature: 016 - Hermes credits from the Nous Portal, routed as x-ai/grok-4.6 xhig
   Scenario: The 014 live case with junie and hermes
     Given the usages of "The live case that prompted the task" in features/014-route-session-trip.feature
     When junie is 30%, hermes is 75% and the user runs `node src/main.ts route`
-    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, exit 0 (grok 91 left beats junie 70 and hermes 25)
+    Then stdout is exactly "grok-4.7 xhigh grok" and a newline, exit 0 (grok 91 left beats junie 70 and hermes 25)
     When hermes is 0% instead, junie still 30%
-    Then stdout is exactly "x-ai/grok-4.6 xhigh hermes" and a newline, exit 0
+    Then stdout is exactly "x-ai/grok-4.7 xhigh hermes" and a newline, exit 0
     When hermes is 0% and junie is 0%
     Then stdout is exactly "gemini-3.8-flash high junie" and a newline, exit 0 (tie, junie is earlier)
     When hermes is 60% with current_period_end one hour from now and before local midnight, junie 30%
-    Then stdout is exactly "x-ai/grok-4.6 xhigh hermes" and a newline, exit 0 (rule 1; hermes never trips)
+    Then stdout is exactly "x-ai/grok-4.7 xhigh hermes" and a newline, exit 0 (rule 1; hermes never trips)
     When hermes is 0%, junie 30%, and the state file holds {"hermes": false}
-    Then stdout is exactly "grok-4.6 xhigh grok" and a newline, exit 0
+    Then stdout is exactly "grok-4.7 xhigh grok" and a newline, exit 0
     When hermes is 0% and the user runs `node src/main.ts route --high`
     Then stdout is exactly "claude-fable-5-1 max claude" and a newline, exit 0
 
@@ -193,7 +193,7 @@ Feature: 016 - Hermes credits from the Nous Portal, routed as x-ai/grok-4.6 xhig
     And the ledger lists `DANDELION_HERMES_AUTH_FILE` (default `~/.hermes/auth.json`) and
       `DANDELION_HERMES_PORTAL_BASE` (default `https://portal.nousresearch.com`)
     And the Route section lists hermes among routed providers and `hermes credits` among weekly windows, the table
-      has the row "| hermes | `x-ai/grok-4.6 xhigh` | `x-ai/grok-4.6 xhigh` |" after junie, and it says `--high`
+      has the row "| hermes | `x-ai/grok-4.7 xhigh` | `x-ai/grok-4.7 xhigh` |" after junie, and it says `--high`
       does not use hermes
 
   Scenario: End-to-end checks

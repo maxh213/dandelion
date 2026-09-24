@@ -472,7 +472,7 @@ describe('main', () => {
     const route = readme.split('## Route')[1].split('## ')[0];
     expect(route).toContain('`junie` and `hermes`, in dashboard order');
     expect(route).toContain('hermes credits)');
-    expect(route).toContain('| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |\n| hermes | `x-ai/grok-4.6 xhigh` | `x-ai/grok-4.6 xhigh` |\n');
+    expect(route).toContain('| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |\n| hermes | `x-ai/grok-4.7 xhigh` | `x-ai/grok-4.7 xhigh` |\n');
     expect(route).toContain('`--high` does not use hermes');
   });
 
@@ -501,8 +501,8 @@ describe('main', () => {
       '| claude | `claude-opus-5 high` | `claude-opus-5 max` |',
       '| claude-work | `claude-opus-5 high` | `claude-opus-5 max` |',
       '| agy | `gemini-3.8-flash-high high` | `gemini-3.1-pro-high high` |',
-      '| kimi | `kimi-code/kimi-for-coding-highspeed` | `kimi-code/kimi-for-coding-highspeed` |',
-      '| grok | `grok-4.6 xhigh` | `grok-4.6 xhigh` |',
+      '| kimi | `kimi-code/k3 max` | `kimi-code/k3 max` |',
+      '| grok | `grok-4.7 xhigh` | `grok-4.7 xhigh` |',
       '| cursor | `kimi-k3-max` | `kimi-k3-max` |'
     ]) expect(route).toContain(row);
   });
@@ -516,7 +516,7 @@ describe('main', () => {
       '| 1 | claude, claude-work | `fable`: the Fable weekly window plus session | `claude-fable-5-1 max` |',
       '| 2 | cursor | (all) | `kimi-k3-max` |',
       '| 3 | claude, claude-work | (all) | `claude-opus-5 max` |',
-      '| 4 | grok | (all) | `grok-4.6 xhigh` |',
+      '| 4 | grok | (all) | `grok-4.7 xhigh` |',
       '| 5 | agy | (all) | `gemini-3.8-flash-high high` |'
     ]) expect(route).toContain(row);
     expect(route).toMatch(/except the windows another entry of the same provider matches/);

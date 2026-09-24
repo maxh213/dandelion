@@ -11,11 +11,11 @@ const ROUTING_TABLE = [
   { id: 'claude', ...CLAUDE_LINES },
   { id: 'claude-work', ...CLAUDE_LINES },
   { id: 'agy', standard: 'gemini-3.8-flash-high high', max: 'gemini-3.1-pro-high high' },
-  { id: 'kimi', standard: 'kimi-code/kimi-for-coding-highspeed', max: 'kimi-code/kimi-for-coding-highspeed' },
-  { id: 'grok', standard: 'grok-4.6 xhigh', max: 'grok-4.6 xhigh' },
+  { id: 'kimi', standard: 'kimi-code/k3 max', max: 'kimi-code/k3 max' },
+  { id: 'grok', standard: 'grok-4.7 xhigh', max: 'grok-4.7 xhigh' },
   { id: 'cursor', standard: 'kimi-k3-max', max: 'kimi-k3-max' },
   { id: 'junie', standard: 'gemini-3.8-flash high', max: 'gemini-3.8-flash high' },
-  { id: 'hermes', standard: 'x-ai/grok-4.6 xhigh', max: 'x-ai/grok-4.6 xhigh' }
+  { id: 'hermes', standard: 'x-ai/grok-4.7 xhigh', max: 'x-ai/grok-4.7 xhigh' }
 ] satisfies Route[];
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
@@ -98,7 +98,7 @@ export const HIGH_CHAIN: readonly ChainEntry[] = [
   { rank: 1, providers: ['claude', 'claude-work'], matcher: 'fable', line: 'claude-fable-5-1 max' },
   { rank: 2, providers: ['cursor'], line: 'kimi-k3-max' },
   { rank: 3, providers: ['claude', 'claude-work'], line: 'claude-opus-5 max' },
-  { rank: 4, providers: ['grok'], line: 'grok-4.6 xhigh' },
+  { rank: 4, providers: ['grok'], line: 'grok-4.7 xhigh' },
   { rank: 5, providers: ['agy'], line: 'gemini-3.8-flash-high high' }
 ] satisfies readonly ChainEntry[];
 
