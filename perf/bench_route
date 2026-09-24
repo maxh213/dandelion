@@ -124,7 +124,7 @@ function expect(actual, wanted, what) {
 
 try {
   expect(domain.routeLine(evaporating, NOW, MIDNIGHT, []), onAccount('claude-opus-5 max', 'claude'), 'evaporation');
-  expect(domain.routeLine(headroom, NOW, MIDNIGHT, []), onAccount('kimi-code/kimi-for-coding-highspeed', 'kimi'), 'headroom');
+  expect(domain.routeLine(headroom, NOW, MIDNIGHT, []), onAccount('kimi-code/k3 max', 'kimi'), 'headroom');
   expect(domain.routeLine(nothing, NOW, MIDNIGHT, []), 'none', 'nothing');
   expect(domain.nextLocalMidnight('UTC', NOW), MIDNIGHT, 'utc midnight');
   expect(domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z'), '2026-10-25T23:00:00.000Z', 'berlin midnight');
