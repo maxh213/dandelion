@@ -492,6 +492,10 @@ describe('live frame', () => {
       expect(frameOf({ rows })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL, ...WORK_PANEL, ...AGY_PANEL, RULE]);
     });
 
+    it('starts the panel region at offset 0 when selected is omitted', () => {
+      expect(frameOf({ selected: undefined })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL]);
+    });
+
     it('scrolls the region so the selected panel’s header is its first line', () => {
       expect(frameOf({ selected: 9 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ kilo', '$14.15 ##############------'.padEnd(72), 'api balance · kilo']);
       expect(frameOf({ selected: 6 })).toEqual([

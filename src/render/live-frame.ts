@@ -186,8 +186,8 @@ function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
   return left.map((line, row) => `${line}${BOX_GAP}${right[row]}`);
 }
 
-function rowBudget(rows: number | undefined): number {
-  return typeof rows === 'number' && Number.isInteger(rows) && rows > 0 ? rows : FALLBACK_ROWS;
+function rowBudget(rows = FALLBACK_ROWS): number {
+  return Number.isInteger(rows) && rows > 0 ? rows : FALLBACK_ROWS;
 }
 
 function panelLines(panels: string[]): string[] {
@@ -198,8 +198,8 @@ function fromSelectedHeader(panels: string[], selected: number): string[] {
   return panelLines(panels.slice(selected)).slice(1);
 }
 
-function hasSelection(selected: number | undefined): selected is number {
-  return selected !== undefined && selected >= 0;
+function hasSelection(selected = -1): selected is number {
+  return selected >= 0;
 }
 
 function regionLines(panels: string[], selected: number | undefined, height: number): string[] {
