@@ -62,10 +62,6 @@ function kindOf(text: string): WindowKind {
 }
 
 describe('routeLine', () => {
-  it('rejects an unknown window kind in a table row', () => {
-    expect(() => kindOf('weakly')).toThrow('unknown window kind weakly');
-  });
-
   const NOW = '2026-09-14T11:00:00.000Z';
   const MIDNIGHT = '2026-09-15T00:00:00.000Z';
 
@@ -85,6 +81,21 @@ describe('routeLine', () => {
   function routeOf(candidates: string, ineligible: string[] = []): string {
     return routeLine(candidates.split('; ').map(usageOf), NOW, MIDNIGHT, ineligible);
   }
+
+  it('excludes ok usages with zero windows before any other rule', () => {
+    expect(routeOf('claude: no windows')).toBe('none');
+    expect(routeOf('claude: no windows; cursor: weekly 60 @2026-09-20T00:00:00.000Z')).toBe('kimi-k3-max cursor');
+  });
+
+  it('does not evaporate a weekly at exactly 97 left or a reset at or before now', () => {
+    expect(routeOf('claude: weekly 3 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-')).toBe('gemini-3.8-flash-high high agy');
+    expect(routeOf('claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z')).toBe('gemini-3.8-flash-high high agy');
+    expect(routeOf('claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z')).toBe('gemini-3.8-flash-high high agy');
+  });
+
+  it('rejects an unknown window kind in a table row', () => {
+    expect(() => kindOf('weakly')).toThrow('unknown window kind weakly');
+  });
 
   it('drops an ineligible provider before the evaporation rule', () => {
     expect(routeOf('claude: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', ['claude'])).toBe('gemini-3.8-flash-high high agy');
@@ -273,6 +284,11 @@ describe('highRouteLine', () => {
   function highOf(candidates: string, ineligible: string[] = []): string {
     return highRouteLine(candidates.split('; ').map(usageOf), ineligible);
   }
+
+  it('matches Fable case-insensitively and keeps Fable off the opus gate', () => {
+    expect(highOf('claude: session rolling 10, weekly weekly 50, weekly Fable weekly 100')).toBe('claude-opus-5 max claude');
+    expect(highOf('claude: session rolling 10, weekly FABLE weekly 90; cursor: total weekly 10')).toBe('kimi-k3-max cursor');
+  });
 
   it('pins the chain entry by entry', () => {
     expect(HIGH_CHAIN).toEqual([

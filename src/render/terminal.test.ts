@@ -568,6 +568,41 @@ describe('route boxes', () => {
     ]);
   });
 
+  it('The dashboard route boxes show the new lines', () => {
+    const liveNow = '2026-09-14T12:39:00.000Z';
+    const live = [
+      ok('claude', [
+        { label: 'session', kind: 'rolling', usedPct: 2 },
+        { label: 'weekly', kind: 'weekly', usedPct: 13, resetsAt: '2026-09-19T22:39:00.000Z' },
+        { label: 'weekly Fable', kind: 'weekly', usedPct: 2, resetsAt: '2026-09-19T22:39:00.000Z' }
+      ]),
+      ok('claude-work', [
+        { label: 'session', kind: 'rolling', usedPct: 100, resetsAt: '2026-09-14T15:50:00.000Z' },
+        { label: 'weekly', kind: 'weekly', usedPct: 72, resetsAt: '2026-09-14T18:00:00.000Z' },
+        { label: 'weekly Fable', kind: 'weekly', usedPct: 52, resetsAt: '2026-09-14T17:59:00.000Z' }
+      ]),
+      ok('agy', [
+        { label: 'Weekly Limit', kind: 'weekly', usedPct: 17, resetsAt: '2026-09-19T18:39:00.000Z' },
+        { label: 'Five Hour Limit', kind: 'rolling', usedPct: 0 }
+      ]),
+      ok('kimi', [
+        { label: 'weekly', kind: 'weekly', usedPct: 95, resetsAt: '2026-09-17T13:39:00.000Z' },
+        { label: '5h', kind: 'rolling', usedPct: 0 }
+      ]),
+      ok('grok', [{ label: 'credits', kind: 'weekly', usedPct: 9, resetsAt: '2026-09-19T22:39:00.000Z' }]),
+      ok('cursor', [
+        { label: 'total', kind: 'weekly', usedPct: 36, resetsAt: '2026-09-29T17:39:00.000Z' },
+        { label: 'auto', kind: 'weekly', usedPct: 36, resetsAt: '2026-09-29T17:39:00.000Z' },
+        { label: 'api', kind: 'weekly', usedPct: 33, resetsAt: '2026-09-29T17:39:00.000Z' }
+      ]),
+      ok('junie', [{ label: 'credits', kind: 'weekly', usedPct: 30 }]),
+      ok('hermes', [{ label: 'credits', kind: 'weekly', usedPct: 75, resetsAt: '2026-09-20T00:00:00.000Z' }])
+    ];
+    const lines = boxLines(boxView(live), true, liveNow);
+    expect(lines[1]).toBe(`| ${'grok-4.7 xhigh'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    expect(lines[2]).toBe(`| ${'grok'.padEnd(31)} |  | ${'claude'.padEnd(31)} |`);
+  });
+
   const weekly = (usedPct: number, resetsAt?: string): UsageWindow => ({ label: 'weekly', kind: 'weekly', usedPct, resetsAt });
   const cut31 = (text: string): string => ([...text].length > 31 ? `${[...text].slice(0, 30).join('').trimEnd()}…` : text);
   const rowText = (row: string, box: number): string => row.slice(box * 37 + 2, box * 37 + 33).trimEnd();

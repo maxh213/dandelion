@@ -116,6 +116,41 @@ describe('main', () => {
     ], [])).toBe('kimi-k3-max cursor');
   });
 
+  it('kills route edge mutants before the long suite', () => {
+    const now = '2026-09-14T11:00:00.000Z';
+    const midnight = '2026-09-15T00:00:00.000Z';
+    const ok = (id: string, windows: { label: string; kind: 'rolling' | 'weekly' | 'other'; usedPct: number; resetsAt?: string }[]) => ({
+      id, displayName: id, fetchedAt: now, status: 'ok' as const, windows
+    });
+    expect(routeLine([ok('claude', [])], now, midnight, [])).toBe('none');
+    expect(routeLine([
+      ok('claude', [{ label: 'weekly', kind: 'weekly', usedPct: 50, resetsAt: now }]),
+      ok('agy', [{ label: '5h', kind: 'rolling', usedPct: 40 }])
+    ], now, midnight, [])).toBe('gemini-3.8-flash-high high agy');
+    expect(routeLine([
+      ok('claude', [{ label: 'weekly', kind: 'weekly', usedPct: 50, resetsAt: '2026-09-14T10:00:00.000Z' }]),
+      ok('agy', [{ label: '5h', kind: 'rolling', usedPct: 40 }])
+    ], now, midnight, [])).toBe('gemini-3.8-flash-high high agy');
+    expect(routeLine([
+      ok('claude', [{ label: 'weekly', kind: 'weekly', usedPct: 3, resetsAt: '2026-09-14T20:00:00.000Z' }]),
+      ok('agy', [{ label: '5h', kind: 'rolling', usedPct: 0 }])
+    ], now, midnight, [])).toBe('gemini-3.8-flash-high high agy');
+    expect(highRouteLine([
+      ok('claude', [
+        { label: 'session', kind: 'rolling', usedPct: 10 },
+        { label: 'weekly', kind: 'weekly', usedPct: 50 },
+        { label: 'Fable', kind: 'weekly', usedPct: 100 }
+      ])
+    ], [])).toBe('claude-opus-5 max claude');
+    expect(highRouteLine([
+      ok('claude', [
+        { label: 'session', kind: 'rolling', usedPct: 10 },
+        { label: 'FABLE', kind: 'weekly', usedPct: 90 }
+      ]),
+      ok('cursor', [{ label: 'total', kind: 'weekly', usedPct: 10 }])
+    ], [])).toBe('kimi-k3-max cursor');
+  });
+
   it('prints the kilo panel with a 14 of 20 gauge from a fixture kilo on PATH', () => {
     const result = runWithFixtureKilo({});
     expect(result.status).toBe(0);
