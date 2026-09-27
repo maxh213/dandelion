@@ -470,7 +470,7 @@ async function dashboardNotRoute(ctx) {
     const first = result.stdout.split('\n')[0];
     assert.match(first, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/, describe(args, result));
     assert.ok(!result.stdout.includes(ENTER), describe(`${args} wrote alternate screen`, result));
-    assert.ok(!result.stdout.startsWith('grok-4.6'), describe(args, result));
+    assert.ok(!result.stdout.startsWith('grok-4.7 xhigh'), describe(args, result));
     assert.ok(!result.stdout.startsWith('claude-fable'), describe(args, result));
     assert.ok(!result.stdout.startsWith('none\n'), describe(args, result));
   }

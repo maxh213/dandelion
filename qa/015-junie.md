@@ -1,6 +1,6 @@
 # QA Procedure: 015 - Junie credits panel and route line
 
-After 015, a `junie` panel sits between `cursor` and `kilo` in every earlier procedure. Where junie home has no snapshot it is dim with the reason `no junie quota snapshot — run junie once`. The task's `grok-4.6 grok` is written `grok-4.7 xhigh grok` here, as grok routes since commit a81d626.
+After 015, a `junie` panel sits between `cursor` and `kilo` in every earlier procedure. Where junie home has no snapshot it is dim with the reason `no junie quota snapshot — run junie once`. The task's `grok-4.6 grok` is written `grok-4.7 xhigh grok` here, as grok routes at xhigh since commit a81d626 and on grok-4.7 since task 020.
 
 Set up once in the repo root, in a real terminal (bash, GNU tools). First run the set-up blocks of `qa/010-route-command.md`, `qa/011-route-eligibility-toggle.md` and `qa/014-route-session-trip.md`, so `$RX`, `$ST`, `rt`, `rq` and `live` exist. `jh DIR BAL` writes a junie home: an older session with a snapshot of `900000` credits 3 hours ago, and a newer one with noise, an `Unknown` completion, a bad line and the `BAL` snapshot 1 hour ago. `snap` fingerprints a tree.
 
