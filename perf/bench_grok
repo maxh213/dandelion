@@ -27,9 +27,15 @@ const TARGETS = {
   renderFresh: 'renderDashboard five providers grok fresh (in-process, per call)',
   renderStale: 'renderDashboard five providers grok stale (in-process, per call)'
 };
+const CLI_KEYS = ['cli', 'cliEmpty'];
+const PART = process.argv[2] ?? 'inProcess';
+if (PART !== 'inProcess' && !CLI_KEYS.includes(PART)) throw new Error(`unknown bench_grok part ${PART}`);
+const OWN = Object.keys(TARGETS)
+  .filter((key) => (CLI_KEYS.includes(key) ? key === PART : PART === 'inProcess'))
+  .map((key) => TARGETS[key]);
 
 if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
-  absent(...Object.values(TARGETS));
+  absent(...OWN);
   process.exit(0);
 }
 
@@ -110,38 +116,39 @@ function usages(snapshotAt) {
 }
 
 try {
-  const { runApp } = await import(pathToFileURL(appEntry).href);
-  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
-  const fresh = usages('2026-09-12T16:00:00.000Z');
-  const stale = usages('2026-09-10T17:14:22.812Z');
-
-  timeCli(home);
-  timeCli(emptyHome);
-  emit(TARGETS.cli, await repeat(VALUES, () => timeCli(home)), 'ms');
-  emit(TARGETS.cliEmpty, await repeat(VALUES, () => timeCli(emptyHome)), 'ms');
-
-  if (existsSync(grokEntry)) {
-    const { probeGrok } = await import(pathToFileURL(grokEntry).href);
-    const recentIo = ioWith(recentLog);
-    const worstIo = ioWith(worstLog);
-    const missingIo = ioWith(undefined);
-    await probeGrok(recentIo, {}, NOW);
-    await probeGrok(worstIo, {}, NOW);
-    await probeGrok(missingIo, {}, NOW);
-    const appEnv = bothNames({ ALLOWANCE_JUNIE_HOME: emptyHome });
-    await runApp(recentIo, appEnv, NOW);
-    emit(TARGETS.probeRecent, await perCall(ITERATIONS, () => probeGrok(recentIo, {}, NOW)), 'us');
-    emit(TARGETS.probeWorst, await perCall(ITERATIONS, () => probeGrok(worstIo, {}, NOW)), 'us');
-    emit(TARGETS.probeMissing, await perCall(RENDER_ITERATIONS, () => probeGrok(missingIo, {}, NOW)), 'us');
-    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(recentIo, appEnv, NOW)), 'us');
+  if (PART !== 'inProcess') {
+    const grokHome = { cli: home, cliEmpty: emptyHome }[PART];
+    timeCli(grokHome);
+    emit(TARGETS[PART], await repeat(VALUES, () => timeCli(grokHome)), 'ms');
   } else {
-    absent(TARGETS.probeRecent, TARGETS.probeWorst, TARGETS.probeMissing, TARGETS.runApp);
-  }
+    const { runApp } = await import(pathToFileURL(appEntry).href);
+    const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+    const fresh = usages('2026-09-12T16:00:00.000Z');
+    const stale = usages('2026-09-10T17:14:22.812Z');
 
-  renderDashboard(fresh, false, NOW, []);
-  renderDashboard(stale, false, NOW, []);
-  emit(TARGETS.renderFresh, perCallSync(RENDER_ITERATIONS, () => renderDashboard(fresh, false, NOW, [])), 'us');
-  emit(TARGETS.renderStale, perCallSync(RENDER_ITERATIONS, () => renderDashboard(stale, false, NOW, [])), 'us');
+    if (existsSync(grokEntry)) {
+      const { probeGrok } = await import(pathToFileURL(grokEntry).href);
+      const recentIo = ioWith(recentLog);
+      const worstIo = ioWith(worstLog);
+      const missingIo = ioWith(undefined);
+      await probeGrok(recentIo, {}, NOW);
+      await probeGrok(worstIo, {}, NOW);
+      await probeGrok(missingIo, {}, NOW);
+      const appEnv = bothNames({ ALLOWANCE_JUNIE_HOME: emptyHome });
+      await runApp(recentIo, appEnv, NOW);
+      emit(TARGETS.probeRecent, await perCall(ITERATIONS, () => probeGrok(recentIo, {}, NOW)), 'us');
+      emit(TARGETS.probeWorst, await perCall(ITERATIONS, () => probeGrok(worstIo, {}, NOW)), 'us');
+      emit(TARGETS.probeMissing, await perCall(RENDER_ITERATIONS, () => probeGrok(missingIo, {}, NOW)), 'us');
+      emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(recentIo, appEnv, NOW)), 'us');
+    } else {
+      absent(TARGETS.probeRecent, TARGETS.probeWorst, TARGETS.probeMissing, TARGETS.runApp);
+    }
+
+    renderDashboard(fresh, false, NOW, []);
+    renderDashboard(stale, false, NOW, []);
+    emit(TARGETS.renderFresh, perCallSync(RENDER_ITERATIONS, () => renderDashboard(fresh, false, NOW, [])), 'us');
+    emit(TARGETS.renderStale, perCallSync(RENDER_ITERATIONS, () => renderDashboard(stale, false, NOW, [])), 'us');
+  }
 } finally {
   rmSync(fixture, { recursive: true, force: true });
 }

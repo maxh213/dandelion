@@ -26,9 +26,15 @@ const TARGETS = {
 };
 
 const KIMI2_TARGETS = [TARGETS.probeLive0, TARGETS.probeEnvelope];
+const CLI_KEYS = ['cliOk', 'cliNoToken'];
+const PART = process.argv[2] ?? 'inProcess';
+if (PART !== 'inProcess' && !CLI_KEYS.includes(PART)) throw new Error(`unknown bench_kimi part ${PART}`);
+const OWN = Object.keys(TARGETS)
+  .filter((key) => (CLI_KEYS.includes(key) ? key === PART : PART === 'inProcess'))
+  .map((key) => TARGETS[key]);
 
 if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry)) {
-  absent(...Object.values(TARGETS));
+  absent(...OWN);
   process.exit(0);
 }
 
@@ -155,41 +161,47 @@ const okFixture = makeFixture('bench-kimi-ok-', KIMI_OK);
 const noTokenFixture = makeFixture('bench-kimi-notoken-', '#!/bin/sh\nexit 0\n');
 
 try {
-  const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
-  if (existsSync(kimiEntry)) {
-    const { runApp } = await import(pathToFileURL(appEntry).href);
-    const { probeKimi } = await import(pathToFileURL(kimiEntry).href);
-    await timeCli(okFixture);
-    await timeCli(noTokenFixture);
-    const appEnv = bothNames({ ALLOWANCE_JUNIE_HOME: okFixture });
-    const probed = await probeKimi(io, {}, NOW);
-    if (probed.status !== 'ok') throw new Error(`probeKimi ok: ${probed.reason}`);
-    await runApp(io, appEnv, NOW);
-    emit(TARGETS.cliOk, await repeat(VALUES, () => timeCli(okFixture)), 'ms');
-    emit(TARGETS.cliNoToken, await repeat(VALUES, () => timeCli(noTokenFixture)), 'ms');
-    emit(TARGETS.probe, await perCall(ITERATIONS, () => probeKimi(io, {}, NOW)), 'us');
-    emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(io, appEnv, NOW)), 'us');
-    if (kimi2) {
-      const liveIo = kimiIo(LIVE_BODY);
-      const envelopeIo = kimiIo(ENVELOPE_BODY);
-      const live = await probeKimi(liveIo, {}, NOW);
-      if (live.status !== 'ok' || live.windows[0]?.usedPct !== 0 || live.windows[1]?.usedPct !== 0) {
-        throw new Error(`probeKimi live 0: ${JSON.stringify(live)}`);
-      }
-      const failed = await probeKimi(envelopeIo, {}, NOW);
-      if (failed.status !== 'unavailable' || !String(failed.reason).includes('kimi usage request failed')) {
-        throw new Error(`probeKimi envelope: ${JSON.stringify(failed)}`);
-      }
-      emit(TARGETS.probeLive0, await perCall(ITERATIONS, () => probeKimi(liveIo, {}, NOW)), 'us');
-      emit(TARGETS.probeEnvelope, await perCall(ITERATIONS, () => probeKimi(envelopeIo, {}, NOW)), 'us');
+  if (PART !== 'inProcess') {
+    if (existsSync(kimiEntry)) {
+      const cliFixture = { cliOk: okFixture, cliNoToken: noTokenFixture }[PART];
+      await timeCli(cliFixture);
+      emit(TARGETS[PART], await repeat(VALUES, () => timeCli(cliFixture)), 'ms');
     } else {
-      absent(...KIMI2_TARGETS);
+      absent(TARGETS[PART]);
     }
   } else {
-    absent(TARGETS.cliOk, TARGETS.cliNoToken, TARGETS.probe, TARGETS.runApp, ...KIMI2_TARGETS);
+    const { renderDashboard } = await import(pathToFileURL(renderEntry).href);
+    if (existsSync(kimiEntry)) {
+      const { runApp } = await import(pathToFileURL(appEntry).href);
+      const { probeKimi } = await import(pathToFileURL(kimiEntry).href);
+      const appEnv = bothNames({ ALLOWANCE_JUNIE_HOME: okFixture });
+      const probed = await probeKimi(io, {}, NOW);
+      if (probed.status !== 'ok') throw new Error(`probeKimi ok: ${probed.reason}`);
+      await runApp(io, appEnv, NOW);
+      emit(TARGETS.probe, await perCall(ITERATIONS, () => probeKimi(io, {}, NOW)), 'us');
+      emit(TARGETS.runApp, await perCall(ITERATIONS, () => runApp(io, appEnv, NOW)), 'us');
+      if (kimi2) {
+        const liveIo = kimiIo(LIVE_BODY);
+        const envelopeIo = kimiIo(ENVELOPE_BODY);
+        const live = await probeKimi(liveIo, {}, NOW);
+        if (live.status !== 'ok' || live.windows[0]?.usedPct !== 0 || live.windows[1]?.usedPct !== 0) {
+          throw new Error(`probeKimi live 0: ${JSON.stringify(live)}`);
+        }
+        const failed = await probeKimi(envelopeIo, {}, NOW);
+        if (failed.status !== 'unavailable' || !String(failed.reason).includes('kimi usage request failed')) {
+          throw new Error(`probeKimi envelope: ${JSON.stringify(failed)}`);
+        }
+        emit(TARGETS.probeLive0, await perCall(ITERATIONS, () => probeKimi(liveIo, {}, NOW)), 'us');
+        emit(TARGETS.probeEnvelope, await perCall(ITERATIONS, () => probeKimi(envelopeIo, {}, NOW)), 'us');
+      } else {
+        absent(...KIMI2_TARGETS);
+      }
+    } else {
+      absent(TARGETS.probe, TARGETS.runApp, ...KIMI2_TARGETS);
+    }
+    renderDashboard(usages, false, NOW, []);
+    emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW, [])), 'us');
   }
-  renderDashboard(usages, false, NOW, []);
-  emit(TARGETS.render, perCallSync(ITERATIONS, () => renderDashboard(usages, false, NOW, [])), 'us');
 } finally {
   rmSync(okFixture, { recursive: true, force: true });
   rmSync(noTokenFixture, { recursive: true, force: true });

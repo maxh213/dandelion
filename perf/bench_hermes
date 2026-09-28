@@ -55,9 +55,15 @@ const TARGETS = {
   highRoute: 'highRouteLine 014 live case plus junie 30% hermes 0% (in-process, per call)',
   session: 'startLive ten stub probes first round then quit (in-process, per session)'
 };
+const CLI_KEYS = ['cli', 'cliMissing', 'cliExpired', 'cliRoute', 'cliHigh'];
+const PART = process.argv[2] ?? 'inProcess';
+if (PART !== 'inProcess' && !CLI_KEYS.includes(PART)) throw new Error(`unknown bench_hermes part ${PART}`);
+const OWN = Object.keys(TARGETS)
+  .filter((key) => (CLI_KEYS.includes(key) ? key === PART : PART === 'inProcess'))
+  .map((key) => TARGETS[key]);
 
 if (!existsSync(main) || !existsSync(appEntry) || !existsSync(renderEntry) || !existsSync(domainEntry)) {
-  absent(...Object.values(TARGETS));
+  absent(...OWN);
   process.exit(0);
 }
 
@@ -249,33 +255,8 @@ const fleetTie = liveCase(junieUsage(0), hermesUsage(0, '2026-09-20T00:00:00.000
 const fleetEvap = liveCase(junieUsage(30), hermesUsage(60, '2026-09-14T13:39:00.000Z'));
 const dashboardFleet = liveCase(junieUsage(30), hermesUsage(75, RESET, { captionSuffix: ' · no paid access' }), { fetchedAt: NOW });
 
-try {
-  const app = await import(pathToFileURL(appEntry).href);
-  const render = await import(pathToFileURL(renderEntry).href);
+async function measureInProcess(app, render, domain, hasHigh) {
   const { renderDashboard } = render;
-  const domain = await import(pathToFileURL(domainEntry).href);
-  const hasHigh = typeof domain.highRouteLine === 'function';
-  R = routing(domain);
-
-  if (!R.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, []).endsWith(' grok')) {
-    absent(...Object.values(TARGETS));
-    process.exit(0);
-  }
-
-  await timeCli(authFile, []);
-  await timeCli(missingAuth, []);
-  await timeCli(expiredFile, []);
-  emit(TARGETS.cli, await repeat(VALUES, () => timeCli(authFile, [])), 'ms');
-  emit(TARGETS.cliMissing, await repeat(VALUES, () => timeCli(missingAuth, [])), 'ms');
-  emit(TARGETS.cliExpired, await repeat(VALUES, () => timeCli(expiredFile, [])), 'ms');
-  emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(authFile, ['route'])), 'ms');
-  if (hasHigh) {
-    await timeCli(authFile, ['route', '--high'], HIGH_LINE);
-    emit(TARGETS.cliHigh, await repeat(VALUES, () => timeCli(authFile, ['route', '--high'], HIGH_LINE)), 'ms');
-  } else {
-    absent(TARGETS.cliHigh);
-  }
-
   renderDashboard(dashboardFleet, false, NOW, []);
   emit(TARGETS.render, perCallSync(FAST_ITERATIONS, () => renderDashboard(dashboardFleet, false, NOW, [])), 'us');
 
@@ -356,6 +337,36 @@ try {
     emit(TARGETS.probeExpired, await perCall(FAST_ITERATIONS, () => probeHermes(httpIo, expiredEnv, NOW)), 'us');
   } else {
     absent(TARGETS.probeStub, TARGETS.probeHttp, TARGETS.probeMissing, TARGETS.probeExpired);
+  }
+}
+
+try {
+  const app = await import(pathToFileURL(appEntry).href);
+  const render = await import(pathToFileURL(renderEntry).href);
+  const domain = await import(pathToFileURL(domainEntry).href);
+  const hasHigh = typeof domain.highRouteLine === 'function';
+  R = routing(domain);
+
+  if (!R.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, []).endsWith(' grok')) {
+    absent(...OWN);
+    process.exit(0);
+  }
+
+  const CLI_RUNS = {
+    cli: [authFile, []],
+    cliMissing: [missingAuth, []],
+    cliExpired: [expiredFile, []],
+    cliRoute: [authFile, ['route']],
+    cliHigh: [authFile, ['route', '--high'], HIGH_LINE]
+  };
+  if (PART === 'inProcess') {
+    await measureInProcess(app, render, domain, hasHigh);
+  } else if (PART === 'cliHigh' && !hasHigh) {
+    absent(TARGETS.cliHigh);
+  } else {
+    const [auth, args, wanted] = CLI_RUNS[PART];
+    await timeCli(auth, args, wanted);
+    emit(TARGETS[PART], await repeat(VALUES, () => timeCli(auth, args, wanted)), 'ms');
   }
 } finally {
   server.close();

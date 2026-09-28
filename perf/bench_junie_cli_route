@@ -19,9 +19,11 @@ const TARGETS = {
   cliRoute: 'cli route nine providers junie 1.6MB session log',
   cliHigh: 'cli route --high nine providers junie 1.6MB session log'
 };
+const PART = process.argv[2] ?? 'cliRoute';
+if (!(PART in TARGETS)) throw new Error(`unknown bench_junie_cli_route part ${PART}`);
 
 if (!existsSync(main) || !existsSync(domainEntry)) {
-  absent(...Object.values(TARGETS));
+  absent(TARGETS[PART]);
   process.exit(0);
 }
 
@@ -123,9 +125,10 @@ try {
   const domain = await import(pathToFileURL(domainEntry).href);
   const hasHigh = typeof domain.highRouteLine === 'function';
   const R = routing(domain);
-  timeCli(R, ['route']);
-  emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(R, ['route'])), 'ms');
-  if (hasHigh) {
+  if (PART === 'cliRoute') {
+    timeCli(R, ['route']);
+    emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(R, ['route'])), 'ms');
+  } else if (hasHigh) {
     timeCli(R, ['route', '--high'], HIGH_LINE);
     emit(TARGETS.cliHigh, await repeat(VALUES, () => timeCli(R, ['route', '--high'], HIGH_LINE)), 'ms');
   } else {

@@ -17,9 +17,11 @@ const TARGETS = {
   cliFallback: 'cli one-shot nine providers junie newest session without snapshot',
   cliEmpty: 'cli one-shot nine providers empty junie home'
 };
+const PART = process.argv[2] ?? 'cli';
+if (!(PART in TARGETS)) throw new Error(`unknown bench_junie_cli part ${PART}`);
 
 if (!existsSync(main)) {
-  absent(...Object.values(TARGETS));
+  absent(TARGETS[PART]);
   process.exit(0);
 }
 
@@ -118,10 +120,9 @@ function timeCli(junieHome) {
 }
 
 try {
-  timeCli(happyHome);
-  emit(TARGETS.cli, await repeat(VALUES, () => timeCli(happyHome)), 'ms');
-  emit(TARGETS.cliFallback, await repeat(VALUES, () => timeCli(fallbackHome)), 'ms');
-  emit(TARGETS.cliEmpty, await repeat(VALUES, () => timeCli(emptyHome)), 'ms');
+  const junieHome = { cli: happyHome, cliFallback: fallbackHome, cliEmpty: emptyHome }[PART];
+  timeCli(junieHome);
+  emit(TARGETS[PART], await repeat(VALUES, () => timeCli(junieHome)), 'ms');
 } finally {
   rmSync(fixture, { recursive: true, force: true });
 }
