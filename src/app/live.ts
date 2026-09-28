@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type LiveSlot, type LiveView } from '../render/index.ts';
+import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type LiveSlot, type LiveView, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -19,6 +19,7 @@ type LiveOptions = {
   keyboard: Keyboard;
   stopChildren(): Promise<void>;
   eligibility: Eligibility;
+  routes: Routes;
   zone: string;
   clock?: () => string;
 };
@@ -78,6 +79,7 @@ function viewOf(session: Session): LiveView {
     footer: session.footer,
     ineligible: session.eligibility.ineligible(),
     zone: session.zone,
+    routes: session.routes,
     settled: session.settled,
     selected: session.selected,
     flash: session.flash

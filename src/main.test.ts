@@ -2,14 +2,16 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ProbeIo } from './app/index.ts';
 
 const MAIN_URL = new URL('./main.ts', import.meta.url).href;
 const MAIN = fileURLToPath(MAIN_URL);
+const ROUTES_FILE = fileURLToPath(new URL('./routes.fixture.json', import.meta.url));
+const LINES = JSON.parse(readFileSync(ROUTES_FILE, 'utf8'));
 
 vi.mock('./app/index.ts', async (importOriginal) => {
   const original = await importOriginal<typeof import('./app/index.ts')>();
@@ -45,12 +47,14 @@ const profileIo: ProbeIo = {
 
 const ENTER_ALTERNATE = '\x1b[?1049h\x1b[?25l';
 
-function procOf(argv: string[], stdinTTY: boolean | undefined, stdoutTTY: boolean | undefined) {
+function procOf(argv: string[], stdinTTY: boolean | undefined, stdoutTTY: boolean | undefined, env: Record<string, string> = { DANDELION_ROUTES_FILE: ROUTES_FILE }) {
   const writes: string[] = [];
+  const errors: string[] = [];
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), isTTY: stdinTTY });
   const stdout = { isTTY: stdoutTTY, write: (text: string) => writes.push(text) };
-  const proc = { argv, env: { NO_COLOR: '1' }, stdin: keyboard, stdout, exit: vi.fn() };
-  return { proc, keyboard, output: () => writes.join('') };
+  const stderr = { write: (text: string) => errors.push(text) };
+  const proc = { argv, env: { NO_COLOR: '1', ...env }, stdin: keyboard, stdout, stderr, exit: vi.fn() };
+  return { proc, keyboard, output: () => writes.join(''), errors: () => errors.join('') };
 }
 
 function writeFixture(dir: string, name: string, body: string): void {
@@ -62,6 +66,10 @@ function writeFixture(dir: string, name: string, body: string): void {
 function linkNodeAndShell(dir: string): void {
   symlinkSync(process.execPath, join(dir, 'node'));
   symlinkSync('/bin/sh', join(dir, 'sh'));
+}
+
+function isolatedEnv(dir: string, extra: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json'), ...extra };
 }
 
 function withoutCountdowns(dashboard: string): string {
@@ -84,7 +92,7 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
     delete env.DANDELION_KIMI_PORT;
     delete env.DANDELION_CURSOR_API_BASE;
     delete env.CLAUDE_CONFIG_DIR;
-    Object.assign(env, { DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') }, extraEnv);
+    Object.assign(env, { DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') }, extraEnv);
     return spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -109,11 +117,11 @@ describe('main', () => {
       status: 'ok' as const,
       windows: [{ label: 'credits', kind: 'weekly' as const, usedPct: 95, resetsAt: '2026-09-20T00:00:00.000Z' }]
     };
-    expect(routeLine([tripped, free], now, midnight, [])).toBe('grok-4.7 xhigh grok');
-    expect(highRouteLine([
+    expect(routeLine(LINES, [tripped, free], now, midnight, [])).toBe('model-e xhigh grok');
+    expect(highRouteLine(LINES, [
       { ...tripped, windows: [{ label: 'session', kind: 'rolling' as const, usedPct: 90 }, { label: 'Fable', kind: 'weekly' as const, usedPct: 10 }] },
       { id: 'cursor', displayName: 'cursor', fetchedAt: now, status: 'ok' as const, windows: [{ label: 'total', kind: 'weekly' as const, usedPct: 10 }] }
-    ], [])).toBe('kimi-k3-max cursor');
+    ], [])).toBe('model-f cursor');
   });
 
   it('kills route edge mutants before the long suite', () => {
@@ -122,33 +130,33 @@ describe('main', () => {
     const ok = (id: string, windows: { label: string; kind: 'rolling' | 'weekly' | 'other'; usedPct: number; resetsAt?: string }[]) => ({
       id, displayName: id, fetchedAt: now, status: 'ok' as const, windows
     });
-    expect(routeLine([ok('claude', [])], now, midnight, [])).toBe('none');
-    expect(routeLine([
+    expect(routeLine(LINES, [ok('claude', [])], now, midnight, [])).toBe('none');
+    expect(routeLine(LINES, [
       ok('claude', [{ label: 'weekly', kind: 'weekly', usedPct: 50, resetsAt: now }]),
       ok('agy', [{ label: '5h', kind: 'rolling', usedPct: 40 }])
-    ], now, midnight, [])).toBe('gemini-3.8-flash-high high agy');
-    expect(routeLine([
+    ], now, midnight, [])).toBe('model-c high agy');
+    expect(routeLine(LINES, [
       ok('claude', [{ label: 'weekly', kind: 'weekly', usedPct: 50, resetsAt: '2026-09-14T10:00:00.000Z' }]),
       ok('agy', [{ label: '5h', kind: 'rolling', usedPct: 40 }])
-    ], now, midnight, [])).toBe('gemini-3.8-flash-high high agy');
-    expect(routeLine([
+    ], now, midnight, [])).toBe('model-c high agy');
+    expect(routeLine(LINES, [
       ok('claude', [{ label: 'weekly', kind: 'weekly', usedPct: 3, resetsAt: '2026-09-14T20:00:00.000Z' }]),
       ok('agy', [{ label: '5h', kind: 'rolling', usedPct: 0 }])
-    ], now, midnight, [])).toBe('gemini-3.8-flash-high high agy');
-    expect(highRouteLine([
+    ], now, midnight, [])).toBe('model-c high agy');
+    expect(highRouteLine(LINES, [
       ok('claude', [
         { label: 'session', kind: 'rolling', usedPct: 10 },
         { label: 'weekly', kind: 'weekly', usedPct: 50 },
         { label: 'Fable', kind: 'weekly', usedPct: 100 }
       ])
-    ], [])).toBe('claude-opus-5 max claude');
-    expect(highRouteLine([
+    ], [])).toBe('model-a max claude');
+    expect(highRouteLine(LINES, [
       ok('claude', [
         { label: 'session', kind: 'rolling', usedPct: 10 },
         { label: 'FABLE', kind: 'weekly', usedPct: 90 }
       ]),
       ok('cursor', [{ label: 'total', kind: 'weekly', usedPct: 10 }])
-    ], [])).toBe('kimi-k3-max cursor');
+    ], [])).toBe('model-f cursor');
   });
 
   it('prints the kilo panel with a 14 of 20 gauge from a fixture kilo on PATH', () => {
@@ -187,9 +195,11 @@ describe('main', () => {
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
   });
 
-  it('writes the dashboard to the stream', async () => {
+  it('writes the dashboard to stdout and nothing to stderr when the routes file is good', async () => {
     let output = '';
-    await main(profileIo, { NO_COLOR: '1' }, { write: (out: string) => { output += out; } }, '2026-09-13T10:00:00.000Z');
+    const stderr = { write: vi.fn() };
+    await main(profileIo, { NO_COLOR: '1', DANDELION_ROUTES_FILE: ROUTES_FILE }, { stdout: { write: (out: string) => { output += out; } }, stderr }, '2026-09-13T10:00:00.000Z');
+    expect(stderr.write).toHaveBeenCalledWith('');
     expect(output).toContain('DANDELION');
     expect(output).toContain('10:00:00Z');
     expect(output).toContain('$14.15');
@@ -248,7 +258,7 @@ describe('main', () => {
     const before = new Date().toISOString();
     await runIfMain(MAIN_URL, MAIN, routeIo, proc);
     const after = new Date().toISOString();
-    expect(output()).toBe('claude-opus-5 high claude\n');
+    expect(output()).toBe('model-a high claude\n');
     expect(keyboard.setRawMode).not.toHaveBeenCalled();
     expect(proc.exit).not.toHaveBeenCalled();
     const [io, env, { mode, now, zone }] = vi.mocked(runRoute).mock.calls[0];
@@ -257,10 +267,10 @@ describe('main', () => {
   });
 
   it.each<[string[], string, string]>([
-    [['route', '--high'], 'high', 'claude-fable-5-1 max claude\n'],
-    [['route', 'extra', '--high'], 'high', 'claude-fable-5-1 max claude\n'],
-    [['route'], 'headroom', 'claude-opus-5 high claude\n'],
-    [['route', '--High'], 'headroom', 'claude-opus-5 high claude\n']
+    [['route', '--high'], 'high', 'model-h1 max claude\n'],
+    [['route', 'extra', '--high'], 'high', 'model-h1 max claude\n'],
+    [['route'], 'headroom', 'model-a high claude\n'],
+    [['route', '--High'], 'headroom', 'model-a high claude\n']
   ])('runIfMain %j uses the --high chain only when an exact --high follows route', async (args, mode, line) => {
     vi.mocked(runRoute).mockClear();
     const { proc, output } = procOf(['node', MAIN, ...args], false, false);
@@ -270,8 +280,8 @@ describe('main', () => {
   });
 
   it.each<[string[], string, string]>([
-    [['--high', MAIN, 'route'], 'headroom', 'claude-opus-5 high claude\n'],
-    [['node', '--high', 'route'], 'headroom', 'claude-opus-5 high claude\n']
+    [['--high', MAIN, 'route'], 'headroom', 'model-a high claude\n'],
+    [['node', '--high', 'route'], 'headroom', 'model-a high claude\n']
   ])('runIfMain %j ignores a --high that comes before route', async (argv, mode, line) => {
     vi.mocked(runRoute).mockClear();
     const { proc, output } = procOf(argv, false, false);
@@ -303,9 +313,9 @@ describe('main', () => {
       writeFixture(dir, 'claude', "[ -z \"$CLAUDE_CONFIG_DIR\" ] || exit 1\nprintf '%s\\n' 'Current week (all models): 86% used'");
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
-      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const routed = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
-      expect([routed.stdout, routed.stderr, routed.status]).toEqual(['claude-opus-5 high claude\n', '', 0]);
+      expect([routed.stdout, routed.stderr, routed.status]).toEqual(['model-a high claude\n', '', 0]);
       rmSync(join(dir, 'claude'));
       const none = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
       expect([none.stdout, none.stderr, none.status]).toEqual(['none\n', '', 1]);
@@ -314,11 +324,30 @@ describe('main', () => {
     }
   });
 
+  it.each([[['route']], [['route', '--high']]])('runIfMain %j prints nothing on stdout, the fault on stderr and exits 2 with a bad routes file', async (args) => {
+    const path = join(tmpdir(), 'dandelion-no-such-dir', 'nope.json');
+    const { proc, output, errors } = procOf(['node', MAIN, ...args], false, false, { DANDELION_ROUTES_FILE: path });
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect([output(), errors()]).toEqual(['', `dandelion: routes file ${path}: cannot be read\n`]);
+    expect(proc.exit).toHaveBeenCalledWith(2);
+  });
+
+  it('runIfMain --once prints the dashboard, the routes file fault on stderr and exits 0', async () => {
+    const good = procOf(['node', MAIN, '--once'], false, false);
+    await runIfMain(MAIN_URL, MAIN, profileIo, good.proc);
+    const path = join(tmpdir(), 'dandelion-no-such-dir', 'nope.json');
+    const bad = procOf(['node', MAIN, '--once'], false, false, { DANDELION_ROUTES_FILE: path });
+    await runIfMain(MAIN_URL, MAIN, profileIo, bad.proc);
+    expect(withoutCountdowns(bad.output())).toBe(withoutCountdowns(good.output()));
+    expect([good.errors(), bad.errors()]).toEqual(['', `dandelion: routes file ${path}: cannot be read\n`]);
+    expect(bad.proc.exit).not.toHaveBeenCalled();
+  });
+
   it('runIfMain route --high prints one line on two terminals without live mode', async () => {
     vi.mocked(runRoute).mockClear();
     const { proc, output, keyboard } = procOf(['node', MAIN, 'route', '--high'], true, true);
     await runIfMain(MAIN_URL, MAIN, routeIo, proc);
-    expect(output()).toBe('claude-fable-5-1 max claude\n');
+    expect(output()).toBe('model-h1 max claude\n');
     expect(keyboard.setRawMode).not.toHaveBeenCalled();
     expect(proc.exit).not.toHaveBeenCalled();
   });
@@ -330,14 +359,110 @@ describe('main', () => {
       writeFixture(dir, 'claude', "[ -z \"$CLAUDE_CONFIG_DIR\" ] || exit 1\nprintf '%s\\n' 'Current session: 10% used' 'Current week (all models): 50% used' 'Current week (Fable): 100% used'");
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
-      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const high = spawnSync(process.execPath, ['src/main.ts', 'route', '--high'], { env, encoding: 'utf-8', timeout: 60000 });
-      expect([high.stdout, high.stderr, high.status]).toEqual(['claude-opus-5 max claude\n', '', 0]);
+      expect([high.stdout, high.stderr, high.status]).toEqual(['model-a max claude\n', '', 0]);
       const plain = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
-      expect([plain.stdout, plain.stderr, plain.status]).toEqual(['claude-opus-5 high claude\n', '', 0]);
+      expect([plain.stdout, plain.stderr, plain.status]).toEqual(['model-a high claude\n', '', 0]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('a bad routes file wins over none: node src/main.ts route exits 2 with one stderr line and no stdout', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dandelion-routes-none-'));
+    try {
+      linkNodeAndShell(dir);
+      const env = isolatedEnv(dir, { DANDELION_ROUTES_FILE: join(dir, 'nope.json') });
+      const result = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
+      expect([result.stdout, result.stderr, result.status]).toEqual(['', `dandelion: routes file ${join(dir, 'nope.json')}: cannot be read\n`, 2]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  describe('a copy of the checkout run through npm link symlinks', () => {
+    const F = {
+      route: {
+        claude: { standard: 'model-a high', max: 'model-a max' },
+        'claude-work': { standard: 'model-b high', max: 'model-b max' },
+        agy: { standard: 'model-c high', max: 'model-c max' },
+        kimi: { standard: 'model-d', max: 'model-d max' },
+        grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
+        cursor: { standard: 'model-f', max: 'model-f' },
+        junie: { standard: 'model-g high', max: 'model-g high' },
+        hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' }
+      },
+      high: { fable: 'model-h1 max', cursor: 'model-h2', opus: 'model-h3 max', grok: 'model-h4 xhigh', agy: 'model-h5 high' }
+    };
+    const DECOY = JSON.stringify(F).replaceAll('model-', 'decoy-');
+
+    function linkedCopy() {
+      const root = realpathSync(mkdtempSync(join(tmpdir(), 'dandelion-linked-')));
+      const checkout = join(root, 'checkout');
+      cpSync(dirname(MAIN), join(checkout, 'src'), { recursive: true });
+      cpSync(join(dirname(MAIN), '..', 'package.json'), join(checkout, 'package.json'));
+      writeFileSync(join(checkout, 'routes.json'), JSON.stringify(F));
+      for (const folder of ['lib', 'bin', 'work', 'tools']) mkdirSync(join(root, folder));
+      symlinkSync(checkout, join(root, 'lib', 'dandelion'));
+      symlinkSync(join(root, 'lib', 'dandelion', 'src', 'main.ts'), join(root, 'bin', 'dandelion'));
+      for (const folder of ['', 'lib', 'bin', 'work']) writeFileSync(join(root, folder, 'routes.json'), DECOY);
+      linkNodeAndShell(join(root, 'tools'));
+      const grokHome = join(root, 'grok');
+      mkdirSync(join(grokHome, 'logs'), { recursive: true });
+      const now = Date.now();
+      const config = { creditUsagePercent: 50, currentPeriod: { end: new Date(now + 72 * 3600000).toISOString() } };
+      writeFileSync(join(grokHome, 'logs', 'unified.jsonl'), `${JSON.stringify({ ts: new Date(now).toISOString(), msg: 'billing: fetched credits config', ctx: { config } })}\n`);
+      const run = (extra: NodeJS.ProcessEnv, entry = join(root, 'bin', 'dandelion')) => {
+        const env = { ...isolatedEnv(join(root, 'tools'), extra), DANDELION_GROK_HOME: grokHome };
+        return spawnSync(process.execPath, [entry, 'route'], { cwd: join(root, 'work'), env, encoding: 'utf-8', timeout: 60000 });
+      };
+      return { root, checkout, run };
+    }
+
+    it.each<[string, NodeJS.ProcessEnv]>([
+      ['unset', {}],
+      ['empty', { DANDELION_ROUTES_FILE: '' }]
+    ])('reads the checkout routes.json, not a decoy, with DANDELION_ROUTES_FILE %s', (_case, extra) => {
+      const { root, run } = linkedCopy();
+      try {
+        const result = run(extra);
+        expect([result.stdout, result.stderr, result.status]).toEqual(['model-e xhigh grok\n', '', 0]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('finds a relative DANDELION_ROUTES_FILE from the working directory', () => {
+      const { root, run } = linkedCopy();
+      try {
+        expect(run({ DANDELION_ROUTES_FILE: 'routes.json' }).stdout).toBe('decoy-e xhigh grok\n');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('prints an edited line after a one-line edit to routes.json', () => {
+      const { root, checkout, run } = linkedCopy();
+      try {
+        writeFileSync(join(checkout, 'routes.json'), JSON.stringify({ ...F, route: { ...F.route, grok: { standard: 'model-z high', max: 'model-e xhigh' } } }));
+        expect(run({}).stdout).toBe('model-z high grok\n');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it('names the real path of a missing shipped file, and still routes with DANDELION_ROUTES_FILE', () => {
+      const { root, checkout, run } = linkedCopy();
+      try {
+        rmSync(join(checkout, 'routes.json'));
+        const missing = run({}, join(checkout, 'src', 'main.ts'));
+        expect([missing.stdout, missing.stderr, missing.status]).toEqual(['', `dandelion: routes file ${join(checkout, 'routes.json')}: cannot be read\n`, 2]);
+        expect(run({ DANDELION_ROUTES_FILE: join(root, 'routes.json') }).stdout).toBe('decoy-e xhigh grok\n');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
   });
 
   it('runIfMain does nothing for another entry file', async () => {
@@ -375,7 +500,7 @@ describe('main', () => {
       writeFixture(dir, 'kimi', 'exit 0');
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
-      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const runs = ['src/main.ts', join(dir, 'dandelion')].map((entry) => spawnSync(process.execPath, [entry, '--once'], { env, encoding: 'utf-8', timeout: 60000 }));
       const panelOrder = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
       for (const run of runs) {
@@ -397,7 +522,7 @@ describe('main', () => {
     try {
       linkNodeAndShell(dir);
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8', timeout: 60000 });
       expect(result.status).toBe(0);
       expect(result.stdout).toMatch(/\ngrok\n[^]*\ncodex\napi-key billing · no usage windows\ncodex · codex\n[^]*\ncursor\n[^]*\nkilo\n/);
@@ -409,7 +534,7 @@ describe('main', () => {
 
   it('prints ten dim unavailable panels in order when no CLI is on PATH, grok and junie homes are empty and cursor auth is missing', () => {
     const grokHome = mkdtempSync(join(tmpdir(), 'dandelion-grok-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome, DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json') };
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome, DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json') };
     delete env.NO_COLOR;
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
     rmSync(grokHome, { recursive: true, force: true });
@@ -508,7 +633,7 @@ describe('main', () => {
     const route = readme.split('## Route')[1].split('## ')[0];
     expect(route).toContain('`grok`, `cursor`, `junie` and `hermes`, in dashboard order');
     expect(route).toContain('junie credits, hermes credits)');
-    expect(route).toContain('| cursor | `kimi-k3-max` | `kimi-k3-max` |\n| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |\n');
+    expect(route).toContain('| cursor | `route.cursor.standard` | `route.cursor.max` |\n| junie | `route.junie.standard` | `route.junie.max` |\n');
     expect(route).toContain('so `--high` does not use junie');
   });
 
@@ -532,7 +657,7 @@ describe('main', () => {
     const route = readme.split('## Route')[1].split('## ')[0];
     expect(route).toContain('`junie` and `hermes`, in dashboard order');
     expect(route).toContain('hermes credits)');
-    expect(route).toContain('| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |\n| hermes | `x-ai/grok-4.7 xhigh` | `x-ai/grok-4.7 xhigh` |\n');
+    expect(route).toContain('| junie | `route.junie.standard` | `route.junie.max` |\n| hermes | `route.hermes.standard` | `route.hermes.max` |\n');
     expect(route).toContain('`--high` does not use hermes');
   });
 
@@ -557,14 +682,7 @@ describe('main', () => {
     expect(route).toContain('`codex` is never routed, because it has no subscription windows to route on');
     expect(route).toMatch(/Evaporation: a weekly window .* before the next local midnight with less than 97% left/);
     expect(route).toMatch(/Most headroom: .*lowest left over its rolling and weekly windows \(100 when it has neither\)/);
-    for (const row of [
-      '| claude | `claude-opus-5 high` | `claude-opus-5 max` |',
-      '| claude-work | `claude-opus-5 high` | `claude-opus-5 max` |',
-      '| agy | `gemini-3.8-flash-high high` | `gemini-3.1-pro-high high` |',
-      '| kimi | `kimi-code/k3 max` | `kimi-code/k3 max` |',
-      '| grok | `grok-4.7 xhigh` | `grok-4.7 xhigh` |',
-      '| cursor | `kimi-k3-max` | `kimi-k3-max` |'
-    ]) expect(route).toContain(row);
+    for (const id of ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'cursor']) expect(route).toContain(`| ${id} | \`route.${id}.standard\` | \`route.${id}.max\` |`);
   });
 
   it('README documents route --high and the account token', () => {
@@ -573,11 +691,11 @@ describe('main', () => {
     expect(commands).toMatch(/^- `dandelion route --high` \(or `npm start -- route --high`\) - .*strongest model.*prints `none` and exits 1/m);
     const route = readme.split('## Route')[1].split('## ')[0];
     for (const row of [
-      '| 1 | claude, claude-work | `fable`: the Fable weekly window plus session | `claude-fable-5-1 max` |',
-      '| 2 | cursor | (all) | `kimi-k3-max` |',
-      '| 3 | claude, claude-work | (all) | `claude-opus-5 max` |',
-      '| 4 | grok | (all) | `grok-4.7 xhigh` |',
-      '| 5 | agy | (all) | `gemini-3.8-flash-high high` |'
+      '| 1 | claude, claude-work | `fable`: the Fable weekly window plus session | `high.fable` |',
+      '| 2 | cursor | (all) | `high.cursor` |',
+      '| 3 | claude, claude-work | (all) | `high.opus` |',
+      '| 4 | grok | (all) | `high.grok` |',
+      '| 5 | agy | (all) | `high.agy` |'
     ]) expect(route).toContain(row);
     expect(route).toMatch(/except the windows another entry of the same provider matches/);
     expect(route).toMatch(/every gating window is under 90% used; at 90% it pops down/);
@@ -624,16 +742,21 @@ describe('main', () => {
     expect(commands).toMatch(/^- `npm start` - .*Two boxes at the top show the answers `dandelion route` and `dandelion route --high` would print; they update when a round settles or routing is toggled/m);
   });
 
-  it('README, unit tests and perf expectations reflect the new lines', () => {
+  it('README documents routes.json, its shape, DANDELION_ROUTES_FILE and the exit-2 errors, with no line strings in the route tables', () => {
     const readme = readFileSync('README.md', 'utf-8');
+    const file = readme.split('## routes.json')[1].split('\n## ')[0];
+    expect(file).toContain('To change a routed model, edit routes.json.');
+    expect(file).toMatch(/real path of `src\/main\.ts` after following symlinks, never from the working directory/);
+    expect(file).toMatch(/"route": \{\n {4}"claude": \{ "standard": "<line>", "max": "<line>" \}/);
+    expect(file).toContain('"high": { "fable": "<line>", "cursor": "<line>", "opus": "<line>", "grok": "<line>", "agy": "<line>" }');
+    expect(file).toContain('A line is `<model>` or `<model> <effort>`: one or two words, one space apart.');
+    expect(file).toMatch(/print nothing on stdout, print `dandelion: routes file <path>: <what is wrong>` on stderr and exit 2, even when nothing could be routed\. Exit 1 stays reserved for `none`/);
+    expect(file).toMatch(/`--once` prints its dashboard as usual, the same line on stderr, and exits 0/);
+    expect(file).toMatch(/both route boxes show `routes file error`/);
+    expect(readme).toMatch(/^- `DANDELION_ROUTES_FILE` - .*unset or empty\. A relative path is taken from the working directory\.$/m);
     const route = readme.split('## Route')[1].split('## ')[0];
-    expect(route).toContain('| kimi | `kimi-code/k3 max` | `kimi-code/k3 max` |');
-    expect(route).toContain('| grok | `grok-4.7 xhigh` | `grok-4.7 xhigh` |');
-    expect(route).toContain('| hermes | `x-ai/grok-4.7 xhigh` | `x-ai/grok-4.7 xhigh` |');
-    expect(route).toContain('| 4 | grok | (all) | `grok-4.7 xhigh` |');
-    for (const bench of ['perf/bench_route', 'perf/bench_trip', 'perf/bench_eligibility', 'perf/bench_junie', 'perf/bench_hermes']) {
-      const text = readFileSync(bench, 'utf-8');
-      expect(text).toMatch(/kimi-code\/k3 max|grok-4\.7 xhigh|x-ai\/grok-4\.7 xhigh/);
-    }
+    const tableRows = route.split('\n').filter((line) => /^\| (\d|claude|agy|kimi|grok|cursor|junie|hermes)/.test(line));
+    expect(tableRows).toHaveLength(13);
+    expect(tableRows.every((row) => /`(route\.[a-z-]+\.(standard|max)|high\.[a-z]+)` \|$/.test(row))).toBe(true);
   });
 });

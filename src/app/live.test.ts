@@ -4,6 +4,20 @@ import type { ProviderProbe } from '../probes/index.ts';
 import { openEligibility } from '../render/index.ts';
 import { startLive } from './live.ts';
 
+const LINES = {
+  route: {
+    claude: { standard: 'model-a high', max: 'model-a max' },
+    'claude-work': { standard: 'model-a high', max: 'model-a max' },
+    agy: { standard: 'model-c high', max: 'model-c max' },
+    kimi: { standard: 'model-d max', max: 'model-d max' },
+    grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
+    cursor: { standard: 'model-f', max: 'model-f' },
+    junie: { standard: 'model-g high', max: 'model-g high' },
+    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' }
+  },
+  high: { fable: 'model-h1 max', cursor: 'model-f', opus: 'model-a max', grok: 'model-e xhigh', agy: 'model-c high' }
+};
+
 type Usage = Awaited<ReturnType<ProviderProbe['probe']>>;
 type PendingCall = { now: string; resolve(usage: Usage): void; reject(error: Error): void };
 
@@ -41,7 +55,7 @@ function startSession(overrides: SessionOverrides = {}) {
   const replace = vi.fn<(path: string, text: string) => boolean>(() => true);
   const eligibility = openEligibility({}, '/home/u', { read: () => JSON.stringify(state), replace });
   const saved = () => replace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen: { write: (text: string) => writes.push(text) }, stopChildren, eligibility, zone });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen: { write: (text: string) => writes.push(text) }, stopChildren, eligibility, routes: { lines: LINES }, zone });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
@@ -441,7 +455,7 @@ describe('route boxes', () => {
     expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('⠙ probing…', '', '⠙ probing…', ''));
     session.probes[6].calls[0].resolve(usageOf('kilo', session.probes[6].calls[0].now));
     await vi.advanceTimersByTimeAsync(0);
-    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('claude-opus-5 high', 'claude', 'claude-fable-5-1 max', 'claude'));
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-a high', 'claude', 'model-h1 max', 'claude'));
     session.press('q');
     await session.finished;
   });
@@ -449,7 +463,7 @@ describe('route boxes', () => {
   it('keeps the previous round’s boxes while a refresh runs and recomputes them when it settles', async () => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '100000' } });
     await session.settleRound(0);
-    const settled = boxBlock('claude-opus-5 high', 'claude', 'claude-fable-5-1 max', 'claude');
+    const settled = boxBlock('model-a high', 'claude', 'model-h1 max', 'claude');
     expect(boxRowsOf(session.lastFrame())).toEqual(settled);
     session.press('r');
     expect(session.lastFrame().split('\n')[0]).toContain('refreshing…');
@@ -460,7 +474,7 @@ describe('route boxes', () => {
     expect(boxRowsOf(session.lastFrame())).toEqual(settled);
     session.probes[6].calls[1].resolve(usageOf('kilo', session.probes[6].calls[1].now));
     await vi.advanceTimersByTimeAsync(0);
-    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('gemini-3.8-flash-high high', 'agy', 'kimi-k3-max', 'cursor'));
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-f', 'cursor'));
     session.press('q');
     await session.finished;
   });
@@ -470,10 +484,10 @@ describe('route boxes', () => {
     await session.settleRound(0);
     session.press('j');
     session.press(' ');
-    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('gemini-3.8-flash-high high', 'agy', 'kimi-k3-max', 'cursor'));
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-f', 'cursor'));
     expect(session.saved().at(-1)).toEqual({ claude: false });
     session.press(' ');
-    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('claude-opus-5 high', 'claude', 'claude-fable-5-1 max', 'claude'));
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-a high', 'claude', 'model-h1 max', 'claude'));
     expect(session.saved().at(-1)).toEqual({ claude: true });
     session.press('q');
     await session.finished;
@@ -484,12 +498,12 @@ describe('route boxes', () => {
     const overrides = () => Object.fromEntries(IDS.map((id) => [id, evaporatingUsage(id, START, resetsAt)]));
     const utc = startSession();
     await utc.settleRound(0, overrides());
-    expect(boxRowsOf(utc.lastFrame())[1]).toBe(`| ${'claude-opus-5 max'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    expect(boxRowsOf(utc.lastFrame())[1]).toBe(`| ${'model-a max'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`);
     utc.press('q');
     await utc.finished;
     const plusTwo = startSession({ zone: 'Etc/GMT-2' });
     await plusTwo.settleRound(0, overrides());
-    expect(boxRowsOf(plusTwo.lastFrame())[1]).toBe(`| ${'claude-opus-5 high'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    expect(boxRowsOf(plusTwo.lastFrame())[1]).toBe(`| ${'model-a high'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`);
     plusTwo.press('q');
     await plusTwo.finished;
   });
@@ -497,9 +511,9 @@ describe('route boxes', () => {
   it('recomputes the boxes from the frame time, flipping when a reset passes between rounds', async () => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '100000' } });
     await session.settleRound(0, Object.fromEntries(IDS.map((id) => [id, evaporatingUsage(id, START, '2026-09-13T10:30:00.000Z')])));
-    expect(boxRowsOf(session.lastFrame())[1]).toBe(`| ${'claude-opus-5 max'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    expect(boxRowsOf(session.lastFrame())[1]).toBe(`| ${'model-a max'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`);
     await vi.advanceTimersByTimeAsync(31 * 60 * 1000);
-    expect(boxRowsOf(session.lastFrame())[1]).toBe(`| ${'claude-opus-5 high'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    expect(boxRowsOf(session.lastFrame())[1]).toBe(`| ${'model-a high'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`);
     session.press('q');
     await session.finished;
   });

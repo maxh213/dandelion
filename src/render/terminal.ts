@@ -8,6 +8,7 @@ import {
   summariseFleet,
   type Balance,
   type ProviderUsage,
+  type Routes,
   type UsageWindow
 } from '../domain/index.ts';
 
@@ -32,6 +33,7 @@ const ROUTE_TITLE = 'route';
 const HIGH_TITLE = 'route --high';
 const NO_SUBSCRIPTION = 'no subscription available';
 const PROBING = 'probing…';
+const ROUTES_FILE_ERROR = 'routes file error';
 
 export type PanelMarks = { selected: boolean; ineligible: boolean; caption?: string };
 
@@ -247,6 +249,7 @@ export type LiveView = {
   footer: boolean;
   ineligible: string[];
   zone: string;
+  routes: Routes;
   settled?: ProviderUsage[];
   selected?: number;
   flash?: Flash;
@@ -369,12 +372,18 @@ function cachedMidnight(zone: string, now: string): string {
   return midnight;
 }
 
+function faultAnswer(problem: string): BoxAnswer {
+  return { model: ROUTES_FILE_ERROR, account: problem, dimmed: true };
+}
+
 function boxAnswers(view: LiveView, now: string): [BoxAnswer, BoxAnswer] {
+  const { lines, fault } = view.routes;
   if (view.settled === undefined) return [probingAnswer(view.spinner), probingAnswer(view.spinner)];
+  if (fault !== undefined) return [faultAnswer(fault.problem), faultAnswer(fault.problem)];
   const midnight = cachedMidnight(view.zone, now);
   return [
-    splitRouteLine(routeLine(view.settled, now, midnight, view.ineligible)),
-    splitRouteLine(highRouteLine(view.settled, view.ineligible))
+    splitRouteLine(routeLine(lines, view.settled, now, midnight, view.ineligible)),
+    splitRouteLine(highRouteLine(lines, view.settled, view.ineligible))
   ];
 }
 

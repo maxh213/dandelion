@@ -19,7 +19,19 @@ export {
   type FileReader
 } from './ports.ts';
 
-export { HIGH_CHAIN, NO_ROUTE, highRouteLine, isRoutable, routeLine, type WindowKind } from './route.ts';
+export {
+  HIGH_CHAIN,
+  NO_ROUTE,
+  faultLine,
+  highRouteLine,
+  isRoutable,
+  openRoutes,
+  routeLine,
+  type RouteLines,
+  type Routes,
+  type RoutesFile,
+  type WindowKind
+} from './route.ts';
 
 export { nextLocalMidnight } from './midnight.ts';
 

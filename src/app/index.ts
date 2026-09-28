@@ -20,7 +20,19 @@ import {
   type RpcSpawner,
   type RunFailure
 } from '../probes/index.ts';
-import { openEligibility, renderDashboard, renderRoute, type Eligibility, type RouteOutput, type RouteRequest, type StateFile } from '../render/index.ts';
+import {
+  openEligibility,
+  openRoutes,
+  renderDashboard,
+  renderRoute,
+  renderRoutesFault,
+  type Eligibility,
+  type RouteOutput,
+  type RouteRequest,
+  type Routes,
+  type RoutesFile,
+  type StateFile
+} from '../render/index.ts';
 import { startLive, type Keyboard, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
@@ -227,6 +239,18 @@ function eligibilityOf(io: ProbeIo, env: Record<string, string | undefined>): El
   return openEligibility(env, io.reader.homeDir(), realStateFile);
 }
 
+const SHIPPED_ROUTES = fileURLToPath(new URL('../../routes.json', import.meta.url));
+const realRoutesFile: RoutesFile = { read: readText };
+
+function routesOf(env: Record<string, string | undefined>): Routes {
+  return openRoutes(env, SHIPPED_ROUTES, realRoutesFile);
+}
+
+export function routesWarning(env: Record<string, string | undefined>): string {
+  const { fault } = routesOf(env);
+  return fault === undefined ? '' : renderRoutesFault(fault).err;
+}
+
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
   const usages = await probeOnce(io, env, now);
   const noColor = env['NO_COLOR'] !== undefined;
@@ -234,7 +258,9 @@ export async function runApp(io: ProbeIo, env: Record<string, string | undefined
 }
 
 export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, request: RouteRequest): Promise<RouteOutput> {
-  return renderRoute(await probeOnce(io, env, request.now), eligibilityOf(io, env).ineligible(), request);
+  const { lines, fault } = routesOf(env);
+  if (fault !== undefined) return renderRoutesFault(fault);
+  return renderRoute(lines, await probeOnce(io, env, request.now), eligibilityOf(io, env).ineligible(), request);
 }
 
 export function processZone(): string {
@@ -256,6 +282,7 @@ export function runLive(
     screen,
     stopChildren,
     eligibility: eligibilityOf(io, env),
+    routes: routesOf(env),
     zone: processZone(),
     clock
   });

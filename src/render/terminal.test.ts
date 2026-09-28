@@ -14,7 +14,21 @@ import {
   type LiveView,
   type PanelMarks
 } from './terminal.ts';
-import { highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type RouteLines, type UsageWindow } from '../domain/index.ts';
+
+const LINES: RouteLines = {
+  route: {
+    claude: { standard: 'model-a high', max: 'model-a max' },
+    'claude-work': { standard: 'model-a high', max: 'model-a max' },
+    agy: { standard: 'model-c high', max: 'model-c max' },
+    kimi: { standard: 'model-d max', max: 'model-d max' },
+    grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
+    cursor: { standard: 'model-f', max: 'model-f' },
+    junie: { standard: 'model-g high', max: 'model-g high' },
+    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' }
+  },
+  high: { fable: 'model-h1 max', cursor: 'model-f', opus: 'model-a max', grok: 'model-e xhigh', agy: 'model-c high' }
+};
 
 vi.mock('../domain/index.ts', async (importOriginal) => {
   const original = await importOriginal<typeof import('../domain/index.ts')>();
@@ -307,6 +321,7 @@ describe('live frame', () => {
     footer: false,
     ineligible: [],
     zone: 'UTC',
+    routes: { lines: LINES },
     ...extra
   });
   const AGY_FIVE_HOUR = 'Claude and GPT models · Five Hour Limit';
@@ -425,6 +440,7 @@ describe('panel marks', () => {
     footer: false,
     ineligible: ['claude'],
     zone: 'UTC',
+    routes: { lines: LINES },
     ...extra
   });
   const panelOf = (view: LiveView, noColor = false) => renderLiveFrame(view, noColor, NOW).split('\n').slice(6).join('\n');
@@ -487,6 +503,7 @@ describe('route boxes', () => {
     footer: false,
     ineligible: [],
     zone: 'UTC',
+    routes: { lines: LINES },
     settled,
     ...extra
   });
@@ -518,7 +535,7 @@ describe('route boxes', () => {
     const lines = boxLines(boxView(ROUTED), true, NOW);
     expect(lines).toEqual([
       TOP,
-      '| claude-opus-5 high              |  | claude-fable-5-1 max            |',
+      `| ${'model-a high'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`,
       '| claude-work                     |  | claude-work                     |',
       BOTTOM
     ]);
@@ -528,7 +545,7 @@ describe('route boxes', () => {
   it('colours the borders dim, the model line bold and the account row plain', () => {
     const lines = boxLines(boxView(ROUTED), false, NOW);
     expect(lines[0]).toBe(`${DIM}┌─ route ${'─'.repeat(25)}┐${RESET}  ${DIM}┌─ route --high ${'─'.repeat(18)}┐${RESET}`);
-    expect(lines[1]).toBe(`${DIM}│${RESET}${BOLD} claude-opus-5 high${' '.repeat(14)}${RESET}${DIM}│${RESET}  ${DIM}│${RESET}${BOLD} claude-fable-5-1 max${' '.repeat(12)}${RESET}${DIM}│${RESET}`);
+    expect(lines[1]).toBe(`${DIM}│${RESET}${BOLD} model-a high${' '.repeat(20)}${RESET}${DIM}│${RESET}  ${DIM}│${RESET}${BOLD} model-h1 max${' '.repeat(20)}${RESET}${DIM}│${RESET}`);
     expect(lines[2]).toBe(`${DIM}│${RESET} claude-work${' '.repeat(21)}${DIM}│${RESET}  ${DIM}│${RESET} claude-work${' '.repeat(21)}${DIM}│${RESET}`);
     expect(lines[3]).toBe(`${DIM}└${'─'.repeat(33)}┘${RESET}  ${DIM}└${'─'.repeat(33)}┘${RESET}`);
   });
@@ -544,6 +561,39 @@ describe('route boxes', () => {
     const coloured = boxLines(boxView(undefined), false, NOW);
     expect(coloured[1]).toBe(`${DIM}│ ⠋ probing…${' '.repeat(22)}│${RESET}  ${DIM}│ ⠋ probing…${' '.repeat(22)}│${RESET}`);
     expect(coloured[2]).toBe(`${DIM}│${' '.repeat(33)}│${RESET}  ${DIM}│${' '.repeat(33)}│${RESET}`);
+  });
+
+  it('shows the lines of the routes file it is given', () => {
+    const route = { ...LINES.route, 'claude-work': { standard: 'model-b high', max: 'model-b max' } };
+    const lines = boxLines(boxView(ROUTED, { routes: { lines: { route, high: { ...LINES.high, fable: 'model-h1 max' } } } }), true, NOW);
+    expect(lines.slice(1, 3)).toEqual([
+      `| ${'model-b high'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`,
+      `| ${'claude-work'.padEnd(31)} |  | ${'claude-work'.padEnd(31)} |`
+    ]);
+  });
+
+  const WROK = { routes: { fault: { path: '/tmp/r/bad.json', problem: 'unknown key route.claude-wrok' } } };
+
+  it('shows routes file error over what is wrong in both boxes once settled, as one dim span per row', () => {
+    const lines = boxLines(boxView(ROUTED, WROK), true, NOW);
+    expect(lines).toEqual([
+      TOP,
+      `| routes file error${' '.repeat(15)}|  | routes file error${' '.repeat(15)}|`,
+      `| ${'unknown key route.claude-wrok'.padEnd(31)} |  | ${'unknown key route.claude-wrok'.padEnd(31)} |`,
+      BOTTOM
+    ]);
+    const coloured = boxLines(boxView(ROUTED, WROK), false, NOW);
+    expect(coloured[0]).toBe(`${DIM}┌─ route ${'─'.repeat(25)}┐${RESET}  ${DIM}┌─ route --high ${'─'.repeat(18)}┐${RESET}`);
+    expect(coloured[1]).toBe(`${DIM}│ routes file error${' '.repeat(15)}│${RESET}  ${DIM}│ routes file error${' '.repeat(15)}│${RESET}`);
+    expect(coloured[2]).toBe(`${DIM}│ unknown key route.claude-wrok${' '.repeat(3)}│${RESET}  ${DIM}│ unknown key route.claude-wrok${' '.repeat(3)}│${RESET}`);
+    expect(coloured[3]).toBe(`${DIM}└${'─'.repeat(33)}┘${RESET}  ${DIM}└${'─'.repeat(33)}┘${RESET}`);
+    expect(coloured.join('\n')).not.toContain(BOLD);
+  });
+
+  it('cuts a long routes file problem to the box and keeps the spinner until the first round settles', () => {
+    const long = { routes: { fault: { path: '/r', problem: 'route.claude.max is not "<model>" or "<model> <effort>"' } } };
+    expect(boxLines(boxView(ROUTED, long), true, NOW)[2]).toBe('| route.claude.max is not "<mode… |  | route.claude.max is not "<mode… |');
+    expect(boxLines(boxView(undefined, long), true, NOW)[1]).toBe(`| ${'⠋ probing…'.padEnd(31)} |  | ${'⠋ probing…'.padEnd(31)} |`);
   });
 
   it('shows none over no subscription available as one dim span per row', () => {
@@ -562,7 +612,7 @@ describe('route boxes', () => {
     const kimi = ok('kimi', [{ label: 'weekly', kind: 'weekly', usedPct: 10 }]);
     expect(boxLines(boxView([kimi]), true, NOW)).toEqual([
       TOP,
-      `| ${'kimi-code/k3 max'.padEnd(31)} |  | ${'none'.padEnd(31)} |`,
+      `| ${'model-d max'.padEnd(31)} |  | ${'none'.padEnd(31)} |`,
       `| ${'kimi'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`,
       BOTTOM
     ]);
@@ -599,7 +649,7 @@ describe('route boxes', () => {
       ok('hermes', [{ label: 'credits', kind: 'weekly', usedPct: 75, resetsAt: '2026-09-20T00:00:00.000Z' }])
     ];
     const lines = boxLines(boxView(live), true, liveNow);
-    expect(lines[1]).toBe(`| ${'grok-4.7 xhigh'.padEnd(31)} |  | ${'claude-fable-5-1 max'.padEnd(31)} |`);
+    expect(lines[1]).toBe(`| ${'model-e xhigh'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`);
     expect(lines[2]).toBe(`| ${'grok'.padEnd(31)} |  | ${'claude'.padEnd(31)} |`);
   });
 
@@ -626,22 +676,22 @@ describe('route boxes', () => {
   ])('boxes equal routeLine and highRouteLine split at the last space: %s', (_case, usages, ineligible, zone, now) => {
     const lines = boxLines(boxView(usages, { ineligible, zone }), true, now);
     const midnight = nextLocalMidnight(zone, now);
-    const [route, high] = [routeLine(usages, now, midnight, ineligible), highRouteLine(usages, ineligible)].map(splitLine);
+    const [route, high] = [routeLine(LINES, usages, now, midnight, ineligible), highRouteLine(LINES, usages, ineligible)].map(splitLine);
     expect([rowText(lines[1], 0), rowText(lines[2], 0)]).toEqual([cut31(route[0]), route[1]]);
     expect([rowText(lines[1], 1), rowText(lines[2], 1)]).toEqual([cut31(high[0]), high[1]]);
   });
 
   it('recomputes the cached midnight once the frame time passes it', () => {
     const view = boxView([ok('claude', [weekly(86, '2026-09-14T01:30:00.000Z')])], { zone: 'Etc/GMT-2' });
-    expect(rowText(boxLines(view, true, '2026-09-13T21:00:00.000Z')[1], 0)).toBe('claude-opus-5 high');
-    expect(rowText(boxLines(view, true, '2026-09-13T21:30:00.000Z')[1], 0)).toBe('claude-opus-5 high');
-    expect(rowText(boxLines(view, true, '2026-09-13T23:00:00.000Z')[1], 0)).toBe('claude-opus-5 max');
+    expect(rowText(boxLines(view, true, '2026-09-13T21:00:00.000Z')[1], 0)).toBe('model-a high');
+    expect(rowText(boxLines(view, true, '2026-09-13T21:30:00.000Z')[1], 0)).toBe('model-a high');
+    expect(rowText(boxLines(view, true, '2026-09-13T23:00:00.000Z')[1], 0)).toBe('model-a max');
   });
 
   it('recomputes the cached midnight when the frame time moves backwards', () => {
     boxLines(boxView([ok('claude', [weekly(10)])]), true, '2026-09-14T23:00:00.000Z');
     const view = boxView([ok('claude', [weekly(86, '2026-09-14T10:00:00.000Z')])]);
-    expect(rowText(boxLines(view, true, '2026-09-13T09:00:00.000Z')[1], 0)).toBe('claude-opus-5 high');
+    expect(rowText(boxLines(view, true, '2026-09-13T09:00:00.000Z')[1], 0)).toBe('model-a high');
   });
 
   it('computes the midnight once for repeated settled frames in the same zone and day', () => {
@@ -664,11 +714,11 @@ describe('route boxes', () => {
 
   it('recomputes the midnight for a frame landing exactly on it', () => {
     const view = boxView([ok('claude', [weekly(86, '2026-09-14T01:30:00.000Z')])], { zone: 'Etc/GMT-7' });
-    expect(rowText(boxLines(view, true, '2026-09-13T16:00:00.000Z')[1], 0)).toBe('claude-opus-5 high');
+    expect(rowText(boxLines(view, true, '2026-09-13T16:00:00.000Z')[1], 0)).toBe('model-a high');
     vi.mocked(nextLocalMidnight).mockClear();
     const lines = boxLines(view, true, '2026-09-13T17:00:00.000Z');
     expect(vi.mocked(nextLocalMidnight)).toHaveBeenCalledTimes(1);
-    expect(rowText(lines[1], 0)).toBe('claude-opus-5 max');
+    expect(rowText(lines[1], 0)).toBe('model-a max');
   });
 
   it('never marks a box line as selected', () => {

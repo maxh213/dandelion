@@ -82,7 +82,8 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
     DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome,
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
     DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'),
-    DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json')
+    DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json'),
+    DANDELION_ROUTES_FILE: fileURLToPath(new URL('./routes.fixture.json', import.meta.url))
   };
 }
 

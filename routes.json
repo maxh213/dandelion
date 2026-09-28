@@ -1,0 +1,19 @@
+{
+  "route": {
+    "claude":      { "standard": "claude-opus-5-5 high",       "max": "claude-opus-5-5 max" },
+    "claude-work": { "standard": "claude-opus-5-5 high",       "max": "claude-opus-5-5 max" },
+    "agy":         { "standard": "gemini-3.8-flash-high high", "max": "gemini-3.1-pro-high high" },
+    "kimi":        { "standard": "kimi-code/k3 max",           "max": "kimi-code/k3 max" },
+    "grok":        { "standard": "grok-4.7 xhigh",             "max": "grok-4.7 xhigh" },
+    "cursor":      { "standard": "kimi-k3-max",                "max": "kimi-k3-max" },
+    "junie":       { "standard": "gemini-3.8-flash high",      "max": "gemini-3.8-flash high" },
+    "hermes":      { "standard": "x-ai/grok-4.7 xhigh",        "max": "x-ai/grok-4.7 xhigh" }
+  },
+  "high": {
+    "fable":  "claude-fable-5-1 max",
+    "cursor": "kimi-k3-max",
+    "opus":   "claude-opus-5-5 max",
+    "grok":   "grok-4.7 xhigh",
+    "agy":    "gemini-3.8-flash-high high"
+  }
+}

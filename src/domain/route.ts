@@ -4,27 +4,27 @@ type RoutableWindow = { label: string; kind: WindowKind; usedPct: number; resets
 
 type RoutableUsage = { id: string; status: string; windows: RoutableWindow[] };
 
-type Route = { id: string; standard: string; max: string };
+type RuleLines = { standard: string; max: string };
 
-const CLAUDE_LINES = { standard: 'claude-opus-5 high', max: 'claude-opus-5 max' };
-const ROUTING_TABLE = [
-  { id: 'claude', ...CLAUDE_LINES },
-  { id: 'claude-work', ...CLAUDE_LINES },
-  { id: 'agy', standard: 'gemini-3.8-flash-high high', max: 'gemini-3.1-pro-high high' },
-  { id: 'kimi', standard: 'kimi-code/k3 max', max: 'kimi-code/k3 max' },
-  { id: 'grok', standard: 'grok-4.7 xhigh', max: 'grok-4.7 xhigh' },
-  { id: 'cursor', standard: 'kimi-k3-max', max: 'kimi-k3-max' },
-  { id: 'junie', standard: 'gemini-3.8-flash high', max: 'gemini-3.8-flash high' },
-  { id: 'hermes', standard: 'x-ai/grok-4.7 xhigh', max: 'x-ai/grok-4.7 xhigh' }
-] satisfies Route[];
+export type RouteLines = { route: Record<string, RuleLines>; high: Record<string, string> };
+
+type RoutesFault = { path: string; problem: string };
+
+export type Routes = { lines: RouteLines; fault?: undefined } | { lines?: undefined; fault: RoutesFault };
+
+export interface RoutesFile {
+  read(path: string): string;
+}
+
+const ROUTED_IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'cursor', 'junie', 'hermes'];
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
 const FULL_LEFT = 100;
 const TRIP_PCT = 90;
 
-type Candidate = { route: Route; windows: RoutableWindow[] };
+type Candidate = { id: string; windows: RoutableWindow[] };
 
-type Pick = { route: Route | undefined; score: number };
+type Pick = { id: string | undefined; score: number };
 
 type Tonight = { nowMs: number; midnightMs: number };
 
@@ -45,9 +45,9 @@ function onAccount(line: string, id: string): string {
 }
 
 function candidatesOf(usages: RoutableUsage[]): Candidate[] {
-  return ROUTING_TABLE.flatMap((route) => {
-    const usage = usages.find((each) => each.id === route.id);
-    return isRoutable(usage) ? [{ route, windows: usage.windows }] : [];
+  return ROUTED_IDS.flatMap((id) => {
+    const usage = usages.find((each) => each.id === id);
+    return isRoutable(usage) ? [{ id, windows: usage.windows }] : [];
   });
 }
 
@@ -77,29 +77,29 @@ function bindingLeft(windows: RoutableWindow[]): number {
 }
 
 function highest(candidates: Candidate[], score: (windows: RoutableWindow[]) => number): Pick {
-  return candidates.reduce<Pick>((best, { route, windows }) => {
+  return candidates.reduce<Pick>((best, { id, windows }) => {
     const value = score(windows);
-    return value > best.score ? { route, score: value } : best;
-  }, { route: undefined, score: -Infinity });
+    return value > best.score ? { id, score: value } : best;
+  }, { id: undefined, score: -Infinity });
 }
 
-export function routeLine(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
+export function routeLine(lines: RouteLines, usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
   const candidates = candidatesOf(eligibleUsages(usages, ineligible)).filter(isUntripped);
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
-  const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight)).route;
-  if (evaporating !== undefined) return onAccount(evaporating.max, evaporating.id);
-  const roomiest = highest(candidates, bindingLeft).route;
-  return roomiest === undefined ? NO_ROUTE : onAccount(roomiest.standard, roomiest.id);
+  const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight)).id;
+  if (evaporating !== undefined) return onAccount(lines.route[evaporating].max, evaporating);
+  const roomiest = highest(candidates, bindingLeft).id;
+  return roomiest === undefined ? NO_ROUTE : onAccount(lines.route[roomiest].standard, roomiest);
 }
 
-type ChainEntry = { rank: number; providers: readonly string[]; matcher?: string; line: string };
+type ChainEntry = { rank: number; name: string; providers: readonly string[]; matcher?: string };
 
 export const HIGH_CHAIN: readonly ChainEntry[] = [
-  { rank: 1, providers: ['claude', 'claude-work'], matcher: 'fable', line: 'claude-fable-5-1 max' },
-  { rank: 2, providers: ['cursor'], line: 'kimi-k3-max' },
-  { rank: 3, providers: ['claude', 'claude-work'], line: 'claude-opus-5 max' },
-  { rank: 4, providers: ['grok'], line: 'grok-4.7 xhigh' },
-  { rank: 5, providers: ['agy'], line: 'gemini-3.8-flash-high high' }
+  { rank: 1, name: 'fable', providers: ['claude', 'claude-work'], matcher: 'fable' },
+  { rank: 2, name: 'cursor', providers: ['cursor'] },
+  { rank: 3, name: 'opus', providers: ['claude', 'claude-work'] },
+  { rank: 4, name: 'grok', providers: ['grok'] },
+  { rank: 5, name: 'agy', providers: ['agy'] }
 ] satisfies readonly ChainEntry[];
 
 type Account = { id: string; used: number };
@@ -136,12 +136,96 @@ function openAccounts(entry: ChainEntry, usages: RoutableUsage[]): Account[] {
     .filter((account) => !trips(account.used));
 }
 
-function entryLine(entry: ChainEntry, usages: RoutableUsage[]): string | undefined {
+function entryLine(lines: RouteLines, entry: ChainEntry, usages: RoutableUsage[]): string | undefined {
   const [leastUsed] = openAccounts(entry, usages).sort((a, b) => a.used - b.used);
-  return leastUsed === undefined ? undefined : onAccount(entry.line, leastUsed.id);
+  return leastUsed === undefined ? undefined : onAccount(lines.high[entry.name], leastUsed.id);
 }
 
-export function highRouteLine(usages: RoutableUsage[], ineligible: string[]): string {
+export function highRouteLine(lines: RouteLines, usages: RoutableUsage[], ineligible: string[]): string {
   const eligible = eligibleUsages(usages, ineligible);
-  return HIGH_CHAIN.map((entry) => entryLine(entry, eligible)).find((line) => line !== undefined) ?? NO_ROUTE;
+  return HIGH_CHAIN.map((entry) => entryLine(lines, entry, eligible)).find((line) => line !== undefined) ?? NO_ROUTE;
+}
+
+type Shape = 'line' | { readonly [key: string]: Shape };
+
+type Parsed = { value: unknown } | undefined;
+
+const LINE_SHAPE = /^\S+( \S+)?$/;
+
+function keyed(keys: readonly string[], shape: Shape): Record<string, Shape> {
+  return Object.fromEntries(keys.map((key) => [key, shape]));
+}
+
+const ROUTES_SHAPE: Shape = {
+  route: keyed(ROUTED_IDS, { standard: 'line', max: 'line' }),
+  high: keyed(HIGH_CHAIN.map((entry) => entry.name), 'line')
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Object.prototype.toString.call(value) === '[object Object]';
+}
+
+function keyPath(at: string, key: string): string {
+  return at === '' ? key : `${at}.${key}`;
+}
+
+function lineProblem(value: unknown, at: string): string | undefined {
+  if (typeof value !== 'string' || value === '') return `${at} is not a non-empty string`;
+  return LINE_SHAPE.test(value) ? undefined : `${at} is not "<model>" or "<model> <effort>"`;
+}
+
+function unknownKeyProblem(value: Record<string, unknown>, shape: Record<string, Shape>, at: string): string | undefined {
+  const unknown = Object.keys(value).find((key) => !Object.hasOwn(shape, key));
+  return unknown === undefined ? undefined : `unknown key ${keyPath(at, unknown)}`;
+}
+
+function keyProblem(value: Record<string, unknown>, key: string, shape: Shape, at: string): string | undefined {
+  const path = keyPath(at, key);
+  return Object.hasOwn(value, key) ? problemIn(value[key], shape, path) : `${path} is missing`;
+}
+
+function childProblem(value: Record<string, unknown>, shape: Record<string, Shape>, at: string): string | undefined {
+  return Object.entries(shape).map(([key, child]) => keyProblem(value, key, child, at)).find((problem) => problem !== undefined);
+}
+
+function objectProblem(value: unknown, shape: Record<string, Shape>, at: string): string | undefined {
+  if (!isPlainObject(value)) return `${at || 'the file'} is not a JSON object`;
+  return unknownKeyProblem(value, shape, at) ?? childProblem(value, shape, at);
+}
+
+function problemIn(value: unknown, shape: Shape, at: string): string | undefined {
+  return shape === 'line' ? lineProblem(value, at) : objectProblem(value, shape, at);
+}
+
+function parsed(text: string): Parsed {
+  try {
+    return { value: JSON.parse(text) };
+  } catch {
+    return undefined;
+  }
+}
+
+function routesIn(text: string, path: string): Routes {
+  const json = parsed(text);
+  if (json === undefined) return { fault: { path, problem: 'is not valid JSON' } };
+  const problem = problemIn(json.value, ROUTES_SHAPE, '');
+  return problem === undefined ? { lines: json.value as RouteLines } : { fault: { path, problem } };
+}
+
+function textIn(file: RoutesFile, path: string): string | undefined {
+  try {
+    return file.read(path);
+  } catch {
+    return undefined;
+  }
+}
+
+export function openRoutes(env: Record<string, string | undefined>, shippedPath: string, file: RoutesFile): Routes {
+  const path = env['DANDELION_ROUTES_FILE'] || shippedPath;
+  const text = textIn(file, path);
+  return text === undefined ? { fault: { path, problem: 'cannot be read' } } : routesIn(text, path);
+}
+
+export function faultLine({ path, problem }: RoutesFault): string {
+  return `dandelion: routes file ${path}: ${problem}`;
 }

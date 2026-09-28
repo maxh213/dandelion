@@ -5,8 +5,8 @@ import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
-import { pathToFileURL } from 'node:url';
-import { isEntryFile, runApp, runLive, runRoute, realIo } from './index.ts';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { isEntryFile, routesWarning, runApp, runLive, runRoute, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
@@ -110,11 +110,19 @@ function codexSpawner(lines: string[] = codexLines(), spawned: string[][] = []):
 }
 
 const LIVE_CLEAR = '\x1b[H\x1b[2J';
+const ROUTES_FILE = fileURLToPath(new URL('../routes.fixture.json', import.meta.url));
+
+async function routeWith(io: ProbeIo, env: Record<string, string | undefined>, request: Parameters<typeof runRoute>[2]) {
+  const { out, err, code } = await runRoute(io, { DANDELION_ROUTES_FILE: ROUTES_FILE, ...env }, request);
+  expect(err).toBe('');
+  return { line: out.slice(0, -1), routed: code === 0 };
+}
 
 function startDashboard(io: ProbeIo, env: Record<string, string>, clock?: () => string) {
   const writes: string[] = [];
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
-  const finished = runLive(io, env, keyboard, { write: (text: string) => writes.push(text) }, clock);
+  const routed = 'DANDELION_ROUTES_FILE' in env ? env : { DANDELION_ROUTES_FILE: ROUTES_FILE, ...env };
+  const finished = runLive(io, routed, keyboard, { write: (text: string) => writes.push(text) }, clock);
   const frames = () => writes.filter((text) => text.startsWith(LIVE_CLEAR)).map((text) => text.slice(LIVE_CLEAR.length));
   const press = (key: string) => keyboard.emit('data', key);
   return { writes, finished, frames, press, lastFrame: () => frames().at(-1) ?? '' };
@@ -544,7 +552,7 @@ describe('kimi panel', () => {
       });
     const missing = { run: async () => ({ stdout: '', stderr: '', failure: 'missing' as const }) };
     const routeOf = (rolling: number, weekly: number, grokPct: number) =>
-      runRoute(
+      routeWith(
         {
           ...ioOf(missing, HAPPY_KIMI, grokReader(grokAt(grokPct))),
           fetcher: { get: async () => ({ status: 200, body: kimiAt(rolling, weekly) }), post: async () => ({ failure: 'network' as const }) }
@@ -552,14 +560,14 @@ describe('kimi panel', () => {
         GROK_ENV,
         { mode: 'headroom', now: NOW, zone: 'UTC' }
       );
-    expect(await routeOf(0.1, 0.1, 50)).toEqual({ line: 'kimi-code/k3 max kimi', routed: true });
-    expect(await routeOf(0.95, 0, 97)).toEqual({ line: 'grok-4.7 xhigh grok', routed: true });
+    expect(await routeOf(0.1, 0.1, 50)).toEqual({ line: 'model-d max kimi', routed: true });
+    expect(await routeOf(0.95, 0, 97)).toEqual({ line: 'model-e xhigh grok', routed: true });
     const onlyKimi = { ...ioOf(missing, HAPPY_KIMI, grokReader(undefined)) };
-    expect(await runRoute(onlyKimi, {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({
-      line: 'kimi-code/k3 max kimi',
+    expect(await routeWith(onlyKimi, {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({
+      line: 'model-d max kimi',
       routed: true
     });
-    expect(await runRoute(onlyKimi, {}, { mode: 'high', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
+    expect(await routeWith(onlyKimi, {}, { mode: 'high', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
   });
 
   it('keeps the claude, agy and kilo panels unchanged next to kimi', async () => {
@@ -1218,7 +1226,7 @@ describe('cursor panel', () => {
       const io = cursorIo();
       const run = vi.spyOn(io.runner, 'run');
       const claudeRuns = () => run.mock.calls.filter(([command]) => command === 'claude').length;
-      const recorded = recordingEnv({ ...CURSOR_ENV, NO_COLOR: '1' });
+      const recorded = recordingEnv({ ...CURSOR_ENV, NO_COLOR: '1', DANDELION_ROUTES_FILE: ROUTES_FILE });
       const dashboard = startDashboard(io, recorded.env);
       await settleProbes();
       await vi.advanceTimersByTimeAsync(5000);
@@ -1226,7 +1234,7 @@ describe('cursor panel', () => {
       expect(dashboard.writes.join('')).not.toContain('refreshing…');
       await vi.advanceTimersByTimeAsync(295000);
       expect(claudeRuns()).toBe(4);
-      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_REFRESH_SECONDS'].sort());
+      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_REFRESH_SECONDS', 'DANDELION_ROUTES_FILE'].sort());
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -1284,8 +1292,8 @@ describe('cursor panel', () => {
         const dashboard = startDashboard(cursorIo(), env);
         await settleProbes();
         const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        const headroom = await runRoute(cursorIo(), env, { mode: 'headroom', now: NOW, zone });
-        const high = await runRoute(cursorIo(), env, { mode: 'high', now: NOW, zone });
+        const headroom = await routeWith(cursorIo(), env, { mode: 'headroom', now: NOW, zone });
+        const high = await routeWith(cursorIo(), env, { mode: 'high', now: NOW, zone });
         const rowsOf = (line: string) => (line === 'none' ? ['none', 'no subscription available'] : [line.slice(0, line.lastIndexOf(' ')), line.slice(line.lastIndexOf(' ') + 1)]);
         const [model, account] = rowsOf(headroom.line);
         const [highModel, highAccount] = rowsOf(high.line);
@@ -1654,16 +1662,50 @@ describe('isEntryFile', () => {
 
 describe('runRoute', () => {
   it('probes every provider once and routes by the next local midnight of the given zone', async () => {
-    expect(await runRoute(routedRunner(), {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'claude-opus-5 max claude', routed: true });
-    expect(await runRoute(routedRunner(), {}, { mode: 'headroom', now: NOW, zone: 'Etc/GMT-2' })).toEqual({ line: 'claude-opus-5 high claude-work', routed: true });
+    expect(await routeWith(routedRunner(), {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'model-a max claude', routed: true });
+    expect(await routeWith(routedRunner(), {}, { mode: 'headroom', now: NOW, zone: 'Etc/GMT-2' })).toEqual({ line: 'model-a high claude-work', routed: true });
   });
 
   it('walks the quality chain when high, skipping personal whose Fable window is tripped', async () => {
-    expect(await runRoute(routedRunner(), {}, { mode: 'high', now: NOW, zone: 'UTC' })).toEqual({ line: 'claude-fable-5-1 max claude-work', routed: true });
+    expect(await routeWith(routedRunner(), {}, { mode: 'high', now: NOW, zone: 'UTC' })).toEqual({ line: 'model-h1 max claude-work', routed: true });
   });
 
   it('is none when every provider is unavailable', async () => {
-    expect(await runRoute(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
+    expect(await routeWith(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
+  });
+
+  it('reads the shipped routes.json when DANDELION_ROUTES_FILE is unset, and it holds every routed provider and high entry as a valid line', async () => {
+    const nothing = mockRunner({ stdout: '', stderr: '', failure: 'missing' });
+    for (const mode of ['headroom', 'high'] as const) {
+      expect(await runRoute(nothing, {}, { mode, now: NOW, zone: 'UTC' })).toEqual({ out: 'none\n', err: '', code: 1 });
+    }
+  });
+
+  describe('with a bad routes file', () => {
+    let scratch = '';
+
+    beforeEach(() => {
+      scratch = mkdtempSync(join(tmpdir(), 'dandelion-routes-'));
+    });
+
+    afterEach(() => {
+      rmSync(scratch, { recursive: true, force: true });
+    });
+
+    it.each(['headroom', 'high'] as const)('prints the fault on stderr and exits 2 in %s mode without probing', async (mode) => {
+      const run = vi.fn(async () => ({ stdout: '', stderr: '', failure: 'missing' as const }));
+      const path = join(scratch, 'nope.json');
+      expect(await runRoute(ioOf({ run }), { DANDELION_ROUTES_FILE: path }, { mode, now: NOW, zone: 'UTC' })).toEqual({ out: '', err: `dandelion: routes file ${path}: cannot be read\n`, code: 2 });
+      expect(await runRoute(ioOf({ run }), { DANDELION_ROUTES_FILE: scratch }, { mode, now: NOW, zone: 'UTC' })).toEqual({ out: '', err: `dandelion: routes file ${scratch}: cannot be read\n`, code: 2 });
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it('warns with the same line for --once, and with nothing for a good file', () => {
+      const path = join(scratch, 'bad.json');
+      writeFileSync(path, '{"route":');
+      expect(routesWarning({ DANDELION_ROUTES_FILE: path })).toBe(`dandelion: routes file ${path}: is not valid JSON\n`);
+      expect(routesWarning({ DANDELION_ROUTES_FILE: ROUTES_FILE })).toBe('');
+    });
   });
 });
 
@@ -1713,29 +1755,29 @@ describe('route eligibility state file', () => {
   }
 
   it('routes as the 010 rules say with no state file and never creates one', async () => {
-    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'claude-opus-5 max claude', routed: true });
+    expect(await routeWith(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'model-a max claude', routed: true });
     expect(readdirSync(scratch)).toEqual([]);
   });
 
   it.each<[string, string, string]>([
-    ['claude and claude-work off', '{"claude": false, "claude-work": false}', 'kimi-code/k3 max kimi'],
-    ['claude off, true and other values eligible', '{"claude": false, "claude-work": true, "kimi": "no"}', 'claude-opus-5 high claude-work'],
-    ['corrupt bytes', '{not json', 'claude-opus-5 max claude'],
-    ['JSON null', 'null', 'claude-opus-5 max claude'],
-    ['a JSON array', '[false]', 'claude-opus-5 max claude']
+    ['claude and claude-work off', '{"claude": false, "claude-work": false}', 'model-d max kimi'],
+    ['claude off, true and other values eligible', '{"claude": false, "claude-work": true, "kimi": "no"}', 'model-a high claude-work'],
+    ['corrupt bytes', '{not json', 'model-a max claude'],
+    ['JSON null', 'null', 'model-a max claude'],
+    ['a JSON array', '[false]', 'model-a max claude']
   ])('routes around ineligible providers and never writes: %s', async (_case, bytes, line) => {
     writeState(bytes);
     const before = statSync(statePath).mtimeMs;
-    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line, routed: true });
+    expect(await routeWith(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line, routed: true });
     expect([readFileSync(statePath, 'utf8'), statSync(statePath).mtimeMs]).toEqual([bytes, before]);
   });
 
   it('routes as if every provider is eligible when the state path is a directory, and is none when all are off', async () => {
     mkdirSync(statePath, { recursive: true });
-    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'claude-opus-5 max claude', routed: true });
+    expect(await routeWith(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'model-a max claude', routed: true });
     rmSync(statePath, { recursive: true });
     writeState('{"claude": false, "claude-work": false, "agy": false, "kimi": false}');
-    expect(await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
+    expect(await routeWith(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
   });
 
   it.each<[string, (home: string) => Record<string, string>, (home: string) => string]>([
@@ -1745,10 +1787,10 @@ describe('route eligibility state file', () => {
   ])('reads the default state path under %s', async (_case, envOf, pathOf) => {
     const io = routedRunner();
     const homed = { ...io, reader: { ...io.reader, homeDir: () => scratch } };
-    expect((await runRoute(homed, envOf(scratch), { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('claude-opus-5 max claude');
+    expect((await routeWith(homed, envOf(scratch), { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('model-a max claude');
     mkdirSync(join(pathOf(scratch), '..'), { recursive: true });
     writeFileSync(pathOf(scratch), '{"claude": false}');
-    expect((await runRoute(homed, envOf(scratch), { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('kimi-code/k3 max kimi');
+    expect((await routeWith(homed, envOf(scratch), { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('model-d max kimi');
   });
 
   it('tags ineligible panels in --once output, changes no other line and never writes', async () => {
@@ -1768,6 +1810,27 @@ describe('route eligibility state file', () => {
     }
   });
 
+  it('keeps every panel with a bad routes file and shows routes file error over the unknown key in both boxes', async () => {
+    const untilSettled = async (dashboard: ReturnType<typeof startDashboard>) => {
+      for (let round = 0; round < 50 && dashboard.lastFrame().includes('probing…'); round += 1) await settleProbes();
+      return dashboard.lastFrame().split('\n');
+    };
+    const good = await settledDashboard(routedRunner(), {});
+    const goodFrame = await untilSettled(good);
+    await quit(good);
+    const fixture = JSON.parse(readFileSync(ROUTES_FILE, 'utf8'));
+    const wrok = join(scratch, 'wrok.json');
+    writeFileSync(wrok, JSON.stringify({ ...fixture, route: { ...fixture.route, 'claude-wrok': fixture.route.claude } }));
+    const bad = await settledDashboard(routedRunner(), { DANDELION_ROUTES_FILE: wrok });
+    const badFrame = await untilSettled(bad);
+    expect(badFrame.slice(3, 5)).toEqual([
+      `| routes file error${' '.repeat(15)}|  | routes file error${' '.repeat(15)}|`,
+      `| ${'unknown key route.claude-wrok'.padEnd(31)} |  | ${'unknown key route.claude-wrok'.padEnd(31)} |`
+    ]);
+    expect([...badFrame.slice(0, 3), ...badFrame.slice(5)]).toEqual([...goodFrame.slice(0, 3), ...goodFrame.slice(5)]);
+    await quit(bad);
+  });
+
   it('toggles claude off and on with j and space, writing only the state file, and keeps the choice across restarts', async () => {
     const dashboard = await settledDashboard(routedRunner(), {});
     expect(dashboard.lastFrame()).not.toMatch(/routing off|▸/);
@@ -1781,7 +1844,7 @@ describe('route eligibility state file', () => {
     expect(readdirSync(join(scratch, 'state'))).toEqual(['eligibility.json']);
     expect(headerOf(dashboard.lastFrame(), 'claude')).toBe(`▸ ${CLAUDE_TAG.slice(0, -13)}routing off`);
     expect(dashboard.lastFrame().split('\n').filter((line) => line.startsWith('session ') || line.startsWith('weekly '))).toEqual(rows);
-    expect((await runRoute(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('claude-opus-5 high claude-work');
+    expect((await routeWith(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('model-a high claude-work');
     dashboard.press(' ');
     expect(stateOf()).toEqual({ claude: true });
     expect(headerOf(dashboard.lastFrame(), 'claude')).toBe('▸ claude');
@@ -2057,27 +2120,27 @@ describe('junie panel', () => {
     });
 
     it.each<[string, Record<string, string>, Record<string, string>, string, boolean]>([
-      ['headroom', {}, junieTree(), 'gemini-3.8-flash high junie', true],
-      ['headroom', {}, junieTree(newEvents(0)), 'gemini-3.8-flash high junie', true],
+      ['headroom', {}, junieTree(), 'model-g high junie', true],
+      ['headroom', {}, junieTree(newEvents(0)), 'model-g high junie', true],
       ['headroom', { DANDELION_JUNIE_REFERENCE: '' }, junieTree(), 'none', false],
       ['headroom', {}, {}, 'none', false],
       ['high', {}, junieTree(newEvents(1000000)), 'none', false]
     ])('routes %s with only junie available under %j', async (mode, env, tree, line, routed) => {
       const request = { mode: mode === 'high' ? ('high' as const) : ('headroom' as const), now: JUNIE_NOW, zone: 'UTC' };
-      expect(await runRoute(onlyJunie(tree), { ...JUNIE_ENV, DANDELION_STATE_FILE: statePath, ...env }, request)).toEqual({ line, routed });
+      expect(await routeWith(onlyJunie(tree), { ...JUNIE_ENV, DANDELION_STATE_FILE: statePath, ...env }, request)).toEqual({ line, routed });
     });
 
     it('shows junie in the route box and none in the --high box', async () => {
       const dashboard = await settledJunie(onlyJunie(), {});
       const lines = dashboard.lastFrame().split('\n');
-      expect(lines.slice(3, 5)).toEqual([`| ${'gemini-3.8-flash high'.padEnd(31)} |  | ${'none'.padEnd(31)} |`, `| ${'junie'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`]);
+      expect(lines.slice(3, 5)).toEqual([`| ${'model-g high'.padEnd(31)} |  | ${'none'.padEnd(31)} |`, `| ${'junie'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`]);
       dashboard.press('q');
       await dashboard.finished;
     });
 
     it('skips junie when the state file turns it off', async () => {
       writeFileSync(statePath, '{"junie": false}');
-      expect(await runRoute(onlyJunie(), { ...JUNIE_ENV, DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: JUNIE_NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
+      expect(await routeWith(onlyJunie(), { ...JUNIE_ENV, DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: JUNIE_NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
     });
   });
 });
@@ -2353,22 +2416,22 @@ describe('hermes panel', () => {
     });
 
     it.each<[string, Outcome, Record<string, string>, string, boolean]>([
-      ['headroom at 75%', { status: 200, body: JSON.stringify(account()) }, { '/auth.json': authJson() }, 'x-ai/grok-4.7 xhigh hermes', true],
-      ['headroom at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'x-ai/grok-4.7 xhigh hermes', true],
-      ['headroom at 100%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 0 } })) }, { '/auth.json': authJson() }, 'x-ai/grok-4.7 xhigh hermes', true],
+      ['headroom at 75%', { status: 200, body: JSON.stringify(account()) }, { '/auth.json': authJson() }, 'vendor/model-h xhigh hermes', true],
+      ['headroom at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'vendor/model-h xhigh hermes', true],
+      ['headroom at 100%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 0 } })) }, { '/auth.json': authJson() }, 'vendor/model-h xhigh hermes', true],
       ['headroom without auth', { status: 200, body: JSON.stringify(account()) }, {}, 'none', false],
       ['high at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'none', false]
     ])('routes %s with only hermes available', async (mode, accountAnswer, files, line, routed) => {
       const { io } = onlyHermes(accountAnswer, files);
       const request = { mode: mode.startsWith('high') ? ('high' as const) : ('headroom' as const), now: HERMES_NOW, zone: 'UTC' };
-      expect(await runRoute(io, { ...HERMES_ENV, DANDELION_STATE_FILE: statePath }, request)).toEqual({ line, routed });
+      expect(await routeWith(io, { ...HERMES_ENV, DANDELION_STATE_FILE: statePath }, request)).toEqual({ line, routed });
     });
 
     it('shows hermes in the route box and none in the --high box', async () => {
       const { io } = onlyHermes();
       const dashboard = await settledHermes(io, {});
       const lines = dashboard.lastFrame().split('\n');
-      expect(lines.slice(3, 5)).toEqual([`| ${'x-ai/grok-4.7 xhigh'.padEnd(31)} |  | ${'none'.padEnd(31)} |`, `| ${'hermes'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`]);
+      expect(lines.slice(3, 5)).toEqual([`| ${'vendor/model-h xhigh'.padEnd(31)} |  | ${'none'.padEnd(31)} |`, `| ${'hermes'.padEnd(31)} |  | ${'no subscription available'.padEnd(31)} |`]);
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -2376,7 +2439,7 @@ describe('hermes panel', () => {
     it('skips hermes when the state file turns it off', async () => {
       writeFileSync(statePath, '{"hermes": false}');
       const { io } = onlyHermes();
-      expect(await runRoute(io, { ...HERMES_ENV, DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: HERMES_NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
+      expect(await routeWith(io, { ...HERMES_ENV, DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: HERMES_NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
     });
   });
 });
