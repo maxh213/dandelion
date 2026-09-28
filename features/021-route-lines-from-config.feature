@@ -14,8 +14,8 @@ Feature: 021 - read route lines from routes.json, and route claude as Opus 5.5
   - Unknown keys fail at every level: top level (only `route` and `high`), provider ids (codex and kilo included), `high` names and
     keys inside a provider entry (only `standard` and `max`). A line matches `^\S+( \S+)?$`: one or two words, one space apart.
   - `--once` has no route boxes (013). With a bad file it prints its dashboard unchanged on stdout, the error line on stderr, and
-    exits 0. In the live dashboard, once the probes settle, both boxes are dim and show `routes file error` over the start of
-    `<what is wrong>`, cut to the box width. For the `claude-wrok` case below that row shows `claude-wrok`.
+    exits 0. In the live dashboard, once the probes settle, both boxes are dim, like a `none` box, and show `routes file error` over
+    the start of `<what is wrong>`, cut to the box's 31 text cells. For the `claude-wrok` case below that row shows `claude-wrok`.
   - `features/010`–`020` are frozen for every role, so they keep the strings true when they ran, like `tasks/001`–`020`, until a
     human unfreezes them. QA owns `qa/**` and moves `qa/010`–`020` to fixture files.
 
@@ -159,8 +159,14 @@ Feature: 021 - read route lines from routes.json, and route claude as Opus 5.5
   Scenario: The dashboard still shows every panel when the file is bad
     Given DANDELION_ROUTES_FILE is F with route.claude-wrok added, and the healthy fixture of qa/013-route-boxes.md
     When the user runs the live dashboard with NO_COLOR set and waits for it to settle
-    Then every panel shows what it shows with F, and both route boxes are dim and show "routes file error" over a row with "claude-wrok"
+    Then every panel shows what it shows with F, and both route boxes show "routes file error" over a row with "claude-wrok"
+    And each box's row 1 is exactly "| routes file error" + " " x15 + "|", and its row 2 is "| ", the start of `<what is wrong>`
+      padded or cut to 31 cells, then " |"
     And pressing `q` exits 0
+    When the user runs the live dashboard without NO_COLOR and waits for it to settle
+    Then each box's top and bottom lines are as in "Box colours" of features/013-route-boxes.feature
+    And its row 1 is one dim span, borders included: "\e[90m│ routes file error" + " " x15 + "│\e[0m"
+    And its row 2 is one dim span the same way, "\e[90m│ " + the 31 padded cells + " │\e[0m", holding "claude-wrok" and no "\e[1m"
     When the user runs `node src/main.ts --once` instead
     Then stdout is the dashboard it prints with F, stderr is one line starting "dandelion: routes file " and containing "claude-wrok",
       and the exit code is 0
