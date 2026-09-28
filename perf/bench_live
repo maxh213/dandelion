@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ROUTE_LINES } from './routes.mjs';
 import { VALUES, absent, emit, perCall, perCallSync } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
@@ -61,7 +62,7 @@ async function session(startLive, probes) {
   const screen = { write: (text) => (bytes += text.length) };
   const settled = [];
   const tracked = probes.map(({ id, probe }) => ({ id, probe: (now) => { const p = probe(now); settled.push(p); return p; } }));
-  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, zone: 'UTC' });
+  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, routes: { lines: ROUTE_LINES }, zone: 'UTC' });
   await Promise.allSettled(settled);
   await new Promise((resolve) => setImmediate(resolve));
   keyboard.press('q');
@@ -84,8 +85,8 @@ try {
 
   const render = await import(pathToFileURL(renderEntry).href);
   if (render.renderLiveFrame) {
-    const settledView = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: 'UTC', settled: usages };
-    const pendingView = { slots: usages.map(({ id }) => ({ id, usage: undefined })), spinner: 3, refreshing: false, footer: false, ineligible: [] };
+    const settledView = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: 'UTC', routes: { lines: ROUTE_LINES }, settled: usages };
+    const pendingView = { slots: usages.map(({ id }) => ({ id, usage: undefined })), spinner: 3, refreshing: false, footer: false, ineligible: [], routes: { lines: ROUTE_LINES } };
     const settledOnce = render.renderLiveFrame(settledView, false, NOW);
     if (render.renderLiveFrame(settledView, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
     render.renderLiveFrame(pendingView, false, NOW);

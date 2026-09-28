@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { routing, writeRoutes } from './routes.mjs';
 import { VALUES, absent, bothNames, emit, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
@@ -12,7 +13,7 @@ const domainEntry = join(tree, 'src', 'domain', 'index.ts');
 const BIG_LINES = 1320;
 const SNAPSHOT_FROM_END = 20;
 const QUOTA_TYPE = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
-const HIGH_LINE = 'claude-fable-5-1 max claude';
+const HIGH_LINE = [['claude', 'fable']];
 
 const TARGETS = {
   cliRoute: 'cli route nine providers junie 1.6MB session log',
@@ -82,6 +83,7 @@ for (const [name, out] of Object.entries(OUTPUTS)) {
   writeFileSync(join(bin, name), `#!/bin/sh\ncat <<'OUT'\n${out}OUT\n`);
   chmodSync(join(bin, name), 0o755);
 }
+const routesFile = writeRoutes(fixture);
 
 function writeHome(home, files) {
   for (const [relative, text] of Object.entries(files)) {
@@ -95,10 +97,11 @@ const NEWEST = 'session-260918-142254-1bzg';
 const OLDER = 'session-260912-232358-evb0';
 writeHome(happyHome, { 'sessions/index.jsonl': indexOf(NEWEST, OLDER), [`sessions/${NEWEST}/events.jsonl`]: bigLog, [`sessions/${OLDER}/events.jsonl`]: olderLog });
 
-function timeCli(args, wanted) {
+function timeCli(R, args, wanted) {
   const env = bothNames({
     ...process.env,
     NODE_COMPILE_CACHE: cache,
+    ALLOWANCE_ROUTES_FILE: routesFile,
     ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'),
     PATH: `${bin}:/usr/bin:/bin`,
     HOME: fixture,
@@ -112,18 +115,19 @@ function timeCli(args, wanted) {
   const result = spawnSync(process.execPath, [main, ...args], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
   const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
   if (result.status !== 0) throw new Error(`cli ${args.join(' ')} exited ${result.status}:\n${result.stdout}${result.stderr}`);
-  if (wanted !== undefined && result.stdout !== `${wanted}\n`) throw new Error(`cli ${args.join(' ')} printed ${JSON.stringify(result.stdout)}, wanted ${JSON.stringify(wanted)}`);
+  if (wanted !== undefined) R.expectLine(result.stdout.trimEnd(), wanted, `cli ${args.join(' ')}`);
   return elapsed;
 }
 
 try {
   const domain = await import(pathToFileURL(domainEntry).href);
   const hasHigh = typeof domain.highRouteLine === 'function';
-  timeCli(['route']);
-  emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(['route'])), 'ms');
+  const R = routing(domain);
+  timeCli(R, ['route']);
+  emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(R, ['route'])), 'ms');
   if (hasHigh) {
-    timeCli(['route', '--high'], HIGH_LINE);
-    emit(TARGETS.cliHigh, await repeat(VALUES, () => timeCli(['route', '--high'], HIGH_LINE)), 'ms');
+    timeCli(R, ['route', '--high'], HIGH_LINE);
+    emit(TARGETS.cliHigh, await repeat(VALUES, () => timeCli(R, ['route', '--high'], HIGH_LINE)), 'ms');
   } else {
     absent(TARGETS.cliHigh);
   }

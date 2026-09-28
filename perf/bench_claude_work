@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ROUTE_LINES } from './routes.mjs';
 import { VALUES, bothNames, absent, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
@@ -149,7 +150,7 @@ try {
 
   const terminal = existsSync(terminalEntry) ? await import(pathToFileURL(terminalEntry).href) : {};
   if (terminal.renderLiveFrame) {
-    const view = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: 'UTC', settled: usages };
+    const view = { slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: 'UTC', routes: { lines: ROUTE_LINES }, settled: usages };
     const settledOnce = terminal.renderLiveFrame(view, false, NOW);
     if (terminal.renderLiveFrame(view, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
     emit(TARGETS.frame, perCallSync(ITERATIONS, () => terminal.renderLiveFrame(view, false, NOW)), 'us');

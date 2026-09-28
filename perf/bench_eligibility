@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ROUTE_LINES, routing, writeRoutes } from './routes.mjs';
 import { VALUES, absent, bothNames, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
@@ -43,6 +44,7 @@ if (typeof domain.openEligibility !== 'function') {
 const app = await import(pathToFileURL(appEntry).href);
 const render = await import(pathToFileURL(renderEntry).href);
 const hasHigh = typeof domain.highRouteLine === 'function';
+const R = routing(domain);
 const runRoute = (io, env, mode) => (hasHigh ? app.runRoute(io, env, { mode, now: NOW, zone: 'Europe/London' }) : app.runRoute(io, env, NOW, 'Europe/London'));
 
 const PERSONAL_OUT = [
@@ -72,9 +74,10 @@ writeFileSync(join(bin, 'claude'), `#!/bin/sh\nif [ -n "$CLAUDE_CONFIG_DIR" ]; t
 writeFileSync(join(bin, 'agy'), `#!/bin/sh\ncat <<'OUT'\n${AGY_OUT}OUT\n`);
 writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
 for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
+const routesFile = writeRoutes(fixture);
 
 function timeCli() {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: stateFile, PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
+  const env = bothNames({ ...process.env, ALLOWANCE_ROUTES_FILE: routesFile, ALLOWANCE_STATE_FILE: stateFile, PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
   delete env.XDG_STATE_HOME;
@@ -84,7 +87,7 @@ function timeCli() {
   const result = spawnSync(process.execPath, [main, 'route'], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
   const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
   if (result.status !== 0 || result.stdout.split('\n').length !== 2) throw new Error(`route printed no single line (exit ${result.status}):\n${result.stdout}${result.stderr}`);
-  if (result.stdout.startsWith('claude-opus')) throw new Error(`route picked the ineligible claude: ${result.stdout}`);
+  if (result.stdout.trimEnd().endsWith(' claude')) throw new Error(`route picked the ineligible claude: ${result.stdout}`);
   return elapsed;
 }
 
@@ -97,7 +100,7 @@ const stubIo = {
   fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
   reader: { homeDir: () => fixture, read: async () => undefined, isDirectory: async (path) => path === workDir }
 };
-const baseEnv = { ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') };
+const baseEnv = { ALLOWANCE_ROUTES_FILE: routesFile, ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') };
 const appEnv = bothNames({ ...baseEnv, ALLOWANCE_STATE_FILE: stateFile });
 const liveEnv = bothNames({ ...baseEnv, ALLOWANCE_STATE_FILE: liveStateFile });
 
@@ -113,7 +116,7 @@ const fleet = [
   { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok', balance: { amount: 14.15, currency: '$', reference: 20 } }
 ];
 const INELIGIBLE = ['claude', 'codex'];
-const frameView = { slots: fleet.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: INELIGIBLE, zone: 'Europe/London', settled: fleet, selected: 7, flash: { index: 7, message: 'not routable (no usage windows)' } };
+const frameView = { slots: fleet.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: INELIGIBLE, zone: 'Europe/London', routes: { lines: ROUTE_LINES }, settled: fleet, selected: 7, flash: { index: 7, message: 'not routable (no usage windows)' } };
 
 const memoryFile = { read: () => STATE_TEXT, replace: () => true };
 const held = domain.openEligibility({}, fixture, memoryFile);
@@ -155,13 +158,13 @@ async function liveSession() {
 }
 
 try {
-  if (!domain.routeLine(fleet, NOW, MIDNIGHT, ['claude']).includes('kimi-code/k3 max')) {
+  if (!R.routeLine(fleet, NOW, MIDNIGHT, ['claude']).endsWith(' kimi')) {
     absent(...Object.values(TARGETS), ...Object.values(HIGH_TARGETS));
     process.exit(0);
   }
-  expect(domain.routeLine(fleet, NOW, MIDNIGHT, ['claude']), hasHigh ? 'kimi-code/k3 max kimi' : 'kimi-code/k3 max', 'routeLine without claude');
+  R.expectLine(R.routeLine(fleet, NOW, MIDNIGHT, ['claude']), [['kimi', 'standard']], 'routeLine without claude');
   expect(held.ineligible().join(), 'claude', 'ineligible');
-  expect((await runRoute(stubIo, appEnv, 'headroom')).line.startsWith('claude-opus'), false, 'runRoute skips claude');
+  expect(R.printed(await runRoute(stubIo, appEnv, 'headroom')).endsWith(' claude'), false, 'runRoute skips claude');
   expect((await app.runApp(stubIo, appEnv, NOW)).includes('routing off'), true, 'runApp tags claude');
   expect(render.renderDashboard(fleet, false, NOW, INELIGIBLE).split('routing off').length, 3, 'dashboard tags');
   expect(render.renderLiveFrame(frameView, false, NOW).includes('not routable'), true, 'frame flash');
@@ -173,7 +176,7 @@ try {
   emit(TARGETS.cliRoute, await repeat(VALUES, timeCli), 'ms');
   emit(TARGETS.runRoute, await perCall(ITERATIONS, () => runRoute(stubIo, appEnv, 'headroom')), 'us');
   emit(TARGETS.runApp, await perCall(ITERATIONS, () => app.runApp(stubIo, appEnv, NOW)), 'us');
-  emit(TARGETS.routeLine, perCallSync(ITERATIONS, () => domain.routeLine(fleet, NOW, MIDNIGHT, ['claude'])), 'us');
+  emit(TARGETS.routeLine, perCallSync(ITERATIONS, () => R.routeLine(fleet, NOW, MIDNIGHT, ['claude'])), 'us');
   emit(TARGETS.open, perCallSync(ITERATIONS, () => domain.openEligibility({}, fixture, memoryFile).ineligible()), 'us');
   emit(TARGETS.toggle, perCallSync(ITERATIONS, () => held.toggle('kimi')), 'us');
   emit(TARGETS.dashboard, perCallSync(ITERATIONS, () => render.renderDashboard(fleet, false, NOW, INELIGIBLE)), 'us');
@@ -183,10 +186,10 @@ try {
   if (!hasHigh) {
     absent(...Object.values(HIGH_TARGETS));
   } else {
-    expect((await runRoute(stubIo, appEnv, 'high')).line, 'claude-fable-5-1 max claude-work', 'runRoute high skips claude');
-    expect(domain.highRouteLine(fleet, ['claude-work']), 'kimi-k3-max cursor', 'highRouteLine without claude-work');
+    R.expectLine(R.printed(await runRoute(stubIo, appEnv, 'high')), [['claude-work', 'fable']], 'runRoute high skips claude');
+    R.expectLine(R.highRouteLine(fleet, ['claude-work']), [['cursor', 'cursor']], 'highRouteLine without claude-work');
     emit(HIGH_TARGETS.runRouteHigh, await perCall(ITERATIONS, () => runRoute(stubIo, appEnv, 'high')), 'us');
-    emit(HIGH_TARGETS.highRouteLine, perCallSync(ITERATIONS, () => domain.highRouteLine(fleet, ['claude-work'])), 'us');
+    emit(HIGH_TARGETS.highRouteLine, perCallSync(ITERATIONS, () => R.highRouteLine(fleet, ['claude-work'])), 'us');
   }
 } finally {
   rmSync(fixture, { recursive: true, force: true });

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { ROUTE_LINES, routing, writeRoutes } from './routes.mjs';
 import { VALUES, absent, bothNames, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const run = promisify(execFile);
@@ -26,7 +27,7 @@ const ITERATIONS = 200;
 const FAST_ITERATIONS = 2000;
 const HTTP_ITERATIONS = 200;
 const SESSIONS = VALUES;
-const HIGH_LINE = 'claude-fable-5-1 max claude';
+const HIGH_LINE = [['claude', 'fable']];
 const AGENT = 'bench-dummy-hermes-agent-key-016';
 const ACCESS = 'bench-dummy-hermes-access-016';
 
@@ -129,6 +130,8 @@ const expiredFile = join(fixture, 'expired.json');
 const missingAuth = join(fixture, 'missing-auth.json');
 writeFileSync(authFile, authJson(HAPPY_NOUS));
 writeFileSync(expiredFile, authJson(EXPIRED_NOUS));
+const routesFile = writeRoutes(fixture);
+let R;
 
 const server = createServer((req, res) => {
   const authorised = req.method === 'GET' && req.url === '/api/oauth/account' && req.headers.authorization === `Bearer ${AGENT}` && req.headers.accept === 'application/json';
@@ -143,6 +146,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 function cliEnv(hermesAuth) {
   const env = bothNames({
     ...process.env,
+    ALLOWANCE_ROUTES_FILE: routesFile,
     ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'),
     PATH: `${bin}:/usr/bin:/bin`,
     HOME: fixture,
@@ -162,7 +166,7 @@ async function timeCli(hermesAuth, args, wanted) {
   const start = process.hrtime.bigint();
   const { stdout } = await run(process.execPath, [main, ...args], { cwd: tree, env, encoding: 'utf8' });
   const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
-  if (wanted !== undefined && stdout !== `${wanted}\n`) throw new Error(`cli ${args.join(' ')} printed ${JSON.stringify(stdout)}, wanted ${JSON.stringify(wanted)}`);
+  if (wanted !== undefined) R.expectLine(stdout.trimEnd(), wanted, `cli ${args.join(' ')}`);
   return elapsed;
 }
 
@@ -183,7 +187,7 @@ async function liveSession(startLive, probes, clock) {
   const screen = { write: (text) => (bytes += text.length) };
   const settled = [];
   const tracked = probes.map(({ id, probe }) => ({ id, probe: (now) => { const p = probe(now); settled.push(p); return p; } }));
-  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, zone: ZONE, clock });
+  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, routes: { lines: ROUTE_LINES }, zone: ZONE, clock });
   await Promise.allSettled(settled);
   await new Promise((resolve) => setImmediate(resolve));
   keyboard.press('q');
@@ -204,6 +208,7 @@ const stubIo = {
   reader: { homeDir: () => fixture, read: async (path) => (path === authFile ? authJson(HAPPY_NOUS) : path === expiredFile ? authJson(EXPIRED_NOUS) : undefined), isDirectory: async () => false }
 };
 const appEnv = bothNames({
+  ALLOWANCE_ROUTES_FILE: routesFile,
   ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'),
   ALLOWANCE_GROK_HOME: fixture,
   ALLOWANCE_JUNIE_HOME: fixture,
@@ -244,18 +249,15 @@ const fleetTie = liveCase(junieUsage(0), hermesUsage(0, '2026-09-20T00:00:00.000
 const fleetEvap = liveCase(junieUsage(30), hermesUsage(60, '2026-09-14T13:39:00.000Z'));
 const dashboardFleet = liveCase(junieUsage(30), hermesUsage(75, RESET, { captionSuffix: ' · no paid access' }), { fetchedAt: NOW });
 
-function expectOneOf(actual, wanted, what) {
-  if (!wanted.includes(actual)) throw new Error(`${what}: got ${JSON.stringify(actual)}, wanted one of ${JSON.stringify(wanted)}`);
-}
-
 try {
   const app = await import(pathToFileURL(appEntry).href);
   const render = await import(pathToFileURL(renderEntry).href);
   const { renderDashboard } = render;
   const domain = await import(pathToFileURL(domainEntry).href);
   const hasHigh = typeof domain.highRouteLine === 'function';
+  R = routing(domain);
 
-  if (!domain.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, []).includes('grok-4.7')) {
+  if (!R.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, []).endsWith(' grok')) {
     absent(...Object.values(TARGETS));
     process.exit(0);
   }
@@ -278,7 +280,7 @@ try {
   emit(TARGETS.render, perCallSync(FAST_ITERATIONS, () => renderDashboard(dashboardFleet, false, NOW, [])), 'us');
 
   if (typeof render.renderLiveFrame === 'function') {
-    const liveView = { slots: dashboardFleet.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: ZONE, settled: dashboardFleet };
+    const liveView = { slots: dashboardFleet.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: ZONE, routes: { lines: ROUTE_LINES }, settled: dashboardFleet };
     const settledOnce = render.renderLiveFrame(liveView, false, NOW);
     if (render.renderLiveFrame(liveView, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
     emit(TARGETS.renderLive, perCallSync(FAST_ITERATIONS, () => render.renderLiveFrame(liveView, false, NOW)), 'us');
@@ -289,23 +291,23 @@ try {
   domain.summariseFleet(dashboardFleet, NOW);
   emit(TARGETS.fleet, perCallSync(FAST_ITERATIONS, () => domain.summariseFleet(dashboardFleet, NOW)), 'us');
 
-  const GROK = ['grok-4.7 xhigh grok', 'grok-4.7 grok'];
-  const HERMES = ['x-ai/grok-4.7 xhigh hermes'];
-  const JUNIE = ['gemini-3.8-flash high junie'];
-  expectOneOf(domain.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, []), GROK, 'hermes 75%');
-  expectOneOf(domain.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, []), [...HERMES, ...GROK], 'hermes 0%');
-  expectOneOf(domain.routeLine(fleetTie, LIVE_NOW, LIVE_MIDNIGHT, []), [...JUNIE, ...GROK], 'junie/hermes 0%');
-  expectOneOf(domain.routeLine(fleetEvap, LIVE_NOW, LIVE_MIDNIGHT, []), [...HERMES, ...GROK], 'hermes evaporating');
-  expectOneOf(domain.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, ['hermes']), GROK, 'hermes ineligible');
-  emit(TARGETS.route75, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
-  emit(TARGETS.route0, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
-  emit(TARGETS.routeTie, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleetTie, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
-  emit(TARGETS.routeEvap, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleetEvap, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
-  emit(TARGETS.routeIneligible, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, ['hermes'])), 'us');
+  const GROK = ['grok', 'standard'];
+  const HERMES = [['hermes', 'standard'], ['hermes', 'max']];
+  const JUNIE = ['junie', 'standard'];
+  R.expectLine(R.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, []), [GROK], 'hermes 75%');
+  R.expectLine(R.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, []), [...HERMES, GROK], 'hermes 0%');
+  R.expectLine(R.routeLine(fleetTie, LIVE_NOW, LIVE_MIDNIGHT, []), [JUNIE, GROK], 'junie/hermes 0%');
+  R.expectLine(R.routeLine(fleetEvap, LIVE_NOW, LIVE_MIDNIGHT, []), [...HERMES, GROK], 'hermes evaporating');
+  R.expectLine(R.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, ['hermes']), [GROK], 'hermes ineligible');
+  emit(TARGETS.route75, perCallSync(FAST_ITERATIONS, () => R.routeLine(fleet75, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
+  emit(TARGETS.route0, perCallSync(FAST_ITERATIONS, () => R.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeTie, perCallSync(FAST_ITERATIONS, () => R.routeLine(fleetTie, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeEvap, perCallSync(FAST_ITERATIONS, () => R.routeLine(fleetEvap, LIVE_NOW, LIVE_MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeIneligible, perCallSync(FAST_ITERATIONS, () => R.routeLine(fleet0, LIVE_NOW, LIVE_MIDNIGHT, ['hermes'])), 'us');
 
   if (hasHigh) {
-    expectOneOf(domain.highRouteLine(fleet0, []), [HIGH_LINE], 'high plus hermes 0%');
-    emit(TARGETS.highRoute, perCallSync(FAST_ITERATIONS, () => domain.highRouteLine(fleet0, [])), 'us');
+    R.expectLine(R.highRouteLine(fleet0, []), HIGH_LINE, 'high plus hermes 0%');
+    emit(TARGETS.highRoute, perCallSync(FAST_ITERATIONS, () => R.highRouteLine(fleet0, [])), 'us');
   } else {
     absent(TARGETS.highRoute);
   }
@@ -329,7 +331,7 @@ try {
   emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, request)), 'us');
   if (hasHigh) {
     const high = await app.runRoute(stubIo, appEnv, highRequest);
-    if (high.line !== HIGH_LINE) throw new Error(`runRoute --high printed ${JSON.stringify(high.line)}`);
+    R.expectLine(R.printed(high), HIGH_LINE, 'runRoute --high');
     emit(TARGETS.runRouteHigh, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, highRequest)), 'us');
   } else {
     absent(TARGETS.runRouteHigh);

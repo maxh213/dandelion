@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ROUTE_LINES, routing, writeRoutes } from './routes.mjs';
 import { VALUES, absent, bothNames, emit, perCall, perCallSync } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
@@ -24,7 +25,7 @@ const NEWER_LINES = 700;
 const WALK_SESSIONS = 40;
 const WALK_LINES = 110;
 const INDEX_SESSIONS = 2000;
-const HIGH_LINE = 'claude-fable-5-1 max claude';
+const HIGH_LINE = [['claude', 'fable']];
 
 const TARGETS = {
   probeReal: 'probeJunie 1.6MB log, snapshot 20 lines from end, real reader (in-process, per call)',
@@ -109,6 +110,7 @@ const fallbackHome = join(fixture, 'fallback');
 const walkHome = join(fixture, 'walk');
 const emptyHome = join(fixture, 'empty');
 mkdirSync(emptyHome);
+const routesFile = writeRoutes(fixture);
 
 function writeHome(home, files) {
   for (const [relative, text] of Object.entries(files)) {
@@ -148,7 +150,7 @@ async function liveSession(startLive, probes) {
   const screen = { write: (text) => (bytes += text.length) };
   const settled = [];
   const tracked = probes.map(({ id, probe }) => ({ id, probe: (now) => { const p = probe(now); settled.push(p); return p; } }));
-  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, zone: ZONE });
+  const ended = startLive({ probes: tracked, env: {}, keyboard, screen, stopChildren: async () => undefined, eligibility: { ineligible: () => [], toggle: () => true }, routes: { lines: ROUTE_LINES }, zone: ZONE });
   await Promise.allSettled(settled);
   await new Promise((resolve) => setImmediate(resolve));
   keyboard.press('q');
@@ -169,7 +171,7 @@ function stubIo(files) {
     reader: { homeDir: () => STUB_HOME, read: async (path) => byPath.get(path), isDirectory: async () => false }
   };
 }
-const appEnv = bothNames({ ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), ALLOWANCE_GROK_HOME: emptyHome, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+const appEnv = bothNames({ ALLOWANCE_ROUTES_FILE: routesFile, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), ALLOWANCE_GROK_HOME: emptyHome, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -200,18 +202,15 @@ const fleet0 = fleet(junieUsage(0, FRESH));
 const fleetStale = fleet(junieUsage(30, STALE));
 const fleetNoReference = fleet(junieUsage(undefined, FRESH));
 
-function expectOneOf(actual, wanted, what) {
-  if (!wanted.includes(actual)) throw new Error(`${what}: got ${JSON.stringify(actual)}, wanted one of ${JSON.stringify(wanted)}`);
-}
-
 try {
   const app = await import(pathToFileURL(appEntry).href);
   const render = await import(pathToFileURL(renderEntry).href);
   const { renderDashboard } = render;
   const domain = await import(pathToFileURL(domainEntry).href);
   const hasHigh = typeof domain.highRouteLine === 'function';
+  const R = routing(domain);
 
-  if (!domain.routeLine(fleet30, NOW, MIDNIGHT, []).includes('grok-4.7')) {
+  if (!R.routeLine(fleet30, NOW, MIDNIGHT, []).endsWith(' grok')) {
     absent(...Object.values(TARGETS));
     process.exit(0);
   }
@@ -222,7 +221,7 @@ try {
   emit(TARGETS.renderNoReference, perCallSync(FAST_ITERATIONS, () => renderDashboard(fleetNoReference, false, NOW, [])), 'us');
 
   if (typeof render.renderLiveFrame === 'function') {
-    const liveView = { slots: fleet30.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: ZONE, settled: fleet30 };
+    const liveView = { slots: fleet30.map((usage) => ({ id: usage.id, usage })), spinner: 3, refreshing: true, footer: true, ineligible: [], zone: ZONE, routes: { lines: ROUTE_LINES }, settled: fleet30 };
     const settledOnce = render.renderLiveFrame(liveView, false, NOW);
     if (render.renderLiveFrame(liveView, false, NOW) !== settledOnce) throw new Error('settled frame changed between identical renders');
     emit(TARGETS.renderLive, perCallSync(FAST_ITERATIONS, () => render.renderLiveFrame(liveView, false, NOW)), 'us');
@@ -233,19 +232,19 @@ try {
   domain.summariseFleet(fleet30, NOW);
   emit(TARGETS.fleet, perCallSync(FAST_ITERATIONS, () => domain.summariseFleet(fleet30, NOW)), 'us');
 
-  const GROK = ['grok-4.7 xhigh grok', 'grok-4.7 grok'];
-  expectOneOf(domain.routeLine(fleet30, NOW, MIDNIGHT, []), GROK, 'junie 30%');
-  expectOneOf(domain.routeLine(fleet0, NOW, MIDNIGHT, []), ['gemini-3.8-flash high junie', ...GROK], 'junie 0%');
-  expectOneOf(domain.routeLine(fleet0, NOW, MIDNIGHT, ['junie']), GROK, 'junie ineligible');
-  expectOneOf(domain.routeLine(fleetNoReference, NOW, MIDNIGHT, []), GROK, 'junie no reference');
-  emit(TARGETS.route30, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet30, NOW, MIDNIGHT, [])), 'us');
-  emit(TARGETS.route0, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, NOW, MIDNIGHT, [])), 'us');
-  emit(TARGETS.routeIneligible, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleet0, NOW, MIDNIGHT, ['junie'])), 'us');
-  emit(TARGETS.routeNoReference, perCallSync(FAST_ITERATIONS, () => domain.routeLine(fleetNoReference, NOW, MIDNIGHT, [])), 'us');
+  const GROK = ['grok', 'standard'];
+  R.expectLine(R.routeLine(fleet30, NOW, MIDNIGHT, []), [GROK], 'junie 30%');
+  R.expectLine(R.routeLine(fleet0, NOW, MIDNIGHT, []), [['junie', 'standard'], GROK], 'junie 0%');
+  R.expectLine(R.routeLine(fleet0, NOW, MIDNIGHT, ['junie']), [GROK], 'junie ineligible');
+  R.expectLine(R.routeLine(fleetNoReference, NOW, MIDNIGHT, []), [GROK], 'junie no reference');
+  emit(TARGETS.route30, perCallSync(FAST_ITERATIONS, () => R.routeLine(fleet30, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.route0, perCallSync(FAST_ITERATIONS, () => R.routeLine(fleet0, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeIneligible, perCallSync(FAST_ITERATIONS, () => R.routeLine(fleet0, NOW, MIDNIGHT, ['junie'])), 'us');
+  emit(TARGETS.routeNoReference, perCallSync(FAST_ITERATIONS, () => R.routeLine(fleetNoReference, NOW, MIDNIGHT, [])), 'us');
 
   if (hasHigh) {
-    expectOneOf(domain.highRouteLine(fleet0, []), [HIGH_LINE], 'high plus junie 0%');
-    emit(TARGETS.highRoute, perCallSync(FAST_ITERATIONS, () => domain.highRouteLine(fleet0, [])), 'us');
+    R.expectLine(R.highRouteLine(fleet0, []), HIGH_LINE, 'high plus junie 0%');
+    emit(TARGETS.highRoute, perCallSync(FAST_ITERATIONS, () => R.highRouteLine(fleet0, [])), 'us');
   } else {
     absent(TARGETS.highRoute);
   }
@@ -269,7 +268,7 @@ try {
   emit(TARGETS.runRoute, await perCall(ITERATIONS, () => app.runRoute(stub, appEnv, request)), 'us');
   if (hasHigh) {
     const high = await app.runRoute(stub, appEnv, highRequest);
-    if (high.line !== HIGH_LINE) throw new Error(`runRoute --high printed ${JSON.stringify(high.line)}`);
+    R.expectLine(R.printed(high), HIGH_LINE, 'runRoute --high');
     emit(TARGETS.runRouteHigh, await perCall(ITERATIONS, () => app.runRoute(stub, appEnv, highRequest)), 'us');
   } else {
     absent(TARGETS.runRouteHigh);

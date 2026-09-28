@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { routing, writeRoutes } from './routes.mjs';
 import { VALUES, absent, bothNames, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
@@ -47,10 +48,10 @@ if (typeof domain.routeLine !== 'function' || typeof render.renderRoute !== 'fun
 }
 
 const hasHigh = typeof domain.highRouteLine === 'function';
+const R = routing(domain);
 const request = (mode) => ({ mode, now: NOW, zone: ZONE });
 const runRoute = (io, env, mode) => (hasHigh ? app.runRoute(io, env, request(mode)) : app.runRoute(io, env, NOW, ZONE));
-const renderRoute = (usages, mode) => (hasHigh ? render.renderRoute(usages, [], request(mode)) : render.renderRoute(usages, NOW, ZONE, []));
-const onAccount = (line, id) => (hasHigh ? `${line} ${id}` : line);
+const renderRoute = (usages, mode) => (hasHigh ? R.renderRoute(render, usages, [], request(mode)) : render.renderRoute(usages, NOW, ZONE, []));
 
 const PERSONAL_OUT = [
   'Current session: 3% used · resets Sep 14, 7:40pm (Europe/London)',
@@ -74,9 +75,10 @@ writeFileSync(join(bin, 'claude'), `#!/bin/sh\nif [ -n "$CLAUDE_CONFIG_DIR" ]; t
 writeFileSync(join(bin, 'agy'), `#!/bin/sh\ncat <<'OUT'\n${AGY_OUT}OUT\n`);
 writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
 for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
+const routesFile = writeRoutes(fixture);
 
 function timeCli(args, wanted) {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
+  const env = bothNames({ ...process.env, ALLOWANCE_ROUTES_FILE: routesFile, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
@@ -85,7 +87,7 @@ function timeCli(args, wanted) {
   const result = spawnSync(process.execPath, [main, ...args], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
   const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
   if (result.status !== 0 || result.stdout.split('\n').length !== 2) throw new Error(`route printed no single line (exit ${result.status}):\n${result.stdout}${result.stderr}`);
-  if (wanted !== undefined && result.stdout !== `${wanted}\n`) throw new Error(`${args.join(' ')} printed ${JSON.stringify(result.stdout)}, wanted ${JSON.stringify(wanted)}`);
+  if (wanted !== undefined) R.expectLine(result.stdout.trimEnd(), wanted, args.join(' '));
   return elapsed;
 }
 
@@ -98,7 +100,7 @@ const stubIo = {
   fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
   reader: { homeDir: () => fixture, read: async () => undefined, isDirectory: async (path) => path === workDir }
 };
-const appEnv = bothNames({ ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+const appEnv = bothNames({ ALLOWANCE_ROUTES_FILE: routesFile, ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
 
 const win = (label, kind, usedPct, resetsAt) => ({ label, kind, usedPct, resetsAt });
 function fleet(claudeWeeklyReset) {
@@ -123,25 +125,25 @@ function expect(actual, wanted, what) {
 }
 
 try {
-  if (!domain.routeLine(headroom, NOW, MIDNIGHT, []).includes('kimi-code/k3 max')) {
+  if (!R.routeLine(headroom, NOW, MIDNIGHT, []).endsWith(' kimi')) {
     absent(...Object.values(TARGETS), ...Object.values(HIGH_TARGETS));
     process.exit(0);
   }
-  expect(domain.routeLine(evaporating, NOW, MIDNIGHT, []), onAccount('claude-opus-5 max', 'claude'), 'evaporation');
-  expect(domain.routeLine(headroom, NOW, MIDNIGHT, []), onAccount('kimi-code/k3 max', 'kimi'), 'headroom');
-  expect(domain.routeLine(nothing, NOW, MIDNIGHT, []), 'none', 'nothing');
+  R.expectLine(R.routeLine(evaporating, NOW, MIDNIGHT, []), [['claude', 'max']], 'evaporation');
+  R.expectLine(R.routeLine(headroom, NOW, MIDNIGHT, []), [['kimi', 'standard']], 'headroom');
+  R.expectLine(R.routeLine(nothing, NOW, MIDNIGHT, []), [['none']], 'nothing');
   expect(domain.nextLocalMidnight('UTC', NOW), MIDNIGHT, 'utc midnight');
   expect(domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z'), '2026-10-25T23:00:00.000Z', 'berlin midnight');
-  expect(renderRoute(evaporating, 'headroom').routed, true, 'renderRoute');
-  expect((await runRoute(stubIo, appEnv, 'headroom')).routed, true, 'runRoute');
+  expect(R.routed(renderRoute(evaporating, 'headroom')), true, 'renderRoute');
+  R.expectLine(R.printed(await runRoute(stubIo, appEnv, 'headroom')), [['claude', 'max']], 'runRoute');
 
   timeCli(['route']);
   emit(TARGETS.cliRoute, await repeat(VALUES, () => timeCli(['route'])), 'ms');
   emit(TARGETS.runRoute, await perCall(ITERATIONS, () => runRoute(stubIo, appEnv, 'headroom')), 'us');
   emit(TARGETS.renderRoute, perCallSync(ITERATIONS, () => renderRoute(evaporating, 'headroom')), 'us');
-  emit(TARGETS.routeEvaporation, perCallSync(ITERATIONS, () => domain.routeLine(evaporating, NOW, MIDNIGHT, [])), 'us');
-  emit(TARGETS.routeHeadroom, perCallSync(ITERATIONS, () => domain.routeLine(headroom, NOW, MIDNIGHT, [])), 'us');
-  emit(TARGETS.routeNone, perCallSync(ITERATIONS, () => domain.routeLine(nothing, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeEvaporation, perCallSync(ITERATIONS, () => R.routeLine(evaporating, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeHeadroom, perCallSync(ITERATIONS, () => R.routeLine(headroom, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeNone, perCallSync(ITERATIONS, () => R.routeLine(nothing, NOW, MIDNIGHT, [])), 'us');
   emit(TARGETS.midnightUtc, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('UTC', NOW)), 'us');
   emit(TARGETS.midnightBerlinDst, perCallSync(ITERATIONS, () => domain.nextLocalMidnight('Europe/Berlin', '2026-10-25T12:00:00.000Z')), 'us');
 
@@ -155,20 +157,20 @@ try {
   if (!hasHigh) {
     absent(...Object.values(HIGH_TARGETS));
   } else {
-    const FABLE_WORK = 'claude-fable-5-1 max claude-work';
-    expect(domain.highRouteLine(evaporating, []), FABLE_WORK, 'high rank 1');
-    expect(domain.highRouteLine(onlyAgyOpen, []), 'gemini-3.8-flash-high high agy', 'high rank 5');
-    expect(domain.highRouteLine(nothing, []), 'none', 'high nothing');
-    expect(renderRoute(evaporating, 'high').line, FABLE_WORK, 'renderRoute high');
-    expect((await runRoute(stubIo, appEnv, 'high')).line, FABLE_WORK, 'runRoute high');
+    const FABLE_WORK = [['claude-work', 'fable']];
+    R.expectLine(R.highRouteLine(evaporating, []), FABLE_WORK, 'high rank 1');
+    R.expectLine(R.highRouteLine(onlyAgyOpen, []), [['agy', 'agy']], 'high rank 5');
+    R.expectLine(R.highRouteLine(nothing, []), [['none']], 'high nothing');
+    R.expectLine(R.printed(renderRoute(evaporating, 'high')), FABLE_WORK, 'renderRoute high');
+    R.expectLine(R.printed(await runRoute(stubIo, appEnv, 'high')), FABLE_WORK, 'runRoute high');
 
     timeCli(['route', '--high'], FABLE_WORK);
     emit(HIGH_TARGETS.cliRouteHigh, await repeat(VALUES, () => timeCli(['route', '--high'], FABLE_WORK)), 'ms');
     emit(HIGH_TARGETS.runRouteHigh, await perCall(ITERATIONS, () => runRoute(stubIo, appEnv, 'high')), 'us');
     emit(HIGH_TARGETS.renderRouteHigh, perCallSync(ITERATIONS, () => renderRoute(evaporating, 'high')), 'us');
-    emit(HIGH_TARGETS.highRank1, perCallSync(ITERATIONS, () => domain.highRouteLine(evaporating, [])), 'us');
-    emit(HIGH_TARGETS.highRank5, perCallSync(ITERATIONS, () => domain.highRouteLine(onlyAgyOpen, [])), 'us');
-    emit(HIGH_TARGETS.highNone, perCallSync(ITERATIONS, () => domain.highRouteLine(nothing, [])), 'us');
+    emit(HIGH_TARGETS.highRank1, perCallSync(ITERATIONS, () => R.highRouteLine(evaporating, [])), 'us');
+    emit(HIGH_TARGETS.highRank5, perCallSync(ITERATIONS, () => R.highRouteLine(onlyAgyOpen, [])), 'us');
+    emit(HIGH_TARGETS.highNone, perCallSync(ITERATIONS, () => R.highRouteLine(nothing, [])), 'us');
   }
 } finally {
   rmSync(fixture, { recursive: true, force: true });

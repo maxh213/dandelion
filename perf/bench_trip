@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { routing, writeRoutes } from './routes.mjs';
 import { VALUES, absent, bothNames, emit, perCall, perCallSync, repeat } from './timing.mjs';
 
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
@@ -32,6 +33,8 @@ if (typeof domain.routeLine !== 'function' || typeof domain.highRouteLine !== 'f
   process.exit(0);
 }
 
+const R = routing(domain);
+
 const PERSONAL_OUT = [
   'Current session: 2% used · resets Sep 14, 5:40pm (Europe/London)',
   'Current week (all models): 13% used · resets Sep 19, 11pm (Europe/London)',
@@ -54,9 +57,10 @@ writeFileSync(join(bin, 'claude'), `#!/bin/sh\nif [ -n "$CLAUDE_CONFIG_DIR" ]; t
 writeFileSync(join(bin, 'agy'), `#!/bin/sh\ncat <<'OUT'\n${AGY_OUT}OUT\n`);
 writeFileSync(join(bin, 'kilo'), `#!/bin/sh\ncat <<'OUT'\n${KILO_OUT}OUT\n`);
 for (const name of ['claude', 'agy', 'kilo']) chmodSync(join(bin, name), 0o755);
+const routesFile = writeRoutes(fixture);
 
 function timeCli() {
-  const env = bothNames({ ...process.env, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
+  const env = bothNames({ ...process.env, ALLOWANCE_ROUTES_FILE: routesFile, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), PATH: `${bin}:/usr/bin:/bin`, HOME: fixture, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_HERMES_AUTH_FILE: join(fixture, 'missing-auth.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir });
   delete env.NO_COLOR;
   delete env.CLAUDE_CONFIG_DIR;
   delete env.ALLOWANCE_CURSOR_API_BASE;
@@ -77,7 +81,7 @@ const stubIo = {
   fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
   reader: { homeDir: () => fixture, read: async () => undefined, isDirectory: async (path) => path === workDir }
 };
-const appEnv = bothNames({ ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
+const appEnv = bothNames({ ALLOWANCE_ROUTES_FILE: routesFile, ALLOWANCE_STATE_FILE: join(tmpdir(), 'bench-no-dandelion-state', 'eligibility.json'), ALLOWANCE_CLAUDE_WORK_CONFIG_DIR: workDir, ALLOWANCE_GROK_HOME: fixture, ALLOWANCE_JUNIE_HOME: fixture, ALLOWANCE_CURSOR_AUTH_FILE: join(fixture, 'missing-auth.json') });
 const request = { mode: 'headroom', now: NOW, zone: ZONE };
 
 const HOUR = 60 * 60 * 1000;
@@ -103,30 +107,26 @@ const allTripped = live100.map((usage) => (usage.windows.some((window) => window
   ? { ...usage, windows: usage.windows.map((window) => (window.kind === 'rolling' ? { ...window, usedPct: 95 } : window)) }
   : { ...usage, status: 'unavailable', windows: [], reason: 'not found' }));
 
-function expectOneOf(actual, wanted, what) {
-  if (!wanted.includes(actual)) throw new Error(`${what}: got ${JSON.stringify(actual)}, wanted one of ${JSON.stringify(wanted)}`);
-}
-
 try {
-  if (!domain.routeLine(live100, NOW, MIDNIGHT, []).includes('grok-4.7')) {
+  if (!R.routeLine(live100, NOW, MIDNIGHT, []).endsWith(' grok')) {
     absent(...Object.values(TARGETS));
     process.exit(0);
   }
-  const WORK_EVAPORATES = 'claude-opus-5 max claude-work';
-  expectOneOf(domain.routeLine(live100, NOW, MIDNIGHT, []), ['grok-4.7 xhigh grok', 'grok-4.7 grok', WORK_EVAPORATES], 'live 100');
-  expectOneOf(domain.routeLine(live89, NOW, MIDNIGHT, []), [WORK_EVAPORATES], 'live 89');
-  expectOneOf(domain.routeLine(allTripped, NOW, MIDNIGHT, []), ['none', WORK_EVAPORATES], 'all tripped');
-  expectOneOf(domain.highRouteLine(live100, []), ['claude-fable-5-1 max claude'], 'high live 100');
+  const WORK_EVAPORATES = ['claude-work', 'max'];
+  R.expectLine(R.routeLine(live100, NOW, MIDNIGHT, []), [['grok', 'standard'], WORK_EVAPORATES], 'live 100');
+  R.expectLine(R.routeLine(live89, NOW, MIDNIGHT, []), [WORK_EVAPORATES], 'live 89');
+  R.expectLine(R.routeLine(allTripped, NOW, MIDNIGHT, []), [['none'], WORK_EVAPORATES], 'all tripped');
+  R.expectLine(R.highRouteLine(live100, []), [['claude', 'fable']], 'high live 100');
   const routed = await app.runRoute(stubIo, appEnv, request);
-  if (routed.routed !== true) throw new Error(`runRoute did not route: ${JSON.stringify(routed)}`);
+  if (!R.routed(routed)) throw new Error(`runRoute did not route: ${JSON.stringify(routed)}`);
 
   timeCli();
   emit(TARGETS.cliTripped, await repeat(VALUES, timeCli), 'ms');
   emit(TARGETS.runRouteTripped, await perCall(ITERATIONS, () => app.runRoute(stubIo, appEnv, request)), 'us');
-  emit(TARGETS.routeLive100, perCallSync(ITERATIONS, () => domain.routeLine(live100, NOW, MIDNIGHT, [])), 'us');
-  emit(TARGETS.routeLive89, perCallSync(ITERATIONS, () => domain.routeLine(live89, NOW, MIDNIGHT, [])), 'us');
-  emit(TARGETS.routeAllTripped, perCallSync(ITERATIONS, () => domain.routeLine(allTripped, NOW, MIDNIGHT, [])), 'us');
-  emit(TARGETS.highLive100, perCallSync(ITERATIONS, () => domain.highRouteLine(live100, [])), 'us');
+  emit(TARGETS.routeLive100, perCallSync(ITERATIONS, () => R.routeLine(live100, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeLive89, perCallSync(ITERATIONS, () => R.routeLine(live89, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.routeAllTripped, perCallSync(ITERATIONS, () => R.routeLine(allTripped, NOW, MIDNIGHT, [])), 'us');
+  emit(TARGETS.highLive100, perCallSync(ITERATIONS, () => R.highRouteLine(live100, [])), 'us');
 } finally {
   rmSync(fixture, { recursive: true, force: true });
 }
