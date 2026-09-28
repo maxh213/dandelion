@@ -10,6 +10,7 @@ Feature: 021 - read route lines from routes.json, and route claude as Opus 5.5
     the coder's, but for a key fault it contains the key name listed below.
   - The file is checked whole on every run, so a fault in `high` also fails plain `route`, and a fault in `route` fails `--high`.
     A bad file wins over `none`: with a bad file and no quota, the exit code is 2.
+  - Tie order (dashboard order) and the --high chain order stay in code; the order of keys in the file means nothing.
   - Unknown keys fail at every level: top level (only `route` and `high`), provider ids (codex and kilo included), `high` names and
     keys inside a provider entry (only `standard` and `max`). A line matches `^\S+( \S+)?$`: one or two words, one space apart.
   - `--once` has no route boxes (013). With a bad file it prints its dashboard unchanged on stdout, the error line on stderr, and
@@ -69,6 +70,19 @@ Feature: 021 - read route lines from routes.json, and route claude as Opus 5.5
       | 5    | agy 10/10                           | model-h5 high agy     | 0    |
       | -    | none                                | none                  | 1    |
 
+  Scenario Outline: Key order in the file changes no tie and no --high pick
+    Given the file "R", which is F with the keys of `route` and the keys of `high` each in reverse order
+    And DANDELION_ROUTES_FILE is R and the usages <usages>
+    When the user runs `node src/main.ts <command>`
+    Then stdout is exactly "<line>" followed by one newline, stderr is empty and the exit code is 0
+
+    Examples:
+      | command      | usages                     | line                |
+      | route        | agy 0/90@2, kimi 0/90@2    | model-c max agy     |
+      | route        | junie 0%, hermes 0%        | model-g high junie  |
+      | route --high | claude 3/86/10, agy 10/10  | model-h1 max claude |
+      | route --high | claude 10/10/95, grok 60   | model-h3 max claude |
+
   Scenario Outline: Unset or empty DANDELION_ROUTES_FILE reads the checkout's routes.json, wherever dandelion is run from
     Given a folder D whose "routes.json" is F with every "model-" replaced by "decoy-"
     And "lib/dandelion" a symlink to the checkout and "bin/dandelion" a symlink to "lib/dandelion/src/main.ts", as `npm link` makes
@@ -113,6 +127,9 @@ Feature: 021 - read route lines from routes.json, and route claude as Opus 5.5
       | invalid JSON          | /tmp/r/bad.json   | the text `{"route":`                               | bad.json     |
       | empty                 | /tmp/r/bad.json   | an empty file                                      | bad.json     |
       | not an object         | /tmp/r/bad.json   | the text `[]`                                      | bad.json     |
+      | top-level null        | /tmp/r/bad.json   | the text `null`                                    | bad.json     |
+      | route not an object   | /tmp/r/bad.json   | route set to []                                    | route        |
+      | high not an object    | /tmp/r/bad.json   | high set to "x"                                    | high         |
       | provider missing      | /tmp/r/bad.json   | removing route.hermes                              | hermes       |
       | high entry missing    | /tmp/r/bad.json   | removing high.opus                                 | opus         |
       | max missing           | /tmp/r/bad.json   | removing route.agy.max                             | agy          |
