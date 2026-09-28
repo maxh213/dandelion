@@ -1,12 +1,10 @@
-import { NO_ROUTE, faultLine, highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type RouteLines, type Routes } from '../domain/index.ts';
+import { NO_ROUTE, faultLine, highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type RouteLines, type RoutesFault } from '../domain/index.ts';
 
 export type RouteOutput = { out: string; err: string; code: number };
 
 export type RouteMode = 'headroom' | 'high';
 
 export type RouteRequest = { mode: RouteMode; now: string; zone: string };
-
-type RoutesFault = NonNullable<Routes['fault']>;
 
 function assertNever(value: never): never {
   throw new Error(`Unexpected route mode: ${JSON.stringify(value)}`);

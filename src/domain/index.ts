@@ -29,6 +29,7 @@ export {
   routeLine,
   type RouteLines,
   type Routes,
+  type RoutesFault,
   type RoutesFile,
   type WindowKind
 } from './route.ts';

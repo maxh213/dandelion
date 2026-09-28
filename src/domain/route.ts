@@ -8,7 +8,7 @@ type RuleLines = { standard: string; max: string };
 
 export type RouteLines = { route: Record<string, RuleLines>; high: Record<string, string> };
 
-type RoutesFault = { path: string; problem: string };
+export type RoutesFault = { path: string; problem: string };
 
 export type Routes = { lines: RouteLines; fault?: undefined } | { lines?: undefined; fault: RoutesFault };
 
@@ -148,8 +148,6 @@ export function highRouteLine(lines: RouteLines, usages: RoutableUsage[], inelig
 
 type Shape = 'line' | { readonly [key: string]: Shape };
 
-type Parsed = { value: unknown } | undefined;
-
 const LINE_SHAPE = /^\S+( \S+)?$/;
 
 function keyed(keys: readonly string[], shape: Shape): Record<string, Shape> {
@@ -197,33 +195,25 @@ function problemIn(value: unknown, shape: Shape, at: string): string | undefined
   return shape === 'line' ? lineProblem(value, at) : objectProblem(value, shape, at);
 }
 
-function parsed(text: string): Parsed {
+function attempted<T>(action: () => T): { value: T } | undefined {
   try {
-    return { value: JSON.parse(text) };
+    return { value: action() };
   } catch {
     return undefined;
   }
 }
 
 function routesIn(text: string, path: string): Routes {
-  const json = parsed(text);
+  const json = attempted((): unknown => JSON.parse(text));
   if (json === undefined) return { fault: { path, problem: 'is not valid JSON' } };
   const problem = problemIn(json.value, ROUTES_SHAPE, '');
   return problem === undefined ? { lines: json.value as RouteLines } : { fault: { path, problem } };
 }
 
-function textIn(file: RoutesFile, path: string): string | undefined {
-  try {
-    return file.read(path);
-  } catch {
-    return undefined;
-  }
-}
-
 export function openRoutes(env: Record<string, string | undefined>, shippedPath: string, file: RoutesFile): Routes {
   const path = env['DANDELION_ROUTES_FILE'] || shippedPath;
-  const text = textIn(file, path);
-  return text === undefined ? { fault: { path, problem: 'cannot be read' } } : routesIn(text, path);
+  const text = attempted(() => file.read(path));
+  return text === undefined ? { fault: { path, problem: 'cannot be read' } } : routesIn(text.value, path);
 }
 
 export function faultLine({ path, problem }: RoutesFault): string {
