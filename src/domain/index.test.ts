@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   HIGH_CHAIN,
-  faultLine,
   formatCountdown,
   highRouteLine,
   nextLocalMidnight,
@@ -579,9 +578,5 @@ describe('openRoutes', () => {
     ['tab', edited((value) => { (value.route.hermes as Record<string, string>).standard = 'vendor/model-h\txhigh'; }), 'route.hermes.standard is not "<model>" or "<model> <effort>"']
   ])('names what is wrong with a bad file: %s', (_case, text, problem) => {
     expect(problemOf(text)).toBe(problem);
-  });
-
-  it('prints the fault as one dandelion line naming the path', () => {
-    expect(faultLine({ path: '/tmp/r/nope.json', problem: 'cannot be read' })).toBe('dandelion: routes file /tmp/r/nope.json: cannot be read');
   });
 });

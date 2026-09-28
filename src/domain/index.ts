@@ -22,7 +22,6 @@ export {
 export {
   HIGH_CHAIN,
   NO_ROUTE,
-  faultLine,
   highRouteLine,
   isRoutable,
   openRoutes,

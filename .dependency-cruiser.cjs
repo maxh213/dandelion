@@ -54,7 +54,7 @@ module.exports = {
     {
       name: 'domain-entry-lists-its-files',
       severity: 'error',
-      comment: 'domain/index.ts fronts exactly four leaves, each hiding one piece of knowledge: ports (IO contracts and unknown-payload reading), route (both route policies and the one shared trip), midnight (local calendar search), eligibility (the state file toggle); a new domain file is a deliberate contract change',
+      comment: 'domain/index.ts fronts exactly four leaves, each hiding one piece of knowledge: ports (IO contracts and unknown-payload reading), route (both route policies, the one shared trip, and the routes.json shape that names their lines, validated into lines or a fault), midnight (local calendar search), eligibility (the state file toggle); a new domain file is a deliberate contract change',
       from: { path: '^src/domain/index\\.ts$' },
       to: { path: '^src/domain/', pathNot: '^src/domain/(index|ports|route|midnight|eligibility)\\.ts$' }
     },
@@ -124,9 +124,16 @@ module.exports = {
     {
       name: 'live-session-gets-eligibility-injected',
       severity: 'error',
-      comment: 'The live session sees only the render entry and probe types; the Eligibility it toggles is opened by app/index.ts over the real state file, never by a sibling module',
+      comment: 'The live session sees only the render entry and probe types; the Eligibility it toggles and the Routes its boxes show are opened by app/index.ts over the real state and routes files, never by a sibling module',
       from: { path: '^src/app/live\\.ts$' },
       to: { pathNot: '^src/(render|probes)/index\\.ts$' }
+    },
+    {
+      name: 'route-lines-are-read-not-bundled',
+      severity: 'error',
+      comment: 'Route lines are data: app/index.ts reads routes.json (or DANDELION_ROUTES_FILE) at run time through the RoutesFile port, so a missing or bad file is the exit-2 error; no module bundles a JSON file, the shipped routes.json or a fixture, as an import',
+      from: { path: '^src/', pathNot: '\\.test\\.ts$' },
+      to: { path: '\\.json$' }
     },
     {
       name: 'main-is-the-entry',
@@ -138,7 +145,7 @@ module.exports = {
     {
       name: 'route-output-is-plain',
       severity: 'error',
-      comment: 'render/route.ts turns the domain route decision into one scriptable line and its routed flag; it never reaches the ANSI dashboard renderer, and the dashboard renderer never reaches it',
+      comment: 'render/route.ts turns the domain route decision into one scriptable line and its exit code, and a routes file fault into the one dandelion: stderr line with exit 2; it never reaches the ANSI dashboard renderer, and the dashboard renderer never reaches it',
       from: { path: '^src/render/(route|terminal)\\.ts$' },
       to: { path: '^src/render/' }
     },
@@ -194,6 +201,6 @@ module.exports = {
   ],
   options: {
     tsPreCompilationDeps: true,
-    includeOnly: ['^src', '^node:', ...builtinModules.map((name) => `^${name}$`)]
+    includeOnly: ['^src', '^routes\\.json$', '^node:', ...builtinModules.map((name) => `^${name}$`)]
   }
 };

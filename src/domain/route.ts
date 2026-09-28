@@ -215,7 +215,3 @@ export function openRoutes(env: Record<string, string | undefined>, shippedPath:
   const text = attempted(() => file.read(path));
   return text === undefined ? { fault: { path, problem: 'cannot be read' } } : routesIn(text.value, path);
 }
-
-export function faultLine({ path, problem }: RoutesFault): string {
-  return `dandelion: routes file ${path}: ${problem}`;
-}

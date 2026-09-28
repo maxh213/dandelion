@@ -1,4 +1,4 @@
-import { NO_ROUTE, faultLine, highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type RouteLines, type RoutesFault } from '../domain/index.ts';
+import { NO_ROUTE, highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type RouteLines, type RoutesFault } from '../domain/index.ts';
 
 export type RouteOutput = { out: string; err: string; code: number };
 
@@ -30,6 +30,6 @@ export function renderRoute(lines: RouteLines, usages: ProviderUsage[], ineligib
   return { out: `${line}\n`, err: '', code: line === NO_ROUTE ? 1 : 0 };
 }
 
-export function renderRoutesFault(fault: RoutesFault): RouteOutput {
-  return { out: '', err: `${faultLine(fault)}\n`, code: 2 };
+export function renderRoutesFault({ path, problem }: RoutesFault): RouteOutput {
+  return { out: '', err: `dandelion: routes file ${path}: ${problem}\n`, code: 2 };
 }
