@@ -148,16 +148,16 @@ export function highRouteLine(lines: RouteLines, usages: RoutableUsage[], inelig
 
 type Shape = 'line' | { readonly [key: string]: Shape };
 
-const LINE_SHAPE = /^\S+( \S+)?$/;
-
 function keyed(keys: readonly string[], shape: Shape): Record<string, Shape> {
   return Object.fromEntries(keys.map((key) => [key, shape]));
 }
 
-const ROUTES_SHAPE: Shape = {
-  route: keyed(ROUTED_IDS, { standard: 'line', max: 'line' }),
-  high: keyed(HIGH_CHAIN.map((entry) => entry.name), 'line')
-};
+function routesShape(): Shape {
+  return {
+    route: keyed(ROUTED_IDS, { standard: 'line', max: 'line' }),
+    high: keyed(HIGH_CHAIN.map((entry) => entry.name), 'line')
+  };
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === '[object Object]';
@@ -169,7 +169,7 @@ function keyPath(at: string, key: string): string {
 
 function lineProblem(value: unknown, at: string): string | undefined {
   if (typeof value !== 'string' || value === '') return `${at} is not a non-empty string`;
-  return LINE_SHAPE.test(value) ? undefined : `${at} is not "<model>" or "<model> <effort>"`;
+  return /^\S+( \S+)?$/.test(value) ? undefined : `${at} is not "<model>" or "<model> <effort>"`;
 }
 
 function unknownKeyProblem(value: Record<string, unknown>, shape: Record<string, Shape>, at: string): string | undefined {
@@ -195,23 +195,23 @@ function problemIn(value: unknown, shape: Shape, at: string): string | undefined
   return shape === 'line' ? lineProblem(value, at) : objectProblem(value, shape, at);
 }
 
-function attempted<T>(action: () => T): { value: T } | undefined {
+function attempted<T>(action: () => T, fault: RoutesFault): { value: T } | { fault: RoutesFault } {
   try {
     return { value: action() };
   } catch {
-    return undefined;
+    return { fault };
   }
 }
 
 function routesIn(text: string, path: string): Routes {
-  const json = attempted((): unknown => JSON.parse(text));
-  if (json === undefined) return { fault: { path, problem: 'is not valid JSON' } };
-  const problem = problemIn(json.value, ROUTES_SHAPE, '');
+  const json = attempted((): unknown => JSON.parse(text), { path, problem: 'is not valid JSON' });
+  if ('fault' in json) return json;
+  const problem = problemIn(json.value, routesShape(), '');
   return problem === undefined ? { lines: json.value as RouteLines } : { fault: { path, problem } };
 }
 
 export function openRoutes(env: Record<string, string | undefined>, shippedPath: string, file: RoutesFile): Routes {
   const path = env['DANDELION_ROUTES_FILE'] || shippedPath;
-  const text = attempted(() => file.read(path));
-  return text === undefined ? { fault: { path, problem: 'cannot be read' } } : routesIn(text.value, path);
+  const text = attempted(() => file.read(path), { path, problem: 'cannot be read' });
+  return 'fault' in text ? text : routesIn(text.value, path);
 }
