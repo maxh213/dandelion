@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, symlink } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { ROUTES_FILE } from './routes-fixture.mjs';
 import { rootDir, launch, startLive, waitWithin, completeFrames, assertClosed } from './live-session.mjs';
 
 const PREFIX = 'dandelion-qa-013-';
@@ -47,13 +48,13 @@ const block = (model, account, highModel, highAccount) =>
 
 const SETTLED_BLOCK = [
   BOX_TOP,
-  '| claude-opus-5 high              |  | claude-fable-5-1 max            |',
+  '| model-b high                    |  | model-h1 max                    |',
   '| claude-work                     |  | claude-work                     |',
   BOX_BOTTOM
 ].join('\n');
-const TOGGLED_BLOCK = block('gemini-3.8-flash-high high', 'agy', 'kimi-k3-max', 'cursor');
+const TOGGLED_BLOCK = block('model-c high', 'agy', 'model-h2', 'cursor');
 const NONE_BLOCK = block('none', 'no subscription available', 'none', 'no subscription available');
-const KIMI_BLOCK = block('kimi-code/k3 max', 'kimi', 'none', 'no subscription available');
+const KIMI_BLOCK = block('vendor/model-d-for-coding-high…', 'kimi', 'none', 'no subscription available');
 const probingBlock = (spinner) => block(`${spinner} probing…`, '', `${spinner} probing…`, '');
 
 const ESCAPES_ONLY = ['\x1b[2J', '\x1b[H', '\x1b[?1049h', '\x1b[?1049l', '\x1b[?25h', '\x1b[?25l'];
@@ -74,6 +75,14 @@ async function fixtureDir() {
   await symlink(process.execPath, join(dir, 'node'));
   await symlink('/bin/sh', join(dir, 'sh'));
   return dir;
+}
+
+async function longRoutesFile() {
+  const routes = JSON.parse(await readFile(ROUTES_FILE, 'utf8'));
+  routes.route.kimi.standard = 'vendor/model-d-for-coding-highspeed';
+  const file = join(await tempDir(), 'routes.json');
+  await writeFile(file, JSON.stringify(routes));
+  return file;
 }
 
 async function slowKiloDir() {
@@ -131,7 +140,7 @@ async function homeFor(usages) {
   return home;
 }
 
-async function envFor(ctx, usages, { color = false, slowKilo = '' } = {}) {
+async function envFor(ctx, usages, { color = false, slowKilo = '', routesFile = ROUTES_FILE } = {}) {
   if (usages.cursor) ctx.cursor.usage = usages.cursor;
   const vars = Object.fromEntries(Object.entries(ENV_NAMES).filter(([name]) => usages[name]).map(([name, variable]) => [variable, usages[name].join(',')]));
   const home = await homeFor(usages);
@@ -152,6 +161,7 @@ async function envFor(ctx, usages, { color = false, slowKilo = '' } = {}) {
     DANDELION_CLAUDE_WORK_CONFIG_DIR: join(home, '.claude-work'),
     DANDELION_STATE_FILE: join(home, 'state', 'eligibility.json'),
     DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json'),
+    DANDELION_ROUTES_FILE: routesFile,
     ...vars
   };
 }
@@ -237,7 +247,7 @@ async function nothingToRoute(ctx) {
 }
 
 async function kimiTruncation(ctx) {
-  const run = startLive(await envFor(ctx, { kimi: [10, 10, 72] }));
+  const run = startLive(await envFor(ctx, { kimi: [10, 10, 72] }, { routesFile: await longRoutesFile() }));
   await waitWithin(run, () => boxLinesOf(lastFrame(run)) === KIMI_BLOCK, 20000, 'kimi boxes');
   send(run, 'q');
   await assertClosed(run);
@@ -245,12 +255,12 @@ async function kimiTruncation(ctx) {
 
 async function colourSpans(ctx) {
   const run = startLive(await envFor(ctx, FULL, { color: true }));
-  const boldModel = `\x1b[1m claude-opus-5 high${' '.repeat(14)}\x1b[0m`;
+  const boldModel = `\x1b[1m model-b high${' '.repeat(20)}\x1b[0m`;
   await waitWithin(run, () => run.output.includes(boldModel), 20000, 'coloured settled boxes');
   const output = run.output;
   assert.ok(output.includes(`\x1b[90m┌─ route ${'─'.repeat(25)}┐\x1b[0m`), 'dim top border with title');
   assert.ok(output.includes(`\x1b[90m│\x1b[0m${boldModel}\x1b[90m│\x1b[0m`), 'bold route model line');
-  assert.ok(output.includes(`\x1b[1m claude-fable-5-1 max${' '.repeat(12)}\x1b[0m`), 'bold route --high model line');
+  assert.ok(output.includes(`\x1b[1m model-h1 max${' '.repeat(20)}\x1b[0m`), 'bold route --high model line');
   assert.ok(output.includes(`\x1b[90m│\x1b[0m claude-work${' '.repeat(21)}\x1b[90m│\x1b[0m`), 'plain account row');
   assert.ok(output.includes(`\x1b[90m└${'─'.repeat(33)}┘\x1b[0m`), 'dim bottom border');
   send(run, 'q');

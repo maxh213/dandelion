@@ -14,22 +14,22 @@ once() { rt A=--once NO_COLOR=1 DANDELION_STATE_FILE="$ST" "$@"; }
    - **Expected:** exits 0. Every `*.e2e.mjs` prints PASS, including `011-route-eligibility-toggle.e2e.mjs`. `pgrep` prints nothing.
 
 2. Run `rt DANDELION_STATE_FILE="$ST" Q_CLAUDE=0,86,2 Q_AGY=0,0,72; ls "$RX/state"`.
-   - **Expected:** `claude-opus-5 max`, `exit=0`, then `ls` says there is no such directory: route never creates the state file.
+   - **Expected:** `model-a max`, `exit=0`, then `ls` says there is no such directory: route never creates the state file.
 
 3. Run `mkdir -p "$RX/state"; echo '{"claude": false}' > "$ST"`, then run step 2's `rt` again. Then run `rm "$ST"` and run it once more.
-   - **Expected:** `gemini-3.8-flash-high high` with `exit=0`, even though claude's weekly would evaporate. After the removal, `claude-opus-5 max` with `exit=0`.
+   - **Expected:** `model-c high` with `exit=0`, even though claude's weekly would evaporate. After the removal, `model-a max` with `exit=0`.
 
 4. Run `echo '{"claude-work": false, "nope": 1}' > "$ST"; rt DANDELION_STATE_FILE="$ST" Q_CLAUDE=20,30,72 Q_WORK=10,5,72 Q_AGY=15,20,72`.
-   - **Expected:** `gemini-3.8-flash-high high`, `exit=0`. Without the file, 010 gave `claude-opus-5 high`.
+   - **Expected:** `model-c high`, `exit=0`. Without the file, 010 gave `model-b high`.
 
 5. Run `echo '{"claude": false}' > "$ST"; rt DANDELION_STATE_FILE="$ST" Q_CLAUDE=0,86,2`.
    - **Expected:** `none`, `exit=1`.
 
 6. Run `printf '{not json' > "$ST"; rt DANDELION_STATE_FILE="$ST" Q_CLAUDE=0,86,2 Q_AGY=0,0,72; once Q_CLAUDE=0,86,2 | grep -c 'routing off'`.
-   - **Expected:** `claude-opus-5 max`, `exit=0`. Then `0`: a corrupt file means everything is eligible, with no error printed.
+   - **Expected:** `model-a max`, `exit=0`. Then `0`: a corrupt file means everything is eligible, with no error printed.
 
 7. Run `rm -rf "$RH/.local"; mkdir -p "$RX/xdg/dandelion"; echo '{"claude": false}' > "$RX/xdg/dandelion/eligibility.json"; rt XDG_STATE_HOME="$RX/xdg" Q_CLAUDE=0,86,2 Q_AGY=0,0,72; rm "$RX/xdg/dandelion/eligibility.json"; mkdir -p "$RH/.local/state/dandelion"; echo '{"claude": false}' > "$RH/.local/state/dandelion/eligibility.json"; rt Q_CLAUDE=0,86,2 Q_AGY=0,0,72; rm -r "$RH/.local"`.
-   - **Expected:** `gemini-3.8-flash-high high` twice, each with `exit=0`. The first run has no `~/.local/state` file, so its result comes from the XDG path. The second comes from the `~/.local/state` default.
+   - **Expected:** `model-c high` twice, each with `exit=0`. The first run has no `~/.local/state` file, so its result comes from the XDG path. The second comes from the `~/.local/state` default.
 
 8. Run `echo '{"claude": false}' > "$ST"; M=$(stat -c %Y "$ST"); sleep 1; once Q_CLAUDE=0,86,2 > "$RX/o"; grep -B1 -A2 'routing off' "$RX/o"; tail -1 "$RX/o"; [ "$(stat -c %Y "$ST")" = "$M" ] && echo untouched; once DANDELION_STATE_FILE="$RX/none" Q_CLAUDE=0,86,2 | diff - "$RX/o"`.
    - **Expected:** the rule, then `claude`, spaces, and `routing off` ending at column 72, then claude's two rows. No `▸` appears. Then `exit=0`, then `untouched`. `diff` shows only the claude header line and, at most, the banner clock.
@@ -41,7 +41,7 @@ once() { rt A=--once NO_COLOR=1 DANDELION_STATE_FILE="$ST" "$@"; }
     - **Expected:** the claude header gets `routing off` at the right edge at once, and the claude rows and summary stay the same. The file reads `{ "claude": false }` over three lines, and `ls` shows only `eligibility.json`. After the second space, the tag is gone and the file holds `"claude": true`.
 
 11. Press space once more so claude is off, then `q`. Run `rt DANDELION_STATE_FILE="$ST" Q_CLAUDE=0,86,2 Q_AGY=0,0,72`, then `lv Q_CLAUDE=0,86,2 Q_AGY=0,0,72` and wait for it to settle.
-    - **Expected:** `exit=0`, then `gemini-3.8-flash-high high`. The new dashboard shows claude with `routing off` and no `▸` anywhere: the choice survived the restart. Apart from that tag, the banner and panels match step 9's before `j`.
+    - **Expected:** `exit=0`, then `model-c high`. The new dashboard shows claude with `routing off` and no `▸` anywhere: the choice survived the restart. Apart from that tag, the banner and panels match step 9's before `j`.
 
 12. In the same dashboard, press `k`, then space. Then press `k` twice more, so codex is selected, and press space.
     - **Expected:** `k` selects kilo. Its caption line reads `not routable (no usage windows)` for 2 to 3 seconds, then `api balance · kilo` again. codex does the same and returns to `codex · codex`. In the second terminal, the file still holds only `"claude": false`.

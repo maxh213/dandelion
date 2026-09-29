@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, stat, symlink } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { ROUTES_FILE } from './routes-fixture.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PREFIX = 'dandelion-qa-015-';
@@ -192,6 +193,7 @@ async function envFor(ctx, usages, { state, extraEnv = {}, junieHome, color = fa
     DANDELION_CURSOR_API_BASE: `http://127.0.0.1:${ctx.cursor.address().port}`,
     DANDELION_JUNIE_HOME: junieHome ?? ctx.junie,
     DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json'),
+    DANDELION_ROUTES_FILE: ROUTES_FILE,
     DANDELION_REFRESH_SECONDS: '3600',
     ...(color ? {} : { NO_COLOR: '1' }),
     ...vars,
@@ -367,14 +369,14 @@ async function emptyHomeUnchanged(ctx) {
 
 async function routeCases(ctx) {
   const rows = [
-    ['junie beats grok 50', 'route', { grok: [50, 72] }, {}, 'gemini-3.8-flash high junie', 0],
-    ['empty reference skips junie', 'route', { grok: [50, 72] }, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'grok-4.7 xhigh grok', 0],
+    ['junie beats grok 50', 'route', { grok: [50, 72] }, {}, 'model-g high junie', 0],
+    ['empty reference skips junie', 'route', { grok: [50, 72] }, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'model-e xhigh grok', 0],
     ['empty reference alone', 'route', {}, { extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'none', 1],
-    ['live case junie 30%', 'route', liveCase(100), {}, 'grok-4.7 xhigh grok', 0],
-    ['live case junie 0%', 'route', liveCase(100), { junieHome: ctx.full }, 'gemini-3.8-flash high junie', 0],
-    ['live case empty reference', 'route', liveCase(100), { junieHome: ctx.full, extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'grok-4.7 xhigh grok', 0],
-    ['live case junie ineligible', 'route', liveCase(100), { junieHome: ctx.full, state: '{"junie": false}' }, 'grok-4.7 xhigh grok', 0],
-    ['live case --high', 'route --high', liveCase(100), {}, 'claude-fable-5-1 max claude', 0],
+    ['live case junie 30%', 'route', liveCase(100), {}, 'model-e xhigh grok', 0],
+    ['live case junie 0%', 'route', liveCase(100), { junieHome: ctx.full }, 'model-g high junie', 0],
+    ['live case empty reference', 'route', liveCase(100), { junieHome: ctx.full, extraEnv: { DANDELION_JUNIE_REFERENCE: '' } }, 'model-e xhigh grok', 0],
+    ['live case junie ineligible', 'route', liveCase(100), { junieHome: ctx.full, state: '{"junie": false}' }, 'model-e xhigh grok', 0],
+    ['live case --high', 'route --high', liveCase(100), {}, 'model-h1 max claude', 0],
     ['--high never uses junie', 'route --high', {}, { junieHome: ctx.full }, 'none', 1]
   ];
   for (const [label, args, usages, options, line, code] of rows) {
@@ -402,7 +404,7 @@ async function liveToggleAndFlash(ctx) {
     const off = `▸ junie${' '.repeat(54)}routing off`;
     await waitFor(session, () => panelLines(lastFrame(session), 'junie')[0] === off, 10000, 'junie routing off');
     assert.equal([...off].length, 72);
-    assert.ok(lastFrame(session).includes('grok-4.7 xhigh'), lastFrame(session));
+    assert.ok(lastFrame(session).includes('model-e xhigh'), lastFrame(session));
     assert.deepEqual(JSON.parse(await readFile(env.DANDELION_STATE_FILE, 'utf8')), { junie: false });
     await quit(session);
   } finally {
@@ -473,7 +475,7 @@ async function readmeDocumentsJunie() {
   assert.ok(readme.includes('All ten probes run in parallel'));
   assert.match(readme, /^- `DANDELION_JUNIE_HOME` - .*Defaults to `~\/\.junie`.*never writes to it/m);
   assert.match(readme, /^- `DANDELION_JUNIE_REFERENCE` - .*Defaults to `1000000`.*empty string, there is no reference/m);
-  assert.ok(readme.includes('| junie | `gemini-3.8-flash high` | `gemini-3.8-flash high` |'));
+  assert.ok(readme.includes('| junie | `route.junie.standard` | `route.junie.max` |'));
   assert.ok(readme.includes('junie credits'));
   assert.ok(readme.includes('`--high` does not use junie'));
   const pkg = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8'));

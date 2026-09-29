@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, symlink } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { ROUTES_FILE } from './routes-fixture.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PREFIX = 'dandelion-qa-018-';
@@ -377,6 +378,7 @@ async function envFor(ctx, usages, { junieHome, authFile } = {}) {
     DANDELION_CURSOR_API_BASE: `http://127.0.0.1:${ctx.cursor.address().port}`,
     DANDELION_JUNIE_HOME: junieHome ?? ctx.empty,
     DANDELION_HERMES_AUTH_FILE: authFile ?? join(home, 'missing-hermes.json'),
+    DANDELION_ROUTES_FILE: ROUTES_FILE,
     DANDELION_HERMES_PORTAL_BASE: `http://127.0.0.1:${ctx.portal.server.address().port}`,
     ...vars
   };
@@ -497,10 +499,10 @@ async function panelBadPort(ctx) {
 
 async function routeRows(ctx) {
   const rows = [
-    ['kimi headroom', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/k3 max kimi', 0],
-    ['5h at 90 trips', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.7 xhigh grok', 0],
-    ['weekly 95 evaporates', 'route', { kimi: [0, 95, 2], agy: [0, 0, 72] }, 'kimi-code/k3 max kimi', 0],
-    ['kimi only', 'route', { kimi: [0, 0, 72] }, 'kimi-code/k3 max kimi', 0],
+    ['kimi headroom', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'model-d kimi', 0],
+    ['5h at 90 trips', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'model-e xhigh grok', 0],
+    ['weekly 95 evaporates', 'route', { kimi: [0, 95, 2], agy: [0, 0, 72] }, 'model-d max kimi', 0],
+    ['kimi only', 'route', { kimi: [0, 0, 72] }, 'model-d kimi', 0],
     ['--high skips kimi', 'route --high', { kimi: [0, 0, 72] }, 'none', 1]
   ];
   for (const [label, args, usages, line, code] of rows) {
@@ -519,7 +521,7 @@ async function liveCaseRows(ctx) {
   const grok = await runRoute(ctx, 'route', liveCase(100), { junieHome: ctx.junie, authFile: ctx.auth });
   assert.deepEqual(
     { stdout: grok.stdout, stderr: grok.stderr, status: grok.status },
-    { stdout: 'grok-4.7 xhigh grok\n', stderr: '', status: 0 },
+    { stdout: 'model-e xhigh grok\n', stderr: '', status: 0 },
     describe('014 live case', grok)
   );
   assertNoToken(grok);
@@ -528,7 +530,7 @@ async function liveCaseRows(ctx) {
   const hermes = await runRoute(ctx, 'route', liveCase(100), { junieHome: ctx.junie, authFile: ctx.auth });
   assert.deepEqual(
     { stdout: hermes.stdout, stderr: hermes.stderr, status: hermes.status },
-    { stdout: 'x-ai/grok-4.7 xhigh hermes\n', stderr: '', status: 0 },
+    { stdout: 'vendor/model-h xhigh hermes\n', stderr: '', status: 0 },
     describe('014 live case hermes 0%', hermes)
   );
   assertNoToken(hermes);

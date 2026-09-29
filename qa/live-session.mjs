@@ -32,6 +32,7 @@ const CODEX_FIXTURE = "#!/bin/sh\necho 'Logged in using an API key - sk-proj-***
 const KILO_FIXTURE = "#!/bin/sh\n[ \"$1\" = \"profile\" ] || exit 2\necho 'Balance: $14.15'\n";
 
 const temps = [];
+const runs = [];
 
 async function tempDir() {
   const dir = await mkdtemp(join(tmpdir(), PREFIX));
@@ -74,6 +75,7 @@ export async function appEnv(pathDir) {
 export function launch(command, args, env) {
   const child = spawn(command, args, { cwd: rootDir, env, timeout: OUTER_TIMEOUT_MS });
   const run = { child, output: '', stderr: '', started: Date.now(), closed: once(child, 'close') };
+  runs.push(run);
   child.stdout.setEncoding('utf8').on('data', (chunk) => (run.output += chunk));
   child.stderr.setEncoding('utf8').on('data', (chunk) => (run.stderr += chunk));
   return run;
@@ -106,7 +108,15 @@ async function assertNoQaProcessLeft() {
   }
 }
 
+async function stopRuns() {
+  for (const run of runs.splice(0)) {
+    if (run.child.exitCode === null && run.child.signalCode === null) run.child.kill('SIGKILL');
+    await run.closed;
+  }
+}
+
 export async function cleanUp() {
+  await stopRuns();
   await Promise.all(temps.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   await assertNoQaProcessLeft();
   const pkg = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8'));

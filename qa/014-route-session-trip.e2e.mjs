@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, symlink } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { ROUTES_FILE } from './routes-fixture.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PREFIX = 'dandelion-qa-014-';
@@ -41,17 +42,17 @@ const ENV_NAMES = { claude: 'Q_CLAUDE', work: 'Q_WORK', agy: 'Q_AGY', kimi: 'Q_K
 const WORK_OFF = '{"claude-work": false}';
 
 const TRIP_ROWS = [
-  ['tripped evaporator loses to untripped one', { claude: [10, 80, 2], work: [95, 52, 2] }, undefined, 'claude-opus-5 max claude', 0],
-  ['work session 89: under the trip', { claude: [2, 13, 130], work: [89, 72, 5.35], grok: [9, 130] }, undefined, 'claude-opus-5 max claude-work', 0],
-  ['work session 90: the trip is inclusive', { claude: [2, 13, 130], work: [90, 72, 5.35], grok: [9, 130] }, undefined, 'grok-4.7 xhigh grok', 0],
-  ['tripped agy never evaporates', { agy: [95, 50, 2], claude: [0, 20, 72] }, undefined, 'claude-opus-5 high claude', 0],
-  ['kimi 5h at 95 loses rule 2 to a lower binding', { kimi: [95, 0, 72], grok: [97, 72] }, undefined, 'grok-4.7 xhigh grok', 0],
-  ['agy Five Hour at 90 loses rule 2', { agy: [90, 0, 72], claude: [10, 92, 72] }, undefined, 'claude-opus-5 high claude', 0],
-  ['claude session at 90 loses rule 2', { claude: [90, 0, 72], grok: [95, 72] }, undefined, 'grok-4.7 xhigh grok', 0],
-  ['a weekly at 95 does not trip (rule 1)', { kimi: [0, 95, 2], agy: [0, 0, 72] }, undefined, 'kimi-code/k3 max kimi', 0],
-  ['a weekly at 92 does not trip (rule 2)', { grok: [92, 72] }, undefined, 'grok-4.7 xhigh grok', 0],
+  ['tripped evaporator loses to untripped one', { claude: [10, 80, 2], work: [95, 52, 2] }, undefined, 'model-a max claude', 0],
+  ['work session 89: under the trip', { claude: [2, 13, 130], work: [89, 72, 5.35], grok: [9, 130] }, undefined, 'model-b max claude-work', 0],
+  ['work session 90: the trip is inclusive', { claude: [2, 13, 130], work: [90, 72, 5.35], grok: [9, 130] }, undefined, 'model-e xhigh grok', 0],
+  ['tripped agy never evaporates', { agy: [95, 50, 2], claude: [0, 20, 72] }, undefined, 'model-a high claude', 0],
+  ['kimi 5h at 95 loses rule 2 to a lower binding', { kimi: [95, 0, 72], grok: [97, 72] }, undefined, 'model-e xhigh grok', 0],
+  ['agy Five Hour at 90 loses rule 2', { agy: [90, 0, 72], claude: [10, 92, 72] }, undefined, 'model-a high claude', 0],
+  ['claude session at 90 loses rule 2', { claude: [90, 0, 72], grok: [95, 72] }, undefined, 'model-e xhigh grok', 0],
+  ['a weekly at 95 does not trip (rule 1)', { kimi: [0, 95, 2], agy: [0, 0, 72] }, undefined, 'model-d max kimi', 0],
+  ['a weekly at 92 does not trip (rule 2)', { grok: [92, 72] }, undefined, 'model-e xhigh grok', 0],
   ['every routable account tripped', { claude: [90, 0, 72], agy: [99, 0, 72], kimi: [100, 0, 72] }, undefined, 'none', 1],
-  ['ineligible work and tripped claude', { claude: [95, 80, 2], work: [0, 80, 2], agy: [10, 10, 72] }, WORK_OFF, 'gemini-3.8-flash-high high agy', 0],
+  ['ineligible work and tripped claude', { claude: [95, 80, 2], work: [0, 80, 2], agy: [10, 10, 72] }, WORK_OFF, 'model-c high agy', 0],
   ['only ineligible or tripped claude accounts', { claude: [95, 80, 2], work: [0, 80, 2] }, WORK_OFF, 'none', 1]
 ];
 
@@ -67,10 +68,10 @@ function liveCase(session) {
 }
 
 const LIVE_ROWS = [
-  ['live case, work session 100%', 'route', 100, 'grok-4.7 xhigh grok'],
-  ['live case, work session 89%', 'route', 89, 'claude-opus-5 max claude-work'],
-  ['live case, work session 90%', 'route', 90, 'grok-4.7 xhigh grok'],
-  ['live case, route --high', 'route --high', 100, 'claude-fable-5-1 max claude']
+  ['live case, work session 100%', 'route', 100, 'model-e xhigh grok'],
+  ['live case, work session 89%', 'route', 89, 'model-b max claude-work'],
+  ['live case, work session 90%', 'route', 90, 'model-e xhigh grok'],
+  ['live case, route --high', 'route --high', 100, 'model-h1 max claude']
 ];
 
 const temps = [];
@@ -163,6 +164,7 @@ async function envFor(ctx, usages, state) {
     HOME: home,
     DANDELION_STATE_FILE: join(home, 'state', 'eligibility.json'),
     DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json'),
+    DANDELION_ROUTES_FILE: ROUTES_FILE,
     TZ: ctx.zone,
     PATH: ctx.bin,
     DANDELION_KIMI_PORT: String(await freePort()),

@@ -1,0 +1,10 @@
+{ "route": {
+    "claude":      { "standard": "model-a high",         "max": "model-a max" },
+    "claude-work": { "standard": "model-b high",         "max": "model-b max" },
+    "agy":         { "standard": "model-c high",         "max": "model-c max" },
+    "kimi":        { "standard": "model-d",              "max": "model-d max" },
+    "grok":        { "standard": "model-e xhigh",        "max": "model-e xhigh" },
+    "cursor":      { "standard": "model-f",              "max": "model-f" },
+    "junie":       { "standard": "model-g high",         "max": "model-g high" },
+    "hermes":      { "standard": "vendor/model-h xhigh", "max": "vendor/model-h xhigh" } },
+  "high": { "fable": "model-h1 max", "cursor": "model-h2", "opus": "model-h3 max", "grok": "model-h4 xhigh", "agy": "model-h5 high" } }

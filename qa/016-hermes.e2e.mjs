@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, stat, symlink } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { ROUTES_FILE } from './routes-fixture.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PREFIX = 'dandelion-qa-016-';
@@ -250,6 +251,7 @@ async function envFor(ctx, usages, { state, extraEnv = {}, junieHome, color = fa
     DANDELION_CURSOR_API_BASE: `http://127.0.0.1:${ctx.cursor.address().port}`,
     DANDELION_JUNIE_HOME: junieHome ?? ctx.empty,
     DANDELION_HERMES_AUTH_FILE: authFile ?? ctx.auth,
+    DANDELION_ROUTES_FILE: ROUTES_FILE,
     DANDELION_HERMES_PORTAL_BASE: `http://127.0.0.1:${ctx.portal.server.address().port}`,
     DANDELION_REFRESH_SECONDS: '3600',
     ...(color ? {} : { NO_COLOR: '1' }),
@@ -384,12 +386,12 @@ async function happyPathAndColour(ctx) {
 
 async function routeCases(ctx) {
   const rows = [
-    ['live case junie 30% hermes 75%', 'route', liveCase(100), {}, 5.5, 72, 'grok-4.7 xhigh grok', 0],
-    ['live case hermes 0%', 'route', liveCase(100), {}, 22, 72, 'x-ai/grok-4.7 xhigh hermes', 0],
-    ['live case junie 0% hermes 0%', 'route', liveCase(100), { junieHome: ctx.full }, 22, 72, 'gemini-3.8-flash high junie', 0],
-    ['hermes 60% evaporates in 1h', 'route', liveCase(100), {}, 8.8, 1, 'x-ai/grok-4.7 xhigh hermes', 0],
-    ['hermes ineligible', 'route', liveCase(100), { state: '{"hermes": false}' }, 22, 72, 'grok-4.7 xhigh grok', 0],
-    ['live case --high', 'route --high', liveCase(100), {}, 22, 72, 'claude-fable-5-1 max claude', 0],
+    ['live case junie 30% hermes 75%', 'route', liveCase(100), {}, 5.5, 72, 'model-e xhigh grok', 0],
+    ['live case hermes 0%', 'route', liveCase(100), {}, 22, 72, 'vendor/model-h xhigh hermes', 0],
+    ['live case junie 0% hermes 0%', 'route', liveCase(100), { junieHome: ctx.full }, 22, 72, 'model-g high junie', 0],
+    ['hermes 60% evaporates in 1h', 'route', liveCase(100), {}, 8.8, 1, 'vendor/model-h xhigh hermes', 0],
+    ['hermes ineligible', 'route', liveCase(100), { state: '{"hermes": false}' }, 22, 72, 'model-e xhigh grok', 0],
+    ['live case --high', 'route --high', liveCase(100), {}, 22, 72, 'model-h1 max claude', 0],
     ['--high never uses hermes', 'route --high', {}, {}, 22, 72, 'none', 1]
   ];
   for (const [label, args, usages, options, remaining, hours, line, code] of rows) {
@@ -410,7 +412,7 @@ async function liveToggleAndFlash(ctx) {
   const session = startLive(env);
   try {
     await waitSettled(session);
-    assert.ok(lastFrame(session).includes('x-ai/grok-4.7 xhigh'), lastFrame(session));
+    assert.ok(lastFrame(session).includes('vendor/model-h xhigh'), lastFrame(session));
     assert.match(lastFrame(session), /\| hermes +\|/, lastFrame(session));
     session.child.stdin.write('k');
     await waitFor(session, () => panelLines(lastFrame(session), 'kilo')[0] === '▸ kilo', 10000, 'selected kilo');
@@ -523,7 +525,7 @@ async function readmeDocumentsHermes() {
   assert.ok(readme.includes('All ten probes run in parallel'));
   assert.match(readme, /^- `DANDELION_HERMES_AUTH_FILE` - .*Defaults to `~\/\.hermes\/auth\.json`/m);
   assert.match(readme, /^- `DANDELION_HERMES_PORTAL_BASE` - .*Defaults to `https:\/\/portal\.nousresearch\.com`/m);
-  assert.ok(readme.includes('| hermes | `x-ai/grok-4.7 xhigh` | `x-ai/grok-4.7 xhigh` |'));
+  assert.ok(readme.includes('| hermes | `route.hermes.standard` | `route.hermes.max` |'));
   assert.ok(readme.includes('hermes credits'));
   assert.ok(readme.includes('`--high` does not use hermes'));
   const pkg = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8'));

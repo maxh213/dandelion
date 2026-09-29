@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, symlink } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { ROUTES_FILE } from './routes-fixture.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PREFIX = 'dandelion-qa-012-';
@@ -39,20 +40,20 @@ if (me === 'kimi') { const v = q('Q_KIMI'); if (!v) process.exit(1); const port 
 const cursor = (pct) => [pct, pct, pct, 72];
 
 const HIGH_ROWS = [
-  ['personal Fable tripped, all-models not', { claude: [3, 86, 100], work: [0, 12, 23] }, undefined, 'claude-fable-5-1 max claude-work', 0],
-  ['higher left on gating windows wins', { claude: [85, 10, 40], work: [10, 10, 70] }, undefined, 'claude-fable-5-1 max claude-work', 0],
-  ['pops back to personal', { claude: [85, 10, 40], work: [10, 10, 95] }, undefined, 'claude-fable-5-1 max claude', 0],
-  ['equal left goes to personal', { claude: [20, 10, 20], work: [20, 60, 0] }, undefined, 'claude-fable-5-1 max claude', 0],
-  ['no Fable line counts as 0', { claude: [10, 50, '-'] }, undefined, 'claude-fable-5-1 max claude', 0],
-  ['all-models does not gate fable', { claude: [10, 95, 10], cursor: cursor(10) }, undefined, 'claude-fable-5-1 max claude', 0],
-  ['session gates fable', { claude: [90, 10, 10], cursor: cursor(10) }, undefined, 'kimi-k3-max cursor', 0],
-  ['both Fable windows tripped', { claude: [10, 10, 90], work: [10, 10, 95], cursor: cursor(50) }, undefined, 'kimi-k3-max cursor', 0],
-  ['one cursor window trips cursor', { claude: [10, 40, 95], work: [10, 95, 95], cursor: [10, 90, 10, 72] }, undefined, 'claude-opus-5 max claude', 0],
-  ['opus: higher left wins', { claude: [10, 70, 95], work: [10, 40, 90], cursor: cursor(90) }, undefined, 'claude-opus-5 max claude-work', 0],
-  ['claude and cursor tripped, grok 60', { claude: [95, 10, 10], cursor: cursor(95), grok: [60, 72] }, undefined, 'grok-4.7 xhigh grok', 0],
-  ['grok tripped, agy left', { grok: [90, 72], agy: [10, 20, 72] }, undefined, 'gemini-3.8-flash-high high agy', 0],
-  ['quality before headroom', { claude: [10, 50, '-'], agy: [0, 0, 72] }, undefined, 'claude-fable-5-1 max claude', 0],
-  ['ineligible work skipped', { claude: [10, 10, 95], work: [10, 10, 10], cursor: cursor(50) }, '{"claude-work": false}', 'kimi-k3-max cursor', 0],
+  ['personal Fable tripped, all-models not', { claude: [3, 86, 100], work: [0, 12, 23] }, undefined, 'model-h1 max claude-work', 0],
+  ['higher left on gating windows wins', { claude: [85, 10, 40], work: [10, 10, 70] }, undefined, 'model-h1 max claude-work', 0],
+  ['pops back to personal', { claude: [85, 10, 40], work: [10, 10, 95] }, undefined, 'model-h1 max claude', 0],
+  ['equal left goes to personal', { claude: [20, 10, 20], work: [20, 60, 0] }, undefined, 'model-h1 max claude', 0],
+  ['no Fable line counts as 0', { claude: [10, 50, '-'] }, undefined, 'model-h1 max claude', 0],
+  ['all-models does not gate fable', { claude: [10, 95, 10], cursor: cursor(10) }, undefined, 'model-h1 max claude', 0],
+  ['session gates fable', { claude: [90, 10, 10], cursor: cursor(10) }, undefined, 'model-h2 cursor', 0],
+  ['both Fable windows tripped', { claude: [10, 10, 90], work: [10, 10, 95], cursor: cursor(50) }, undefined, 'model-h2 cursor', 0],
+  ['one cursor window trips cursor', { claude: [10, 40, 95], work: [10, 95, 95], cursor: [10, 90, 10, 72] }, undefined, 'model-h3 max claude', 0],
+  ['opus: higher left wins', { claude: [10, 70, 95], work: [10, 40, 90], cursor: cursor(90) }, undefined, 'model-h3 max claude-work', 0],
+  ['claude and cursor tripped, grok 60', { claude: [95, 10, 10], cursor: cursor(95), grok: [60, 72] }, undefined, 'model-h4 xhigh grok', 0],
+  ['grok tripped, agy left', { grok: [90, 72], agy: [10, 20, 72] }, undefined, 'model-h5 high agy', 0],
+  ['quality before headroom', { claude: [10, 50, '-'], agy: [0, 0, 72] }, undefined, 'model-h1 max claude', 0],
+  ['ineligible work skipped', { claude: [10, 10, 95], work: [10, 10, 10], cursor: cursor(50) }, '{"claude-work": false}', 'model-h2 cursor', 0],
   ['kimi is never in the chain', { kimi: [0, 0, 72] }, undefined, 'none', 1],
   ['everything tripped or unavailable', { claude: [90, 90, 90], cursor: cursor(99), grok: [90, 72], agy: [10, 90, 72], kimi: [0, 0, 72] }, undefined, 'none', 1]
 ];
@@ -60,19 +61,19 @@ const HIGH_ROWS = [
 const ARGUMENT_USAGES = { claude: [10, 50, '-'], agy: [0, 0, 72] };
 
 const ARGUMENT_ROWS = [
-  ['route --high', 'claude-fable-5-1 max claude'],
-  ['route extra --high', 'claude-fable-5-1 max claude'],
-  ['route', 'gemini-3.8-flash-high high agy'],
-  ['route --High', 'gemini-3.8-flash-high high agy']
+  ['route --high', 'model-h1 max claude'],
+  ['route extra --high', 'model-h1 max claude'],
+  ['route', 'model-c high agy'],
+  ['route --High', 'model-c high agy']
 ];
 
 const PLAIN_ROWS = [
-  [{ qclaude: [0, 86, 2], agy: [0, 0, 72] }, 'claude-opus-5 max claude'],
-  [{ qclaude: [20, 30, 72], qwork: [10, 5, 72], agy: [15, 20, 72] }, 'claude-opus-5 high claude-work'],
-  [{ agy: [0, 90, 2], kimi: [0, 90, 2] }, 'gemini-3.1-pro-high high agy'],
-  [{ kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/k3 max kimi'],
-  [{ kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.7 xhigh grok'],
-  [{ qclaude: [0, 86, 2], cursor: [60, 60, 60, 2] }, 'kimi-k3-max cursor']
+  [{ qclaude: [0, 86, 2], agy: [0, 0, 72] }, 'model-a max claude'],
+  [{ qclaude: [20, 30, 72], qwork: [10, 5, 72], agy: [15, 20, 72] }, 'model-b high claude-work'],
+  [{ agy: [0, 90, 2], kimi: [0, 90, 2] }, 'model-c max agy'],
+  [{ kimi: [10, 10, 72], grok: [50, 72] }, 'model-d kimi'],
+  [{ kimi: [90, 10, 72], grok: [50, 72] }, 'model-e xhigh grok'],
+  [{ qclaude: [0, 86, 2], cursor: [60, 60, 60, 2] }, 'model-f cursor']
 ];
 
 const ENV_NAMES = { claude: 'H_CLAUDE', work: 'H_WORK', qclaude: 'Q_CLAUDE', qwork: 'Q_WORK', agy: 'Q_AGY', kimi: 'Q_KIMI' };
@@ -163,6 +164,7 @@ async function envFor(ctx, usages, state, extraEnv) {
     HOME: home,
     DANDELION_STATE_FILE: join(home, 'state', 'eligibility.json'),
     DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json'),
+    DANDELION_ROUTES_FILE: ROUTES_FILE,
     TZ: ctx.zone,
     PATH: ctx.bin,
     DANDELION_KIMI_PORT: String(await freePort()),
@@ -218,7 +220,7 @@ async function terminalStillPrintsOneLine(ctx) {
   const env = await envFor(ctx, { claude: [10, 50, '-'] }, undefined, { TERM: 'xterm', SHELL: '/bin/sh' });
   const child = spawn('/usr/bin/script', ['-qfec', 'dandelion route --high', '/dev/null'], { cwd: rootDir, env, timeout: OUTER_TIMEOUT_MS });
   const result = await collect(child);
-  assert.deepEqual(result, { stdout: 'claude-fable-5-1 max claude\r\n', stderr: '', status: 0 }, describe('terminal', result));
+  assert.deepEqual(result, { stdout: 'model-h1 max claude\r\n', stderr: '', status: 0 }, describe('terminal', result));
 }
 
 async function assertNoQaProcessLeft() {

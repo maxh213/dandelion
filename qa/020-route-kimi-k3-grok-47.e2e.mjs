@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, symlink } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { ROUTES_FILE } from './routes-fixture.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PREFIX = 'dandelion-qa-020-';
@@ -263,6 +264,7 @@ async function envFor(ctx, usages, { authFile, junieHome, extraEnv = {} } = {}) 
     DANDELION_CURSOR_API_BASE: `http://127.0.0.1:${ctx.cursor.address().port}`,
     DANDELION_JUNIE_HOME: junieHome ?? ctx.empty,
     DANDELION_HERMES_AUTH_FILE: authFile ?? join(home, 'missing-hermes.json'),
+    DANDELION_ROUTES_FILE: ROUTES_FILE,
     DANDELION_HERMES_PORTAL_BASE: `http://127.0.0.1:${ctx.portal.server.address().port}`,
     NO_COLOR: '1',
     ...vars,
@@ -300,11 +302,11 @@ function configure(portal, remaining = 5.5, hours = 72) {
 
 async function movedLines(ctx) {
   const rows = [
-    ['kimi free on both', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/k3 max kimi', 0],
-    ['grok alone', 'route', { grok: [50, 72] }, 'grok-4.7 xhigh grok', 0],
-    ['--high rank 4 grok', 'route --high', { claude: [95, 10, 10], cursor: [95, 95, 95, 72], grok: [60, 72] }, 'grok-4.7 xhigh grok', 0],
-    ['kimi 5h tripped', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.7 xhigh grok', 0],
-    ['kimi weekly evaporates', 'route', { kimi: [0, 95, 2], agy: [0, 0, 72] }, 'kimi-code/k3 max kimi', 0]
+    ['kimi free on both', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'model-d kimi', 0],
+    ['grok alone', 'route', { grok: [50, 72] }, 'model-e xhigh grok', 0],
+    ['--high rank 4 grok', 'route --high', { claude: [95, 10, 10], cursor: [95, 95, 95, 72], grok: [60, 72] }, 'model-h4 xhigh grok', 0],
+    ['kimi 5h tripped', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'model-e xhigh grok', 0],
+    ['kimi weekly evaporates', 'route', { kimi: [0, 95, 2], agy: [0, 0, 72] }, 'model-d max kimi', 0]
   ];
   for (const [label, args, usages, line, code] of rows) {
     const result = await run(ctx, args, usages);
@@ -321,7 +323,7 @@ async function hermesLines(ctx) {
   const grok = await run(ctx, 'route', liveCase(100), { junieHome: ctx.junie, authFile: ctx.auth });
   assert.deepEqual(
     { stdout: grok.stdout, stderr: grok.stderr, status: grok.status },
-    { stdout: 'grok-4.7 xhigh grok\n', stderr: '', status: 0 },
+    { stdout: 'model-e xhigh grok\n', stderr: '', status: 0 },
     describe('hx hermes 75%', grok)
   );
 
@@ -329,7 +331,7 @@ async function hermesLines(ctx) {
   const hermes = await run(ctx, 'route', liveCase(100), { junieHome: ctx.junie, authFile: ctx.auth });
   assert.deepEqual(
     { stdout: hermes.stdout, stderr: hermes.stderr, status: hermes.status },
-    { stdout: 'x-ai/grok-4.7 xhigh hermes\n', stderr: '', status: 0 },
+    { stdout: 'vendor/model-h xhigh hermes\n', stderr: '', status: 0 },
     describe('hx hermes 0%', hermes)
   );
 }
@@ -342,21 +344,25 @@ async function routeBoxes(ctx) {
     const settled = frames(session).find((frame) => !frame.includes('probing…'));
     assert.ok(settled, 'no settled frame');
     const head = settled.split('\n').slice(0, 15).join('\n');
-    assert.equal(boxLinesOf(settled), boxPair('kimi-code/k3 max', 'kimi', 'claude-fable-5-1 max', 'claude'), head);
-    assert.ok(!head.includes('kimi-for-coding-highspeed'), head);
-    assert.ok(!head.includes('grok-4.6'), head);
+    assert.equal(boxLinesOf(settled), boxPair('model-d', 'kimi', 'model-h1 max', 'claude'), head);
+    for (const line of await shippedLines()) assert.ok(!boxLinesOf(settled).includes(line), head);
     await quit(session);
   } finally {
     session.child.kill();
   }
 }
 
+async function shippedLines() {
+  const shipped = JSON.parse(await readFile(join(rootDir, 'routes.json'), 'utf8'));
+  return [...Object.values(shipped.route).flatMap(Object.values), ...Object.values(shipped.high)];
+}
+
 async function readmePins() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
-  assert.ok(readme.includes('| kimi | `kimi-code/k3 max` | `kimi-code/k3 max` |'), 'README kimi row');
-  assert.ok(readme.includes('| grok | `grok-4.7 xhigh` | `grok-4.7 xhigh` |'), 'README grok row');
-  assert.ok(readme.includes('| hermes | `x-ai/grok-4.7 xhigh` | `x-ai/grok-4.7 xhigh` |'), 'README hermes row');
-  assert.ok(readme.includes('| 4 | grok | (all) | `grok-4.7 xhigh` |'), 'README --high rank 4');
+  assert.ok(readme.includes('| kimi | `route.kimi.standard` | `route.kimi.max` |'), 'README kimi row');
+  assert.ok(readme.includes('| grok | `route.grok.standard` | `route.grok.max` |'), 'README grok row');
+  assert.ok(readme.includes('| hermes | `route.hermes.standard` | `route.hermes.max` |'), 'README hermes row');
+  assert.ok(readme.includes('| 4 | grok | (all) | `high.grok` |'), 'README --high rank 4');
 }
 
 async function livingSurfacesUnderQa() {

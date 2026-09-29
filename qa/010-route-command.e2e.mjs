@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, writeFile, chmod, rm, readFile, readdir, symlink } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { ROUTES_FILE } from './routes-fixture.mjs';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PREFIX = 'dandelion-qa-010-';
@@ -36,19 +37,19 @@ if (me === 'kimi') { const v = q('Q_KIMI'); if (!v) process.exit(1); const port 
 `;
 
 const ROUTE_ROWS = [
-  ['evaporation beats perfect headroom', 'route', { claude: [0, 86, 2], agy: [0, 0, 72] }, 'claude-opus-5 max claude'],
-  ['highest evaporation score wins', 'route', { claude: [0, 86, 2], cursor: [60, 2] }, 'kimi-k3-max cursor'],
-  ['evaporation tie goes to dashboard order', 'route', { agy: [0, 90, 2], kimi: [0, 90, 2] }, 'gemini-3.1-pro-high high agy'],
-  ['an untouched weekly (97 left) never evaporates', 'route', { claude: [0, 3, 2], agy: [10, 10, 72] }, 'claude-opus-5 high claude'],
-  ['a reset after local midnight never evaporates', 'route', { claude: [0, 86, 14], agy: [10, 10, 72] }, 'gemini-3.8-flash-high high agy'],
-  ['most headroom, claude-work highest', 'route', { claude: [20, 30, 72], work: [10, 5, 72], agy: [15, 20, 72] }, 'claude-opus-5 high claude-work'],
-  ['most headroom, agy highest', 'route', { claude: [20, 30, 72], agy: [5, 5, 72] }, 'gemini-3.8-flash-high high agy'],
-  ['kimi bound by its 5h window', 'route', { kimi: [90, 10, 72], agy: [50, 50, 72] }, 'gemini-3.8-flash-high high agy'],
-  ['a missing rolling kind counts as 100', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'grok-4.7 xhigh grok'],
-  ['kimi free on both', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'kimi-code/k3 max kimi'],
-  ['headroom tie goes to dashboard order', 'route', { agy: [20, 20, 72], kimi: [20, 20, 72] }, 'gemini-3.8-flash-high high agy'],
-  ['an unavailable candidate is skipped', 'route', { cursor: [40, 72] }, 'kimi-k3-max cursor'],
-  ['later arguments are ignored', 'route extra', { claude: [0, 86, 2] }, 'claude-opus-5 max claude']
+  ['evaporation beats perfect headroom', 'route', { claude: [0, 86, 2], agy: [0, 0, 72] }, 'model-a max claude'],
+  ['highest evaporation score wins', 'route', { claude: [0, 86, 2], cursor: [60, 2] }, 'model-f cursor'],
+  ['evaporation tie goes to dashboard order', 'route', { agy: [0, 90, 2], kimi: [0, 90, 2] }, 'model-c max agy'],
+  ['an untouched weekly (97 left) never evaporates', 'route', { claude: [0, 3, 2], agy: [10, 10, 72] }, 'model-a high claude'],
+  ['a reset after local midnight never evaporates', 'route', { claude: [0, 86, 14], agy: [10, 10, 72] }, 'model-c high agy'],
+  ['most headroom, claude-work highest', 'route', { claude: [20, 30, 72], work: [10, 5, 72], agy: [15, 20, 72] }, 'model-b high claude-work'],
+  ['most headroom, agy highest', 'route', { claude: [20, 30, 72], agy: [5, 5, 72] }, 'model-c high agy'],
+  ['kimi bound by its 5h window', 'route', { kimi: [90, 10, 72], agy: [50, 50, 72] }, 'model-c high agy'],
+  ['a missing rolling kind counts as 100', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'model-e xhigh grok'],
+  ['kimi free on both', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'model-d kimi'],
+  ['headroom tie goes to dashboard order', 'route', { agy: [20, 20, 72], kimi: [20, 20, 72] }, 'model-c high agy'],
+  ['an unavailable candidate is skipped', 'route', { cursor: [40, 72] }, 'model-f cursor'],
+  ['later arguments are ignored', 'route extra', { claude: [0, 86, 2] }, 'model-a max claude']
 ];
 
 const DASHBOARD_ARGS = ['--once route', 'routes'];
@@ -139,6 +140,7 @@ async function run(ctx, args, usages, extraEnv = {}) {
     HOME: home,
     DANDELION_STATE_FILE: join(home, 'no-state', 'eligibility.json'),
     DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json'),
+    DANDELION_ROUTES_FILE: ROUTES_FILE,
     TZ: ctx.zone,
     PATH: ctx.bin,
     DANDELION_KIMI_PORT: String(await freePort()),
@@ -178,7 +180,7 @@ async function routeAnywhereButFirstKeepsTheDashboard(ctx) {
     const first = result.stdout.split('\n')[0];
     assert.ok(first.startsWith('DANDELION'), describe(args, result));
     assert.match(first, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/, describe(args, result));
-    assert.ok(!result.stdout.includes('claude-opus-5'), describe(args, result));
+    assert.ok(!result.stdout.includes('model-a'), describe(args, result));
   }
 }
 
