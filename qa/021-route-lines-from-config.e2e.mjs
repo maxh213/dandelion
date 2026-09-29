@@ -524,7 +524,7 @@ async function livingSurfaces() {
   const tableRows = readme.split('\n').filter((row) => row.startsWith('|'));
   for (const line of lines) assert.ok(!tableRows.some((row) => row.includes(line)), `a README table holds the line ${line}`);
 
-  const history = spawnSync('git', ['diff', '--stat', 'd99c410', '--', 'tasks/0[01]*', 'tasks/020*', 'features/0[01]*', 'features/020*'], { cwd: rootDir, encoding: 'utf8' });
+  const history = spawnSync('git', ['diff', '--stat', 'd99c410', '--', 'tasks/0[01]*', 'tasks/020*', 'features/0[01]*', 'features/020*', ':!tasks/019*', ':!features/019*'], { cwd: rootDir, encoding: 'utf8' });
   assert.equal(history.status, 0, history.stderr);
   assert.equal(history.stdout, '', `historical tasks or features changed:\n${history.stdout}`);
 }

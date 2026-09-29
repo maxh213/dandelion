@@ -10,7 +10,7 @@ import { VALUES, absent, bothNames, emit, perCall, perCallSync, repeat } from '.
 const tree = process.env.MARESTAIL_PERF_TREE_PATH ?? process.cwd();
 const main = join(tree, 'src', 'main.ts');
 const appEntry = join(tree, 'src', 'app', 'index.ts');
-const renderEntry = join(tree, 'src', 'render', 'terminal.ts');
+const renderEntry = join(tree, 'src', 'render', 'index.ts');
 const domainEntry = join(tree, 'src', 'domain', 'index.ts');
 const NOW = '2026-09-14T11:00:00.000Z';
 const MIDNIGHT = '2026-09-15T00:00:00.000Z';
@@ -141,7 +141,7 @@ const turn = () => new Promise((resolve) => setImmediate(resolve));
 async function liveSession() {
   const keyboard = keyboardStub();
   let last = '';
-  const screen = { write: (text) => { last = text; } };
+  const screen = { rows: 60, write: (text) => { last = text; } };
   const ended = app.runLive(stubIo, liveEnv, keyboard, screen);
   const deadline = Date.now() + 10000;
   while (!(last.includes('api balance') && !last.includes('probing…'))) {

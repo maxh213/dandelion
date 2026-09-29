@@ -122,7 +122,7 @@ function startDashboard(io: ProbeIo, env: Record<string, string>, clock?: () => 
   const writes: string[] = [];
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
   const routed = 'DANDELION_ROUTES_FILE' in env ? env : { DANDELION_ROUTES_FILE: ROUTES_FILE, ...env };
-  const finished = runLive(io, routed, keyboard, { write: (text: string) => writes.push(text) }, clock);
+  const finished = runLive(io, routed, keyboard, { rows: 60, write: (text: string) => writes.push(text) }, clock);
   const frames = () => writes.filter((text) => text.startsWith(LIVE_CLEAR)).map((text) => text.slice(LIVE_CLEAR.length));
   const press = (key: string) => keyboard.emit('data', key);
   return { writes, finished, frames, press, lastFrame: () => frames().at(-1) ?? '' };

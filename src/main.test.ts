@@ -51,7 +51,7 @@ function procOf(argv: string[], stdinTTY: boolean | undefined, stdoutTTY: boolea
   const writes: string[] = [];
   const errors: string[] = [];
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), isTTY: stdinTTY });
-  const stdout = { isTTY: stdoutTTY, write: (text: string) => writes.push(text) };
+  const stdout = { isTTY: stdoutTTY, rows: 60, write: (text: string) => writes.push(text) };
   const stderr = { write: (text: string) => errors.push(text) };
   const proc = { argv, env: { NO_COLOR: '1', ...env }, stdin: keyboard, stdout, stderr, exit: vi.fn() };
   return { proc, keyboard, output: () => writes.join(''), errors: () => errors.join('') };
@@ -758,5 +758,11 @@ describe('main', () => {
     const tableRows = route.split('\n').filter((line) => /^\| (\d|claude|agy|kimi|grok|cursor|junie|hermes)/.test(line));
     expect(tableRows).toHaveLength(13);
     expect(tableRows.every((row) => /`(route\.[a-z-]+\.(standard|max)|high\.[a-z]+)` \|$/.test(row))).toBe(true);
+  });
+
+  it('README documents that the live dashboard fits the terminal', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const commands = readme.split('## Run Commands')[1].split('## ')[0];
+    expect(commands).toMatch(/^- `npm start` - .*fits the terminal: the `route` and `route --high` boxes stay at the top, and the provider list scrolls with `↑↓\/jk` so earlier panels, personal `claude` included, stay reachable/m);
   });
 });

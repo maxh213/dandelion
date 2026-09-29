@@ -1,18 +1,6 @@
-import {
-  HOT_PCT,
-  NO_ROUTE,
-  formatCountdown,
-  highRouteLine,
-  nextLocalMidnight,
-  routeLine,
-  summariseFleet,
-  type Balance,
-  type ProviderUsage,
-  type Routes,
-  type UsageWindow
-} from '../domain/index.ts';
+import { HOT_PCT, formatCountdown, type Balance, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
-const WIDTH = 72;
+export const WIDTH = 72;
 const GAUGE_CELLS = 20;
 const LABEL_CELLS = 35;
 const PERCENT_CELLS = 4;
@@ -21,19 +9,8 @@ const DIM = '\x1b[90m';
 const RESET = '\x1b[0m';
 const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
 const TITLE = 'DANDELION';
-const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
-const REFRESHING = 'refreshing…';
-const HELP_FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
 const ROUTING_OFF = 'routing off';
 const MARKER = '▸ ';
-const BOX_WIDTH = 35;
-const BOX_TEXT_CELLS = 31;
-const BOX_GAP = '  ';
-const ROUTE_TITLE = 'route';
-const HIGH_TITLE = 'route --high';
-const NO_SUBSCRIPTION = 'no subscription available';
-const PROBING = 'probing…';
-const ROUTES_FILE_ERROR = 'routes file error';
 
 export type PanelMarks = { selected: boolean; ineligible: boolean; caption?: string };
 
@@ -42,19 +19,23 @@ function styled(text: string, code: string, noColor: boolean): string {
   return `${code}${text}${RESET}`;
 }
 
-function dim(text: string, noColor: boolean): string {
+export function bold(text: string, noColor: boolean): string {
+  return styled(text, BOLD, noColor);
+}
+
+export function dim(text: string, noColor: boolean): string {
   return styled(text, DIM, noColor);
 }
 
-function repeatChar(char: string, count: number): string {
+export function repeatChar(char: string, count: number): string {
   return char.repeat(Math.max(0, count));
 }
 
-function clockTime(instant: string): string {
+export function clockTime(instant: string): string {
   return `${instant.slice(11, 19)}Z`;
 }
 
-function cellCount(text: string): number {
+export function cellCount(text: string): number {
   return [...text].length;
 }
 
@@ -62,8 +43,14 @@ function bannerGap(right: string): string {
   return repeatChar(' ', WIDTH - TITLE.length - cellCount(right));
 }
 
-function bannerLine(right: string, noColor: boolean): string {
+export function bannerLine(right: string, noColor: boolean): string {
   return styled(`${TITLE}${bannerGap(right)}${right}`, BOLD, noColor);
+}
+
+export function splitBanner(emphasis: string, right: string, noColor: boolean): string {
+  const rest = ` · ${right}`;
+  const lead = TITLE + bannerGap(emphasis + rest);
+  return styled(lead, BOLD, noColor) + dim(emphasis, noColor) + styled(rest, BOLD, noColor);
 }
 
 export function renderBanner(instant: string, noColor: boolean): string {
@@ -91,6 +78,10 @@ function headerLine(name: string, marks: PanelMarks, tag: (text: string) => stri
 function dimPanel(lines: string[], marks: PanelMarks, noColor: boolean): string {
   if (!marks.selected) return dim([plainRule(noColor), ...lines].join('\n'), noColor);
   return `${markedRule(marks, noColor)}\n${dim(lines.join('\n'), noColor)}`;
+}
+
+export function renderDimPanel(name: string, body: string[], noColor: boolean, marks: PanelMarks): string {
+  return dimPanel([headerLine(name, marks, String), ...body], marks, noColor);
 }
 
 function gaugeCells(filledCells: number, noColor: boolean): string {
@@ -126,7 +117,7 @@ export function styleToken(usedPct: number): StyleToken {
   return RAMP.find(([threshold]) => usedPct >= threshold)?.[1] ?? 'calm';
 }
 
-function cutCells(text: string, limit: number): string {
+export function cutCells(text: string, limit: number): string {
   const cells = [...text];
   return cells.length > limit ? `${cells.slice(0, limit - 1).join('').trimEnd()}…` : text;
 }
@@ -221,7 +212,7 @@ function assertNever(value: never): never {
   throw new Error(`Unexpected provider status: ${JSON.stringify(value)}`);
 }
 
-function renderPanel(usage: ProviderUsage, noColor: boolean, now: string, marks: PanelMarks): string {
+export function renderPanel(usage: ProviderUsage, noColor: boolean, now: string, marks: PanelMarks): string {
   switch (usage.status) {
     case 'ok':
       return renderPanelOk(usage, noColor, now, marks);
@@ -236,174 +227,4 @@ function renderPanel(usage: ProviderUsage, noColor: boolean, now: string, marks:
 export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string, ineligible: string[]): string {
   const panels = usages.map((usage) => renderPanel(usage, noColor, now, { selected: false, ineligible: ineligible.includes(usage.id) }));
   return [renderBanner(now, noColor), ...panels].join('\n');
-}
-
-export type LiveSlot = { id: string; usage: ProviderUsage | undefined };
-
-export type Flash = { index: number; message: string };
-
-export type LiveView = {
-  slots: LiveSlot[];
-  spinner: number;
-  refreshing: boolean;
-  footer: boolean;
-  ineligible: string[];
-  zone: string;
-  routes: Routes;
-  settled?: ProviderUsage[];
-  selected?: number;
-  flash?: Flash;
-};
-
-function settledUsages(slots: LiveSlot[]): ProviderUsage[] {
-  return slots.flatMap((slot) => (slot.usage === undefined ? [] : [slot.usage]));
-}
-
-function dataAge(usages: ProviderUsage[], now: string): string {
-  if (usages.length === 0) return '';
-  const oldest = new Date(Math.min(...usages.map((usage) => Date.parse(usage.fetchedAt)))).toISOString();
-  return `data ${formatCountdown(now, oldest)} old · `;
-}
-
-function refreshingBanner(tail: string, noColor: boolean): string {
-  const rest = ` · ${tail}`;
-  const lead = TITLE + bannerGap(REFRESHING + rest);
-  return styled(lead, BOLD, noColor) + dim(REFRESHING, noColor) + styled(rest, BOLD, noColor);
-}
-
-function liveBanner(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string {
-  const tail = `${dataAge(usages, now)}${clockTime(now)}`;
-  return view.refreshing ? refreshingBanner(tail, noColor) : bannerLine(tail, noColor);
-}
-
-function hotSegment(hot: number, windows: number): string {
-  return hot === 0 ? `all windows below ${HOT_PCT}%` : `${hot}/${windows} windows above ${HOT_PCT}%`;
-}
-
-function resetSegment(head: string, next: { id: string; label: string; resetsAt: string }, now: string): string {
-  const prefix = `${head}${next.id} `;
-  const suffix = ` in ${formatCountdown(next.resetsAt, now)}`;
-  return `${prefix}${cutCells(next.label, WIDTH - cellCount(prefix) - cellCount(suffix))}${suffix}`;
-}
-
-function summaryLine(usages: ProviderUsage[], now: string): string {
-  const fleet = summariseFleet(usages, now);
-  const head = `${hotSegment(fleet.hot, fleet.windows)} · next reset: `;
-  return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now);
-}
-
-function probingLine(spinner: number): string {
-  return `${SPINNER_FRAMES[spinner % SPINNER_FRAMES.length]} ${PROBING}`;
-}
-
-function pendingPanel(id: string, spinner: number, noColor: boolean, marks: PanelMarks): string {
-  return dimPanel([headerLine(id, marks, String), probingLine(spinner)], marks, noColor);
-}
-
-function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
-  const caption = view.flash?.index === index ? view.flash.message : undefined;
-  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), caption };
-}
-
-function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
-  return slot.usage === undefined ? pendingPanel(slot.id, spinner, noColor, marks) : renderPanel(slot.usage, noColor, now, marks);
-}
-
-type BoxAnswer = { model: string; account: string; dimmed: boolean };
-
-function boxTop(title: string, noColor: boolean): string {
-  const [left, line, right] = noColor ? ['+', '-', '+'] : ['┌', '─', '┐'];
-  const head = `${left}${line} ${title} `;
-  return `${head}${repeatChar(line, BOX_WIDTH - cellCount(head) - 1)}${right}`;
-}
-
-function boxBottom(noColor: boolean): string {
-  return noColor ? `+${repeatChar('-', BOX_WIDTH - 2)}+` : `└${repeatChar('─', BOX_WIDTH - 2)}┘`;
-}
-
-function boxSide(noColor: boolean): string {
-  return noColor ? '|' : '│';
-}
-
-function boxText(text: string): string {
-  return ` ${cutCells(text, BOX_TEXT_CELLS).padEnd(BOX_TEXT_CELLS)} `;
-}
-
-function dimBoxRow(content: string, noColor: boolean): string {
-  return dim(`${boxSide(noColor)}${content}${boxSide(noColor)}`, noColor);
-}
-
-function withSides(content: string, noColor: boolean): string {
-  const side = dim(boxSide(noColor), noColor);
-  return `${side}${content}${side}`;
-}
-
-function modelBoxRow(content: string, noColor: boolean): string {
-  return withSides(styled(content, BOLD, noColor), noColor);
-}
-
-function splitRouteLine(line: string): BoxAnswer {
-  if (line === NO_ROUTE) return { model: NO_ROUTE, account: NO_SUBSCRIPTION, dimmed: true };
-  const at = line.lastIndexOf(' ');
-  return { model: line.slice(0, at), account: line.slice(at + 1), dimmed: false };
-}
-
-function probingAnswer(spinner: number): BoxAnswer {
-  return { model: probingLine(spinner), account: '', dimmed: true };
-}
-
-let midnightZone: string | undefined;
-let midnightFromMs: number | undefined;
-let midnightUntilMs: number | undefined;
-let midnightInstant: string | undefined;
-
-function cacheHolds(zone: string, nowMs: number): boolean {
-  return midnightZone === zone && nowMs >= Number(midnightFromMs) && nowMs < Number(midnightUntilMs);
-}
-
-function cachedMidnight(zone: string, now: string): string {
-  const nowMs = Date.parse(now);
-  if (cacheHolds(zone, nowMs)) return String(midnightInstant);
-  const midnight = nextLocalMidnight(zone, now);
-  midnightZone = zone;
-  midnightFromMs = nowMs;
-  midnightUntilMs = Date.parse(midnight);
-  midnightInstant = midnight;
-  return midnight;
-}
-
-function faultAnswer(problem: string): BoxAnswer {
-  return { model: ROUTES_FILE_ERROR, account: problem, dimmed: true };
-}
-
-function boxAnswers(view: LiveView, now: string): [BoxAnswer, BoxAnswer] {
-  const { lines, fault } = view.routes;
-  if (view.settled === undefined) return [probingAnswer(view.spinner), probingAnswer(view.spinner)];
-  if (fault !== undefined) return [faultAnswer(fault.problem), faultAnswer(fault.problem)];
-  const midnight = cachedMidnight(view.zone, now);
-  return [
-    splitRouteLine(routeLine(lines, view.settled, now, midnight, view.ineligible)),
-    splitRouteLine(highRouteLine(lines, view.settled, view.ineligible))
-  ];
-}
-
-function renderBox(title: string, answer: BoxAnswer, noColor: boolean): string[] {
-  const top = dim(boxTop(title, noColor), noColor);
-  const bottom = dim(boxBottom(noColor), noColor);
-  if (answer.dimmed) return [top, dimBoxRow(boxText(answer.model), noColor), dimBoxRow(boxText(answer.account), noColor), bottom];
-  return [top, modelBoxRow(boxText(answer.model), noColor), withSides(boxText(answer.account), noColor), bottom];
-}
-
-function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
-  const [route, high] = boxAnswers(view, now);
-  const left = renderBox(ROUTE_TITLE, route, noColor);
-  const right = renderBox(HIGH_TITLE, high, noColor);
-  return left.map((line, row) => `${line}${BOX_GAP}${right[row]}`);
-}
-
-export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
-  const usages = settledUsages(view.slots);
-  const panels = view.slots.map((slot, index) => livePanel(slot, view.spinner, noColor, now, slotMarks(view, slot, index)));
-  const footer = view.footer ? [dim(HELP_FOOTER, noColor)] : [];
-  return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...routeBoxes(view, noColor, now), ...panels, ...footer].join('\n');
 }

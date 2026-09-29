@@ -248,7 +248,7 @@ function assertAge(line, hours) {
 }
 
 function startLive(env) {
-  const child = spawn('/usr/bin/script', ['-qfec', `'${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env, timeout: OUTER_TIMEOUT_MS });
+  const child = spawn('/usr/bin/script', ['-qfec', `stty rows 60 cols 80; '${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env: { ...env, PATH: `${env.PATH}:/usr/bin` }, timeout: OUTER_TIMEOUT_MS });
   const run = { child, output: '', stderr: '', frameStarts: [], started: Date.now(), closed: once(child, 'close') };
   child.stdout.setEncoding('utf8').on('data', (chunk) => {
     run.output += chunk;
@@ -269,10 +269,18 @@ function lastFrame(run) {
 
 async function waitFor(run, predicate, boundMs, what) {
   const until = Date.now() + boundMs;
-  while (!predicate()) {
-    assert.ok(Date.now() < until, `no ${what} within ${boundMs}ms\nlast frame:\n${lastFrame(run)}\nstderr:\n${run.stderr}`);
+  let lastError;
+  while (Date.now() < until) {
+    try {
+      if (predicate()) return;
+      lastError = undefined;
+    } catch (error) {
+      lastError = error;
+    }
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
+  if (lastError) throw lastError;
+  assert.fail(`no ${what} within ${boundMs}ms\nlast frame:\n${lastFrame(run)}\nstderr:\n${run.stderr}`);
 }
 
 async function waitSettled(run) {

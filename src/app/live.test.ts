@@ -45,23 +45,25 @@ type SessionOverrides = {
   stopChildren?: () => Promise<void>;
   state?: Record<string, unknown>;
   zone?: string;
+  rows?: number;
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone } = { env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', ...overrides };
+  const { env, stopChildren, state, zone, rows } = { env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
+  const screen = Object.assign(new EventEmitter(), { rows, write: (text: string) => writes.push(text) });
   const replace = vi.fn<(path: string, text: string) => boolean>(() => true);
   const eligibility = openEligibility({}, '/home/u', { read: () => JSON.stringify(state), replace });
   const saved = () => replace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen: { write: (text: string) => writes.push(text) }, stopChildren, eligibility, routes: { lines: LINES }, zone });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, routes: { lines: LINES }, zone });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { writes, probes, keyboard, finished, frames, stopChildren, replace, saved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -213,6 +215,70 @@ describe('live session', () => {
     session.press('\r');
     expect(session.writes).toHaveLength(count);
     expect(session.probes[0].calls).toHaveLength(1);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('fits every frame to the screen’s rows and redraws the same view when they change', async () => {
+    const session = startSession({ rows: 12 });
+    expect(session.lastFrame().split('\n')).toHaveLength(12);
+    await session.settleRound(0);
+    expect(session.frames().every((frame) => frame.split('\n').length <= 12 && !frame.endsWith('\n'))).toBe(true);
+    const settled = session.lastFrame();
+    expect(settled.split('\n')).toHaveLength(12);
+    expect(settled.split('\n')[7]).toBe('claude');
+    expect(settled).not.toContain('kilo');
+    session.press('?');
+    expect(session.lastFrame().split('\n')).toHaveLength(12);
+    expect(session.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
+    session.press('?');
+    expect(session.lastFrame()).not.toContain('keys:');
+    expect(session.lastFrame().split('\n')).toHaveLength(12);
+    session.screen.rows = 30;
+    session.screen.emit('resize');
+    const grown = session.lastFrame();
+    expect(grown.split('\n')).toHaveLength(30);
+    expect(grown.split('\n').slice(0, 12)).toEqual(settled.split('\n'));
+    session.screen.rows = 12;
+    session.screen.emit('resize');
+    expect(session.lastFrame()).toBe(settled);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('scrolls a short session to the last panel and walks back to the first with the boxes in the chrome', async () => {
+    const session = startSession({ rows: 12 });
+    await session.settleRound(0);
+    IDS.forEach(() => session.press('j'));
+    const kilo = session.lastFrame().split('\n');
+    expect(kilo.length).toBeLessThanOrEqual(12);
+    expect(kilo[2]?.startsWith('+- route')).toBe(true);
+    expect(kilo[6]).toBe('▸ kilo');
+    expect(kilo).not.toContain('claude');
+    IDS.slice(1).forEach(() => session.press('k'));
+    const claude = session.lastFrame().split('\n');
+    expect(claude.length).toBeLessThanOrEqual(12);
+    expect(claude[2]?.startsWith('+- route')).toBe(true);
+    expect(claude[6]).toBe('▸ claude');
+    expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
+    session.press('?');
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 11), 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help']);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('clips a 4-row session to the banner, the summary and the first two box lines', async () => {
+    const session = startSession({ rows: 4 });
+    const pending = session.lastFrame().split('\n');
+    expect(pending).toHaveLength(4);
+    expect(pending[0]?.startsWith('DANDELION')).toBe(true);
+    expect(pending[2]?.startsWith('+- route')).toBe(true);
+    await session.settleRound(0);
+    const settled = session.lastFrame().split('\n');
+    expect(settled).toHaveLength(4);
+    expect(settled[2]?.startsWith('+- route')).toBe(true);
+    session.press('?');
+    expect(session.lastFrame().split('\n')).toEqual(settled);
     session.press('q');
     await session.finished;
   });

@@ -145,7 +145,7 @@ module.exports = {
     {
       name: 'route-output-is-plain',
       severity: 'error',
-      comment: 'render/route.ts turns the domain route decision into one scriptable line and its exit code, and a routes file fault into the one dandelion: stderr line with exit 2; it never reaches the ANSI dashboard renderer, and the dashboard renderer never reaches it',
+      comment: 'render/route.ts turns the domain route decision into one scriptable line and its exit code, and a routes file fault into the one dandelion: stderr line with exit 2; it never reaches the ANSI dashboard renderer, and the dashboard renderer never reaches it. live-frame.ts draws the route boxes from domain lines, never from this renderer',
       from: { path: '^src/render/(route|terminal)\\.ts$' },
       to: { path: '^src/render/' }
     },
@@ -155,6 +155,34 @@ module.exports = {
       severity: 'error',
       from: { path: '^src/render/route\\.ts$' },
       to: { pathNot: '^src/domain/index\\.ts$' }
+    },
+    {
+      name: 'dashboard-renderer-knows-domain-entry-only',
+      severity: 'error',
+      comment: 'render/terminal.ts is the --once dashboard (72-cell panels, gauges, banner); it is a leaf like route.ts, reaching domain only through domain/index.ts, no Node built-ins, no render siblings',
+      from: { path: '^src/render/terminal\\.ts$' },
+      to: { pathNot: '^src/domain/index\\.ts$' }
+    },
+    {
+      name: 'live-frame-uses-dashboard-drawing',
+      severity: 'error',
+      comment: 'The live TUI (chrome, route boxes, panel-region scroll) reuses the --once dashboard drawing from terminal.ts; it never reaches the scriptable route renderer, whose answers it already gets from domain',
+      from: { path: '^src/render/live-frame\\.ts$' },
+      to: { path: '^src/render/', pathNot: '^src/render/terminal\\.ts$' }
+    },
+    {
+      name: 'live-frame-knows-domain-and-dashboard-only',
+      severity: 'error',
+      comment: 'live-frame.ts reaches domain policies and midnight through domain/index.ts and dashboard drawing through terminal.ts; no Node built-ins, no probes, no other render files',
+      from: { path: '^src/render/live-frame\\.ts$' },
+      to: { pathNot: ['^src/domain/index\\.ts$', '^src/render/terminal\\.ts$'] }
+    },
+    {
+      name: 'render-entry-lists-its-files',
+      severity: 'error',
+      comment: 'render/index.ts fronts exactly three files, each hiding one piece of knowledge: route (the scriptable one-line), terminal (the --once dashboard), live-frame (the live TUI: chrome, boxes, panel-region scroll); a new render file is a deliberate contract change',
+      from: { path: '^src/render/index\\.ts$' },
+      to: { path: '^src/render/', pathNot: '^src/render/(index|route|terminal|live-frame)\\.ts$' }
     },
     {
       name: 'render-layer',
