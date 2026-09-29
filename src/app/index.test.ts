@@ -4,7 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, s
 import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isEntryFile, routesWarning, runApp, runLive, runRoute, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
@@ -1397,11 +1397,11 @@ describe('real fetcher', () => {
 describe('wiring', () => {
   const session: { dashboard?: ReturnType<typeof startDashboard> } = {};
 
-  beforeAll(() => {
+  beforeEach(() => {
     session.dashboard = startDashboard(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), { NO_COLOR: '1' });
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     session.dashboard?.press('q');
     await session.dashboard?.finished;
   });
@@ -1737,10 +1737,10 @@ describe('route eligibility state file', () => {
     for (let turn = 0; turn < 16; turn += 1) await new Promise((resolve) => setImmediate(resolve));
   }
 
-  async function settledDashboard(io: ProbeIo, env: Record<string, string>) {
+  async function settledDashboard(io: ProbeIo, env: Record<string, string>, clock?: () => string) {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     vi.setSystemTime(new Date(NOW));
-    const dashboard = startDashboard({ ...io, launcher: MISSING_KIMI }, { NO_COLOR: '1', DANDELION_STATE_FILE: statePath, ...env });
+    const dashboard = startDashboard({ ...io, launcher: MISSING_KIMI }, { NO_COLOR: '1', DANDELION_STATE_FILE: statePath, ...env }, clock);
     await settleProbes();
     return dashboard;
   }
@@ -1815,13 +1815,13 @@ describe('route eligibility state file', () => {
       for (let round = 0; round < 50 && dashboard.lastFrame().includes('probing…'); round += 1) await settleProbes();
       return dashboard.lastFrame().split('\n');
     };
-    const good = await settledDashboard(routedRunner(), {});
+    const good = await settledDashboard(routedRunner(), {}, () => NOW);
     const goodFrame = await untilSettled(good);
     await quit(good);
     const fixture = JSON.parse(readFileSync(ROUTES_FILE, 'utf8'));
     const wrok = join(scratch, 'wrok.json');
     writeFileSync(wrok, JSON.stringify({ ...fixture, route: { ...fixture.route, 'claude-wrok': fixture.route.claude } }));
-    const bad = await settledDashboard(routedRunner(), { DANDELION_ROUTES_FILE: wrok });
+    const bad = await settledDashboard(routedRunner(), { DANDELION_ROUTES_FILE: wrok }, () => NOW);
     const badFrame = await untilSettled(bad);
     expect(badFrame.slice(3, 5)).toEqual([
       `| routes file error${' '.repeat(15)}|  | routes file error${' '.repeat(15)}|`,
