@@ -512,7 +512,8 @@ describe('route boxes', () => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '100000' } });
     await session.settleRound(0, Object.fromEntries(IDS.map((id) => [id, evaporatingUsage(id, START, '2026-09-13T10:30:00.000Z')])));
     expect(boxRowsOf(session.lastFrame())[1]).toBe(`| ${'model-a max'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`);
-    await vi.advanceTimersByTimeAsync(31 * 60 * 1000);
+    vi.setSystemTime(new Date('2026-09-13T10:31:00.000Z'));
+    await vi.advanceTimersByTimeAsync(1000);
     expect(boxRowsOf(session.lastFrame())[1]).toBe(`| ${'model-a high'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`);
     session.press('q');
     await session.finished;
