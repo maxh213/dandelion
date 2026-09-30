@@ -29,7 +29,7 @@ function flagsOf({ modelFlag, effortFlag }: Target, model: string, effort: strin
 
 export function launchOf(routeLine: string, extra: string[], env: Env, homeDir: string): Launch {
   const [model, ...rest] = routeLine.split(' ');
-  const account = rest.pop() ?? '';
+  const account = rest.pop() as string;
   const target = TARGETS[account];
   return { command: target.command, args: [...flagsOf(target, model, rest[0]), ...extra], env: accountEnv(account, env, homeDir) };
 }

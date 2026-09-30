@@ -46,7 +46,7 @@ import { startLive, type Keyboard, type Notifier, type Screen } from './live.ts'
 export type { ProbeIo } from '../probes/index.ts';
 export type { RouteMode, RouteOutput, RouteRequest } from '../render/index.ts';
 export type { Keyboard, Screen } from './live.ts';
-export type { Launch, RunSpawner } from './launch.ts';
+export type { RunSpawner } from './launch.ts';
 
 export type JsonOutput = { out: string; err: string };
 
@@ -294,7 +294,7 @@ export const realNotifier: Notifier = {
 };
 
 function statusOf(code: number | null, signal: NodeJS.Signals | null): number {
-  return code ?? 128 + (signal === null ? 0 : osConstants.signals[signal]);
+  return code ?? 128 + osConstants.signals[signal as NodeJS.Signals];
 }
 
 export const realRunSpawner: RunSpawner = {

@@ -1708,7 +1708,7 @@ describe('runRun', () => {
   const env = { DANDELION_ROUTES_FILE: ROUTES_FILE };
 
   function fakeSpawner(result: number | 'missing' = 0) {
-    const spawn = vi.fn(async (_launch: Parameters<RunSpawner['spawn']>[0]) => result);
+    const spawn = vi.fn<RunSpawner['spawn']>(async () => result);
     return { spawn, spawner: { spawn } };
   }
 
@@ -1770,7 +1770,7 @@ describe('runRun', () => {
   describe('realRunSpawner', () => {
     it('inherits stdio and resolves the exit code, merging env over the process env', async () => {
       const launch = (args: string[], env = {}) => realRunSpawner.spawn({ command: process.execPath, args, env });
-      expect(await launch(['-e', 'process.exit(process.env.DANDELION_RUN_TEST === "yes" ? 5 : 6)'], { DANDELION_RUN_TEST: 'yes' })).toBe(5);
+      expect(await launch(['-e', 'process.exit(process.env.RUN_TEST_FLAG === "yes" ? 5 : 6)'], { RUN_TEST_FLAG: 'yes' })).toBe(5);
       expect(await launch(['-e', 'process.kill(process.pid, "SIGTERM")'])).toBe(143);
     });
 
