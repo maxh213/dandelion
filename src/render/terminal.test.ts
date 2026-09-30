@@ -919,8 +919,10 @@ describe('route boxes', () => {
 });
 
 describe('style balance', () => {
-  const SGR = /\x1b\[[0-9;]*m/g;
-  const closed = (line: string): boolean => (line.match(SGR)?.at(-1) ?? RESET) === RESET;
+  const closed = (line: string): boolean => {
+    const last = line.lastIndexOf('\x1b[');
+    return last < 0 || line.startsWith('0m', last + 2);
+  };
   const okOf = (id: string, snapshotAt?: string): ProviderUsage => ({
     id,
     displayName: id,
