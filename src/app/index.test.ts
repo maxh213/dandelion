@@ -141,7 +141,7 @@ function profileRunner(stdout: string): ProbeIo {
 }
 
 function visibleLines(output: string): string[] {
-  return ['\x1b[1m', '\x1b[90m', '\x1b[0m']
+  return ['\x1b[1m', '\x1b[90m', '\x1b[0m', '\x1b[32m', '\x1b[33m', '\x1b[31m', '\x1b[35m']
     .reduce((text, code) => text.replaceAll(code, ''), output)
     .split('\n');
 }
@@ -206,7 +206,7 @@ describe('claude and agy windows', () => {
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
     expect(output).toContain(`${DIM}claude · personal · claude\x1b[0m`);
     expect(output).toContain(`${DIM}agy · agy\x1b[0m`);
-    expect(panelOf(output, 'kilo')).toEqual(['kilo', `$14.15 ${'█'.repeat(14)}${'░'.repeat(6)}`.padEnd(72), 'api balance · kilo']);
+    expect(panelOf(output, 'kilo')).toEqual(['kilo', `${'balance $14.15'.padEnd(35)} ${'█'.repeat(14)}${'░'.repeat(6)}  71%`.padEnd(72), 'api balance · kilo']);
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
   });
 
@@ -1203,7 +1203,7 @@ describe('cursor panel', () => {
       const io = { ...routedRunner({ kilo: { stdout: 'Balance: $5.00', stderr: '' } }, { launch }, NO_GROK), fetcher: KIMI_FETCHER };
       const env = { NO_COLOR: '1', DANDELION_KILO_REFERENCE: '10', DANDELION_KIMI_PORT: 'abc', DANDELION_GROK_HOME: '/empty-grok', DANDELION_CURSOR_AUTH_FILE: '/missing.json', DANDELION_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' };
       const output = await runApp(io, env, NOW);
-      expect(panelOf(output, 'kilo')[1]).toMatch(/^\$5\.00 #{10}-{10} /);
+      expect(panelOf(output, 'kilo')[1]).toMatch(/^balance \$5\.00 {23}#{10}-{10}  50% /);
       expect(panelOf(output, 'kimi')[1]).toBe('DANDELION_KIMI_PORT must be an integer from 1 to 65535');
       expect(launch).not.toHaveBeenCalled();
       expect(panelOf(output, 'grok')[1]).toBe('no grok billing snapshot — run grok once');
@@ -1411,33 +1411,33 @@ describe('wiring', () => {
     expect(output).toContain('DANDELION');
     expect(output).toContain('10:00:00Z');
     expect(output).toContain('━'.repeat(72));
-    expect(output).toContain('$14.15 ██████████████░░░░░░');
+    expect(output).toContain(`${'balance $14.15'.padEnd(35)} \x1b[32m██████████████░░░░░░\x1b[0m \x1b[32m 71%\x1b[0m`);
     expect(output).toContain('\x1b[90mapi balance · kilo\x1b[0m');
   });
 
   it('rounds gauge fill half-up', async () => {
     const output = await runApp(profileRunner('Balance: $14.50'), {}, NOW);
-    expect(output).toContain('$14.50 ███████████████░░░░░ ');
+    expect(output).toContain(`${'balance $14.50'.padEnd(35)} \x1b[32m███████████████░░░░░\x1b[0m \x1b[32m 73%\x1b[0m`);
   });
 
   it('fills the gauge when balance exceeds reference', async () => {
     const output = await runApp(profileRunner('Balance: $25.00'), {}, NOW);
-    expect(output).toContain('$25.00 ████████████████████ ');
+    expect(output).toContain(`${'balance $25.00'.padEnd(35)} \x1b[32m████████████████████\x1b[0m \x1b[32m100%\x1b[0m`);
   });
 
   it('renders an empty gauge when reference is empty', async () => {
     const output = await runApp(profileRunner('Balance: $14.15'), { DANDELION_KILO_REFERENCE: '' }, NOW);
-    expect(output).toContain('$14.15 ░░░░░░░░░░░░░░░░░░░░');
+    expect(output).toContain(`${'balance $14.15'.padEnd(35)} ░░░░░░░░░░░░░░░░░░░░${' '.repeat(16)}`);
   });
 
   it('uses a custom reference', async () => {
     const output = await runApp(profileRunner('Balance: $5.00'), { DANDELION_KILO_REFERENCE: '10' }, NOW);
-    expect(output).toContain('$5.00 ██████████░░░░░░░░░░');
+    expect(output).toContain(`${'balance $5.00'.padEnd(35)} \x1b[33m██████████░░░░░░░░░░\x1b[0m \x1b[33m 50%\x1b[0m`);
   });
 
   it('degrades to ASCII when NO_COLOR is set', async () => {
     const output = await runApp(profileRunner('Balance: $14.15'), { NO_COLOR: '1' }, NOW);
-    expect(output).toContain('$14.15 ##############------');
+    expect(output).toContain(`${'balance $14.15'.padEnd(35)} ##############------  71%`);
     expect(output).not.toContain('\x1b[');
   });
 
@@ -2253,7 +2253,7 @@ describe('hermes panel', () => {
     expect(lines.filter((line) => names.includes(line))).toEqual(names);
     expect(panelOf(output, 'junie').slice(1)).toEqual(['credits                             ######--------------  30%', 'snapshot 6h6m old', '701513 credits · junie']);
     expect(panelOf(output, 'hermes').slice(1)).toEqual([ROW_75, 'Plus · $5.50 of $22 · hermes']);
-    expect(panelOf(output, 'kilo').slice(1)).toEqual([`$14.15 ${'#'.repeat(14)}${'-'.repeat(6)}`.padEnd(72), 'api balance · kilo']);
+    expect(panelOf(output, 'kilo').slice(1)).toEqual([`${'balance $14.15'.padEnd(35)} ${'#'.repeat(14)}${'-'.repeat(6)}  71%`.padEnd(72), 'api balance · kilo']);
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
     expect(output).not.toContain(AGENT);
     expect(output).not.toContain(ACCESS);

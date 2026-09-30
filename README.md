@@ -17,7 +17,7 @@ Panels always appear in this order. A provider whose CLI is missing, fails, time
 - `cursor` - reads the access token from the cursor-agent auth file without running cursor-agent, and POSTs to the dashboard API's `GetCurrentPeriodUsage` and `GetPlanInfo` (15s timeout each) to show the total, auto and api windows with a reset countdown and the plan name and price. The token is never printed or written.
 - `junie` - reads the newest completion snapshot from `<junie home>/sessions/<id>/events.jsonl` without running junie, visiting sessions from `<junie home>/sessions/index.jsonl` newest first, and shows the credits used against a reference, the balance and the snapshot's age. A snapshot older than 48h is shown dim as stale. Without a snapshot the panel says to run junie once.
 - `hermes` - reads the Nous Portal tokens from the hermes auth file without running hermes, GETs `/api/oauth/account` (15s timeout) for the credits window with a reset countdown and remaining versus the monthly grant, and never prints the tokens. Without a token the panel says to run `hermes portal login`; when the token is expired it says to run `hermes once`.
-- `kilo` (api balance) - runs `kilo profile` (20s timeout) and shows the balance against a reference.
+- `kilo` (api balance) - runs `kilo profile` (20s timeout) and shows the balance against a reference as a row laid out like a window row: `balance $12.31`, a gauge filled with the remaining share, the remaining percent, and the gauge coloured by the spent share on the usual scale.
 
 All ten probes run in parallel. Window gauges are coloured by usage: below 50% calm, 50-79% warm, 80-94% hot, 95% and above critical.
 

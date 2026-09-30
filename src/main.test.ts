@@ -164,7 +164,7 @@ describe('main', () => {
     expect(result.status).toBe(0);
     expect(result.stdout.startsWith('\x1b[1mDANDELION ')).toBe(true);
     expect(result.stdout).toMatch(/^\S+DANDELION +\d{2}:\d{2}:\d{2}Z\S+\n/);
-    expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\x1b[0m\nkilo\n$14.15 ' + '█'.repeat(14) + '░'.repeat(6) + ' '.repeat(45) + '\n\x1b[90mapi balance · kilo\x1b[0m');
+    expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\x1b[0m\nkilo\n' + 'balance $14.15'.padEnd(35) + ' \x1b[32m' + '█'.repeat(14) + '░'.repeat(6) + '\x1b[0m \x1b[32m 71%\x1b[0m' + ' '.repeat(11) + '\n\x1b[90mapi balance · kilo\x1b[0m');
     expect(result.stdout).not.toContain('not found');
   });
 
@@ -172,7 +172,7 @@ describe('main', () => {
     const result = runWithFixtureKilo({ DANDELION_KILO_REFERENCE: '10', NO_COLOR: '1' });
     expect(result.status).toBe(0);
     expect(result.stdout).not.toContain('\x1b[');
-    expect(result.stdout).toContain('='.repeat(72) + '\nkilo\n$14.15 ' + '#'.repeat(20) + ' '.repeat(45) + '\n');
+    expect(result.stdout).toContain('='.repeat(72) + '\nkilo\n' + 'balance $14.15'.padEnd(35) + ' ' + '#'.repeat(20) + ' 100%' + ' '.repeat(11) + '\n');
   });
 
   it('prints claude, claude-work, agy, kimi, grok, codex and kilo panels in order from fixture CLIs on PATH', () => {

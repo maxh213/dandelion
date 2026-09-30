@@ -141,15 +141,30 @@ export function renderWindowRow(window: UsageWindow, noColor: boolean, now: stri
   return rowWith(window, noColor, now, (text) => styled(text, style, noColor));
 }
 
-function balanceGauge(balance: Balance, noColor: boolean): string {
-  if (balance.reference === undefined) return renderEmptyGauge(noColor);
-  return renderGauge(balance.amount, balance.reference, noColor);
+function remainingPct(balance: Balance, reference: number): number {
+  return Math.min(100, Math.max(0, Math.round((balance.amount / reference) * 100)));
 }
 
-function balanceLine(balance: Balance | undefined, noColor: boolean): string {
+function balanceCells(balance: Balance, noColor: boolean, paint: (text: string, usedPct: number) => string): string {
+  if (balance.reference === undefined) return renderEmptyGauge(noColor);
+  const remaining = remainingPct(balance, balance.reference);
+  const gauge = paint(renderGauge(balance.amount, balance.reference, noColor), 100 - remaining);
+  return `${gauge} ${paint(`${remaining}%`.padStart(PERCENT_CELLS), 100 - remaining)}`;
+}
+
+function balanceTail(balance: Balance): number {
+  return balance.reference === undefined ? GAUGE_CELLS : GAUGE_CELLS + 1 + PERCENT_CELLS;
+}
+
+function balanceLine(balance: Balance | undefined, noColor: boolean, paint: (text: string, usedPct: number) => string): string {
   if (!balance) return ' '.repeat(WIDTH);
-  const amount = `${balance.currency}${balance.amount.toFixed(2)}`;
-  return `${amount} ${balanceGauge(balance, noColor)}`.padEnd(WIDTH);
+  const label = fitLabel(`balance ${balance.currency}${balance.amount.toFixed(2)}`);
+  const padding = repeatChar(' ', WIDTH - LABEL_CELLS - 1 - balanceTail(balance));
+  return `${label} ${balanceCells(balance, noColor, paint)}${padding}`;
+}
+
+function usageStyle(noColor: boolean): (text: string, usedPct: number) => string {
+  return (text, usedPct) => styled(text, STYLE_TOKENS[styleToken(usedPct)], noColor);
 }
 
 function taggedCaption(usage: ProviderUsage): string {
@@ -167,8 +182,8 @@ function captionLine(usage: ProviderUsage, marks: PanelMarks): string {
 type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
 type FailedUsage = Exclude<ProviderUsage, OkUsage>;
 
-function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow) => string): string[] {
-  if (usage.windows.length === 0) return [usage.note ?? balanceLine(usage.balance, noColor)];
+function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow) => string, paint: (text: string, usedPct: number) => string): string[] {
+  if (usage.windows.length === 0) return [usage.note ?? balanceLine(usage.balance, noColor, paint)];
   return usage.windows.map(row);
 }
 
@@ -186,7 +201,7 @@ function snapshotLines(usage: OkUsage, now: string): string[] {
 }
 
 function renderPanelStale(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
-  const rows = panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String));
+  const rows = panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String), (text) => text);
   return dimPanel([headerLine(usage.displayName, marks, String), ...rows, ...snapshotLines(usage, now), captionLine(usage, marks)], marks, noColor);
 }
 
@@ -194,7 +209,7 @@ function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, marks: 
   return [
     markedRule(marks, noColor),
     headerLine(usage.displayName, marks, (text) => dim(text, noColor)),
-    ...panelBody(usage, noColor, (window) => renderWindowRow(window, noColor, now)),
+    ...panelBody(usage, noColor, (window) => renderWindowRow(window, noColor, now), usageStyle(noColor)),
     ...snapshotLines(usage, now).map((line) => dim(line, noColor)),
     dim(captionLine(usage, marks), noColor)
   ].join('\n');

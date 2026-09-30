@@ -96,6 +96,50 @@ describe('terminal renderer', () => {
     expect(panel).toContain('--------------------');
   });
 
+  describe('kilo balance row', () => {
+    const kilo = (amount: number, reference?: number): ProviderUsage => ({
+      id: 'kilo',
+      displayName: 'kilo',
+      windows: [],
+      fetchedAt: 'now',
+      status: 'ok',
+      balance: { amount, currency: '$', reference }
+    });
+    const strip = (text: string): string => text.replace(/\x1b\[\d+m/g, '');
+    const balanceRow = (usage: ProviderUsage, noColor: boolean): string => renderPanelOk(usage as Extract<ProviderUsage, { status: 'ok' }>, noColor, NOW, PLAIN).split('\n')[2];
+    const weeklyRow = (noColor: boolean): string => renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct: 10, resetsAt: '2026-09-13T22:00:00Z' }, noColor, NOW);
+
+    it.each([true, false])('starts the gauge in the window row gauge column with noColor %s', (noColor) => {
+      const column = (row: string): number => strip(row).search(/[#█░-]{20}/);
+      expect(column(balanceRow(kilo(14.15, 20), noColor))).toBe(36);
+      expect(column(balanceRow(kilo(14.15, 20), noColor))).toBe(column(weeklyRow(noColor)));
+      expect(column(balanceRow(kilo(14.15), noColor))).toBe(column(weeklyRow(noColor)));
+    });
+
+    it('fills the row to exactly the dashboard width with a percent column', () => {
+      const row = strip(balanceRow(kilo(14.15, 20), false));
+      expect([...row]).toHaveLength(72);
+      expect(row.trimEnd()).toBe(`${'balance $14.15'.padEnd(35)} ██████████████░░░░░░  71%`);
+    });
+
+    it('colours the gauge by the spent share: calm when full, critical when nearly empty', () => {
+      expect(balanceRow(kilo(20, 20), false)).toContain(`${STYLE_TOKENS.calm}${'█'.repeat(20)}`);
+      expect(balanceRow(kilo(1, 20), false)).toContain(`${STYLE_TOKENS.critical}█`);
+      expect(balanceRow(kilo(1, 20), false)).toContain(`${STYLE_TOKENS.critical}  5%`);
+      expect(balanceRow(kilo(3, 20), false)).toContain(STYLE_TOKENS.hot);
+    });
+
+    it('clamps the percent between 0 and 100', () => {
+      expect(strip(balanceRow(kilo(25, 20), true))).toContain('100%');
+      expect(strip(balanceRow(kilo(-1, 20), true))).toContain('  0%');
+    });
+
+    it('keeps an empty gauge without a percent when there is no reference', () => {
+      const row = balanceRow(kilo(14.15), true);
+      expect(row).toBe(`${'balance $14.15'.padEnd(35)} ${'-'.repeat(20)}`.padEnd(72));
+    });
+  });
+
   it('renders ok panel with no balance', () => {
     const usage: ProviderUsage = {
       id: 'kilo',
@@ -512,7 +556,7 @@ describe('live frame', () => {
     });
 
     it('scrolls the region so the selected panel’s header is its first line', () => {
-      expect(frameOf({ selected: 9 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ kilo', '$14.15 ##############------'.padEnd(72), 'api balance · kilo']);
+      expect(frameOf({ selected: 9 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ kilo', `${'balance $14.15'.padEnd(35)} ##############------  71%`.padEnd(72), 'api balance · kilo']);
       expect(frameOf({ selected: 6 })).toEqual([
         BANNER,
         SUMMARY,
