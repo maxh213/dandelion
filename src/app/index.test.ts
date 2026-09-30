@@ -1770,7 +1770,7 @@ describe('runRun', () => {
   describe('realRunSpawner', () => {
     it('inherits stdio and resolves the exit code, merging env over the process env', async () => {
       const launch = (args: string[], env = {}) => realRunSpawner.spawn({ command: process.execPath, args, env });
-      expect(await launch(['-e', 'process.exit(process.env.RUN_TEST_FLAG === "yes" ? 5 : 6)'], { RUN_TEST_FLAG: 'yes' })).toBe(5);
+      expect(await launch(['-e', 'process.exit(process.env.flag === "yes" ? 5 : 6)'], { flag: 'yes' })).toBe(5);
       expect(await launch(['-e', 'process.kill(process.pid, "SIGTERM")'])).toBe(143);
     });
 
