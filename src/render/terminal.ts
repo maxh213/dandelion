@@ -16,6 +16,7 @@ const TITLE = 'DANDELION';
 const ROUTING_OFF = 'routing off';
 const HIDDEN = 'hidden';
 const MARKER = '▸ ';
+const COMPACT_LEAD_CELLS = 16;
 
 export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number; status?: ClaudeStatus };
 
@@ -363,4 +364,58 @@ export function viewportLines(panels: string[], selected: number | undefined, he
   const hasSelection = selected !== undefined && selected >= 0 && selected < blocks.length;
   const top = hasSelection ? topFor(blocks, selected, height) : 0;
   return lines.slice(top, top + height);
+}
+
+function worstWindow(windows: UsageWindow[]): UsageWindow {
+  const pool = windows.filter((window) => window.kind !== 'other');
+  return (pool.length > 0 ? pool : windows).reduce((worst, window) => (window.usedPct > worst.usedPct ? window : worst));
+}
+
+function soonestReset(windows: UsageWindow[]): string | undefined {
+  const times = windows.flatMap((window) => (window.resetsAt === undefined ? [] : [window.resetsAt]));
+  return times.sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+}
+
+function compactLead(id: string, marks: PanelMarks): string {
+  const titled = marks.spinner === undefined ? id : `${id} ${marks.spinner}`;
+  return `${marks.selected ? MARKER : '  '}${titled}`.padEnd(COMPACT_LEAD_CELLS);
+}
+
+function rightAligned(left: string, marks: PanelMarks): string {
+  const flags = flagsOf(marks);
+  return flags === '' ? left : `${left}${repeatChar(' ', widthOfMarks(marks) - cellCount(left) - cellCount(flags))}${flags}`;
+}
+
+function textRow(id: string, text: string, marks: PanelMarks, paint: (line: string) => string): string {
+  const lead = compactLead(id, marks);
+  return paint(rightAligned(`${lead}${cutCells(text, widthOfMarks(marks) - cellCount(lead) - cellCount(flagsOf(marks)) - 1)}`, marks));
+}
+
+function dimRow(id: string, text: string, marks: PanelMarks, noColor: boolean): string {
+  return textRow(id, text, marks, (line) => styled(line, marks.selected ? BOLD + DIM : DIM, noColor));
+}
+
+function balanceText(balance: Balance | undefined): string {
+  return balance === undefined ? '' : `balance ${balance.currency}${balance.amount.toFixed(2)}`;
+}
+
+function windowRow(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
+  const worst = worstWindow(usage.windows);
+  const lead = compactLead(usage.id, marks);
+  const meter = `${renderGauge(worst.usedPct, 100, noColor)} ${`${worst.usedPct}%`.padStart(PERCENT_CELLS)}`;
+  const reset = cutCells(countdown(soonestReset(usage.windows), now, marks.absoluteZone), widthOfMarks(marks) - cellCount(lead) - cellCount(meter) - cellCount(flagsOf(marks)) - 1);
+  const weight = marks.selected ? BOLD : '';
+  const tail = rightAligned(`${lead}${meter}${reset}`, marks).slice(cellCount(lead) + cellCount(meter));
+  return `${styled(lead, weight, noColor || !marks.selected)}${styled(meter, weight + STYLE_TOKENS[styleToken(worst.usedPct)], noColor)}${styled(tail, weight, noColor || !marks.selected)}`;
+}
+
+function usageRow(usage: ProviderUsage, noColor: boolean, now: string, marks: PanelMarks): string {
+  if (usage.status !== 'ok') return dimRow(usage.id, usage.reason, marks, noColor);
+  if (usage.windows.length === 0) return dimRow(usage.id, usage.note ?? balanceText(usage.balance), marks, noColor);
+  return windowRow(usage, noColor, now, marks);
+}
+
+export function renderCompactRow(id: string, usage: ProviderUsage | undefined, noColor: boolean, now: string, marks: PanelMarks, pending: string): string {
+  if (marks.caption !== undefined) return textRow(id, marks.caption, marks, (line) => bold(line, noColor));
+  return usage === undefined ? dimRow(id, pending, marks, noColor) : usageRow(usage, noColor, now, marks);
 }

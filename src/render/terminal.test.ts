@@ -648,7 +648,7 @@ describe('live frame', () => {
     expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
     expect(lines.at(-1)).toBe(`\x1b[90m↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?${RESET}`);
-    expect(lines.at(-2)).toBe(`\x1b[90mg usage graph of the selected panel · esc/q/g back${RESET}`);
+    expect(lines.at(-2)).toBe(`\x1b[90mg usage graph of the selected panel · esc/q/g back · v compact${RESET}`);
     expect(lines.slice(6, -3).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n').replace(PLAN_CAPTION, '$1 · 0h1m ago'));
   });
 
@@ -657,6 +657,78 @@ describe('live frame', () => {
     expect(lines[0]).toBe('DANDELION'.padEnd(34) + 'refreshing… · data 0h1m old · 10:01:05');
     expect(lines.at(-1)).toBe('↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+  });
+
+  describe('compact view', () => {
+    const compact = (usages: (ProviderUsage | undefined)[], extra: Partial<LiveView> = {}, noColor = true): string[] =>
+      renderLiveFrame(viewOf(usages, { compact: true, ...extra }), noColor, NOW).split('\n').slice(6);
+    const sizes = (lines: string[]): number[] => lines.map((line) => [...line.replace(ANSI_CODE, '')].length);
+    const ten = (): ProviderUsage[] => [...background(), unavailable('junie'), unavailable('hermes'), okUsage('claude-work', [{ label: 'session', kind: 'rolling', usedPct: 5 }])];
+
+    it('shows one line per provider with the worst window and the soonest reset', () => {
+      const rows = compact(background());
+      expect(rows).toHaveLength(7);
+      expect(rows[0]).toBe('  claude        #################### 100% ↻ 8h40m');
+      expect(rows[1]).toBe('  agy           ###############-----  75% ↻ 12h13m');
+      expect(rows[2]).toBe('  kimi          ############--------  59% ↻ 5d0h');
+    });
+
+    it('omits the reset when no window has one and ignores other windows for the gauge', () => {
+      const rows = compact([okUsage('x', [{ label: 'a', kind: 'other', usedPct: 99 }, { label: 'b', kind: 'weekly', usedPct: 20 }]), okUsage('y', [{ label: 'a', kind: 'other', usedPct: 99 }])]);
+      expect(rows).toEqual(['  x             ####----------------  20%', '  y             ####################  99%']);
+    });
+
+    it('shows the note, the balance or the reason dim and cut to the width', () => {
+      const long = { ...unavailable('hermes'), reason: 'r'.repeat(100) } as ProviderUsage;
+      const rows = compact([okUsage('codex', [], { note: 'api-key billing · no usage windows' }), background()[6], long, okUsage('junie', [])]);
+      expect(rows[0]).toBe('  codex         api-key billing · no usage windows');
+      expect(rows[1]).toBe('  kilo          balance $14.15');
+      expect(rows[2]).toBe(`  hermes        ${'r'.repeat(54)}…`);
+      expect(rows[3]).toBe('  junie         ');
+      expect(sizes(rows).every((size) => size <= 72)).toBe(true);
+    });
+
+    it('marks the selection, routing off and the spinner and shows the pending spinner', () => {
+      const rows = compact([background()[0], unavailable('junie'), undefined], { selected: 0, ineligible: ['claude'], slots: [{ id: 'claude', usage: background()[0], probing: true }, { id: 'junie', usage: unavailable('junie') }, { id: 'p2', usage: undefined }], spinner: 1 });
+      expect(rows[0]).toBe(`▸ claude ⠙      #################### 100% ↻ 8h40m            routing off`);
+      expect(rows[2]).toBe('  p2            ⠙ probing…');
+    });
+
+    it('keeps long rows within the width when flags and absolute times combine', () => {
+      const rows = compact(background(), { absoluteResets: true, ineligible: ['kimi'], hidden: ['kimi'], showHidden: true, zone: 'Europe/London' });
+      expect(rows[2]).toMatch(/^ {2}kimi .* hidden · routing off$/);
+      expect(sizes(rows).every((size) => size <= 72)).toBe(true);
+    });
+
+    it('shows a flash in place of the row and paints bold and coloured with colour on', () => {
+      expect(compact(background(), { flash: { index: 0, message: 'routing state not saved' } })[0]).toBe('  claude        routing state not saved');
+      const [selected, plain] = compact(background(), { selected: 0 }, false);
+      expect(selected).toContain('\x1b[1m\x1b[35m');
+      expect(selected.startsWith('\x1b[1m▸ claude')).toBe(true);
+      expect(plain).toContain('\x1b[33m');
+      expect(plain.startsWith('\x1b[')).toBe(false);
+    });
+
+    it('dims unavailable rows and bolds a selected one', () => {
+      expect(compact([unavailable('junie')], {}, false)[0]).toBe('\x1b[90m  junie         junie CLI not found in PATH\x1b[0m');
+      expect(compact([unavailable('junie')], { selected: 0 }, false)[0]).toBe('\x1b[1m\x1b[90m▸ junie         junie CLI not found in PATH\x1b[0m');
+    });
+
+    it('fits ten providers with the banner, summary and route boxes in 24 rows', () => {
+      const frame = renderLiveFrame(viewOf(ten(), { compact: true, rows: 24 }), true, NOW).split('\n');
+      expect(frame).toHaveLength(16);
+      expect(frame[0]).toMatch(/^DANDELION/);
+      expect(frame.slice(2, 6).join('')).toContain('route --high');
+      expect(frame.slice(6).map((line) => line.slice(2, 14).trim())).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo', 'junie', 'hermes', 'claude-work']);
+    });
+
+    it('scrolls to keep the selection visible when the rows do not fit and notes hidden providers', () => {
+      const rows = (selected: number): string[] => renderLiveFrame(viewOf(ten(), { compact: true, rows: 10, selected }), true, NOW).split('\n').slice(6);
+      expect(rows(0).map((line) => line.slice(0, 8).trim())).toEqual(['▸ claude', 'agy', 'kimi', 'grok']);
+      expect(rows(9).map((line) => line.slice(0, 14).trim())).toEqual(['kilo', 'junie', 'hermes', '▸ claude-work']);
+      const hidden = compact(ten(), { hidden: ['agy'] });
+      expect(hidden.at(-1)).toBe('1 hidden · H to show');
+    });
   });
 
   describe('absolute reset times', () => {
@@ -843,7 +915,7 @@ describe('live frame', () => {
     });
 
     it('keeps the help footer as the last line of the frame', () => {
-      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -3), 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch', 'g usage graph of the selected panel · esc/q/g back', FOOTER]);
+      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -3), 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch', 'g usage graph of the selected panel · esc/q/g back · v compact', FOOTER]);
     });
 
     it.each<[number, string[]]>([

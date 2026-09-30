@@ -696,6 +696,27 @@ describe('live session', () => {
     await session.finished;
   });
 
+  it('toggles the compact view with v and keeps the other keys working in it', async () => {
+    const session = startSession();
+    await vi.advanceTimersByTimeAsync(0);
+    await session.settleRound(0);
+    const full = session.lastFrame();
+    session.press('v');
+    const compact = session.lastFrame();
+    expect(compact.split('\n').length).toBeLessThan(full.split('\n').length);
+    expect(compact.split('\n').slice(6, 13).map((line) => line.slice(2, 8).trim())).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
+    session.press('j');
+    session.press(' ');
+    expect(session.lastFrame()).toMatch(/▸ claude +#*-*.*routing off/);
+    expect(session.lastFrame()).toContain('routing off');
+    session.press('?');
+    expect(session.lastFrame()).toContain('v compact');
+    session.press('v');
+    expect(session.lastFrame()).toContain('weekly');
+    session.press('q');
+    await session.finished;
+  });
+
   it('fits every frame to the screen’s rows and redraws the same view when they change', async () => {
     const session = startSession({ rows: 12 });
     expect(session.lastFrame().split('\n')).toHaveLength(12);
@@ -760,7 +781,7 @@ describe('live session', () => {
     expect(claude[7]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch', 'g usage graph of the selected panel · esc/q/g back · v compact', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
     session.press('q');
     await session.finished;
   });

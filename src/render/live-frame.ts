@@ -25,6 +25,7 @@ import {
   cutCells,
   dim,
   fitToWidth,
+  renderCompactRow,
   renderDimPanel,
   renderPanel,
   renderPanelRemembered,
@@ -37,7 +38,7 @@ import {
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
 const HIDE_HELP = 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch';
-const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back';
+const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back · v compact';
 const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
 const BOX_GAP = '  ';
 const BOX_CHROME_CELLS = 4;
@@ -63,6 +64,7 @@ export type LiveView = {
   absoluteResets?: boolean;
   order?: number[];
   sort?: SortOrder;
+  compact?: boolean;
   ineligible: string[];
   hidden?: string[];
   showHidden?: boolean;
@@ -159,6 +161,11 @@ function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: strin
   if (slot.usage === undefined) return pendingPanel(slot.id, spinner, noColor, marks);
   if (slot.usage.status !== 'ok' && slot.lastGood !== undefined) return rememberedPanel(slot, slot.lastGood, slot.usage, spinner, noColor, now, marks);
   return renderPanel(slot.usage, noColor, now, { ...settledMarks(slot, slot.usage, spinner, now, marks), fixable: slot.usage.fix !== undefined });
+}
+
+function liveRow(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
+  const settled = slot.usage === undefined ? marks : settledMarks(slot, slot.usage, spinner, now, marks);
+  return renderCompactRow(slot.id, slot.usage, noColor, now, settled, probingLine(spinner));
 }
 
 type BoxAnswer = { model: string; account: string; dimmed: boolean };
@@ -295,6 +302,18 @@ function livePanels(view: LiveView, shown: number[], noColor: boolean, now: stri
     ...shown.map((index) => livePanel(view.slots[index], view.spinner, noColor, now, slotMarks(view, view.slots[index], index))),
     ...hiddenNote(view, shown, noColor)
   ];
+}
+
+function compactRows(view: LiveView, shown: number[], noColor: boolean, now: string): string[] {
+  return [
+    ...shown.map((index) => liveRow(view.slots[index], view.spinner, noColor, now, slotMarks(view, view.slots[index], index))),
+    ...hiddenNote(view, shown, noColor)
+  ];
+}
+
+function compactRegion(rows: string[], selectedAt: number, height: number): string[] {
+  const from = Math.max(0, selectedAt - height + 1);
+  return rows.slice(from, from + height);
 }
 
 function regionHeight(rows: number, chrome: string[], footer: string[]): number {
@@ -460,6 +479,12 @@ function fitFrame(frame: string, columns: number | undefined): string {
   return width === undefined ? frame : frame.split('\n').map((line) => fitToWidth(line, width)).join('\n');
 }
 
+function providerRegion(view: LiveView, shown: number[], height: number, noColor: boolean, now: string): string[] {
+  const selectedAt = shown.indexOf(view.selected ?? -1);
+  if (view.compact === true) return compactRegion(compactRows(view, shown, noColor, now), selectedAt, height);
+  return viewportLines(livePanels(view, shown, noColor, now), selectedAt, height);
+}
+
 export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
   return fitFrame(composeFrame(view, noColor, now), view.columns);
 }
@@ -470,6 +495,6 @@ function composeFrame(view: LiveView, noColor: boolean, now: string): string {
   const chrome = liveChrome(view, settledUsages(view.slots), noColor, now);
   const footer = view.footer ? liveFooter(noColor) : [];
   const shown = shownIndexes(view);
-  const region = viewportLines(livePanels(view, shown, noColor, now), shown.indexOf(view.selected ?? -1), regionHeight(rows, chrome, footer));
+  const region = providerRegion(view, shown, regionHeight(rows, chrome, footer), noColor, now);
   return [...chrome, ...region, ...footer].slice(0, rows).join('\n');
 }

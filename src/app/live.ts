@@ -78,6 +78,7 @@ type Session = LiveOptions & {
   absoluteResets: boolean;
   sort: SortOrder;
   order: number[];
+  compact: boolean;
   running?: boolean;
   rounds: number;
   endedAt: number;
@@ -141,6 +142,7 @@ function viewOf(session: Session): LiveView {
     absoluteResets: session.absoluteResets,
     order: session.order,
     sort: session.sort,
+    compact: session.compact,
     ineligible: session.eligibility.ineligible(),
     hidden: session.hidden.ids(),
     showHidden: session.showHidden,
@@ -318,6 +320,11 @@ function cycleSort(session: Session): void {
   session.sort = nextSortOrder(session.sort);
   reorder(session);
   saveView(session);
+  draw(session);
+}
+
+function toggleCompact(session: Session): void {
+  session.compact = !session.compact;
   draw(session);
 }
 
@@ -515,6 +522,7 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['\r', refreshPanel],
   ['s', cycleSort],
   ['t', toggleResetTimes],
+  ['v', toggleCompact],
   ['c', copyRoute],
   ['C', copyHigh],
   ['l', launchRoute],
@@ -557,6 +565,7 @@ export function startLive(options: LiveOptions): Promise<number> {
       showHidden: false,
       ...options.view.initial(),
       order: options.probes.map((_, index) => index),
+      compact: false,
       rounds: 0,
       endedAt: Number.NaN,
       selected: -1,
