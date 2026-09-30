@@ -1203,7 +1203,7 @@ describe('cursor panel', () => {
       const io = { ...routedRunner({ kilo: { stdout: 'Balance: $5.00', stderr: '' } }, { launch }, NO_GROK), fetcher: KIMI_FETCHER };
       const env = { NO_COLOR: '1', DANDELION_KILO_REFERENCE: '10', DANDELION_KIMI_PORT: 'abc', DANDELION_GROK_HOME: '/empty-grok', DANDELION_CURSOR_AUTH_FILE: '/missing.json', DANDELION_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' };
       const output = await runApp(io, env, NOW);
-      expect(panelOf(output, 'kilo')[1]).toMatch(/^balance \$5\.00 {23}#{10}-{10}  50% /);
+      expect(panelOf(output, 'kilo')[1]).toMatch(/^balance \$5\.00 {23}#{10}-{10} {2}50% /);
       expect(panelOf(output, 'kimi')[1]).toBe('DANDELION_KIMI_PORT must be an integer from 1 to 65535');
       expect(launch).not.toHaveBeenCalled();
       expect(panelOf(output, 'grok')[1]).toBe('no grok billing snapshot — run grok once');
