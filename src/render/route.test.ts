@@ -100,6 +100,14 @@ describe('renderRoute', () => {
       expect(why([usage('claude', ['session', 'rolling', 5])], [], 'high').out).toBe('model-h1 max claude\nrank 1 fable on claude: gating 5% used\n');
     });
 
+    it('counts an ineligible provider as no open account for its rank', () => {
+      expect(why([usage('claude', ['session', 'rolling', 5])], ['claude'], 'high')).toEqual({
+        out: 'none\nnone: no chain entry is open\nskipped: rank 1 fable no open account; rank 2 cursor no open account; rank 3 opus no open account; rank 4 grok no open account; rank 5 agy no open account\n',
+        err: '',
+        code: 1
+      });
+    });
+
     it('lists every rank when the chain is empty', () => {
       expect(why([], [], 'high')).toEqual({
         out: 'none\nnone: no chain entry is open\nskipped: rank 1 fable no open account; rank 2 cursor no open account; rank 3 opus no open account; rank 4 grok no open account; rank 5 agy no open account\n',
