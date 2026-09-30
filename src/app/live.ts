@@ -1,5 +1,6 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { isRoutable, nextLocalMidnight, notificationEvents, renderLiveFrame, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
+import type { Clipboard } from './clipboard.ts';
+import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, isRoutable, nextLocalMidnight, notificationEvents, renderLiveFrame, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -30,6 +31,7 @@ type LiveOptions = {
   routes: Routes;
   zone: string;
   notifier: Notifier;
+  clipboard: Clipboard;
   clock?: () => string;
 };
 
@@ -76,6 +78,8 @@ const DIGITS_ONLY = /^\d+$/;
 const NOT_ROUTABLE = 'not routable (no usage windows)';
 const NOT_SAVED = 'routing state not saved';
 const HIDDEN_NOT_SAVED = 'hidden state not saved';
+const NOTHING_TO_COPY = 'nothing to copy';
+const COPY_FAILED = 'copy failed';
 
 function refreshSecondsOf(raw: string): number {
   const seconds = DIGITS_ONLY.test(raw) ? Number(raw) : 0;
@@ -292,6 +296,24 @@ function leave(session: Session): void {
   else void quit(session);
 }
 
+function copyOutcome(session: Session, line: string, copied: boolean): void {
+  if (!session.quitting) showFlash(session, ROUTE_FLASH, copied ? `copied: ${line}` : COPY_FAILED);
+}
+
+function copyLine(session: Session, which: 0 | 1): void {
+  const line = currentRouteLines(viewOf(session), session.clock())?.[which];
+  if (line === undefined || line === NO_ROUTE) showFlash(session, ROUTE_FLASH, NOTHING_TO_COPY);
+  else void session.clipboard.copy(line).then((copied) => copyOutcome(session, line, copied));
+}
+
+function copyRoute(session: Session): void {
+  copyLine(session, 0);
+}
+
+function copyHigh(session: Session): void {
+  copyLine(session, 1);
+}
+
 async function quit(session: Session): Promise<void> {
   if (session.quitting) return;
   session.quitting = true;
@@ -308,6 +330,8 @@ async function quit(session: Session): Promise<void> {
 const KEYS = new Map<string, (session: Session) => unknown>([
   ['r', refresh],
   ['t', toggleResetTimes],
+  ['c', copyRoute],
+  ['C', copyHigh],
   ['?', toggleFooter],
   ['q', leave],
   ['\x1b', closeGraph],

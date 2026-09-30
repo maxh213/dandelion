@@ -52,10 +52,12 @@ type SessionOverrides = {
   historyText?: string;
   historyWrites?: boolean;
   notifier?: { notify(text: string): unknown };
+  copy?: (text: string) => Promise<boolean>;
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier } = { notifier: { notify: vi.fn() }, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier, copy } = { notifier: { notify: vi.fn() }, copy: async () => true, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const clipboard = { copy: vi.fn(copy) };
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
@@ -74,13 +76,13 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: hiddenReplace
   });
   const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes: { lines: LINES }, zone, notifier });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes: { lines: LINES }, zone, notifier, clipboard });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { notifier, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { notifier, clipboard, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -379,7 +381,7 @@ describe('live session', () => {
     const session = startSession();
     await session.settleRound(0);
     session.press('?');
-    expect(session.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t reset times · q quit · ? help');
+    expect(session.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?');
     session.press('?');
     expect(session.lastFrame()).not.toContain('keys:');
     const count = session.writes.length;
@@ -424,7 +426,7 @@ describe('live session', () => {
     expect(settled).not.toContain('kilo');
     session.press('?');
     expect(session.lastFrame().split('\n')).toHaveLength(12);
-    expect(session.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t reset times · q quit · ? help');
+    expect(session.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?');
     session.press('?');
     expect(session.lastFrame()).not.toContain('keys:');
     expect(session.lastFrame().split('\n')).toHaveLength(12);
@@ -456,7 +458,7 @@ describe('live session', () => {
     expect(claude[6]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 9), 'h hide · H show hidden', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t reset times · q quit · ? help']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 9), 'h hide · H show hidden', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
     session.press('q');
     await session.finished;
   });
@@ -951,6 +953,76 @@ describe('route boxes', () => {
       expect(hidden.lastFrame().split('\n').at(-1)).toBe(NOTE(7));
       await end(visible);
       await end(hidden);
+    });
+  });
+
+  describe('copy keys', () => {
+    const summary = (session: ReturnType<typeof startSession>) => session.lastFrame().split('\n')[1];
+
+    it('copies the route line with c and the route --high line with C, flashing copied: for 2 s', async () => {
+      const session = startSession();
+      await session.settleRound(0);
+      const boxes = session.lastFrame().split('\n').slice(2, 6).join('\n');
+      expect(boxes).toContain('model-a high');
+      expect(boxes).toContain('model-h1 max');
+      session.press('c');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.clipboard.copy).toHaveBeenLastCalledWith('model-a high claude');
+      expect(summary(session)).toBe('copied: model-a high claude');
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(summary(session)).toBe('copied: model-a high claude');
+      await vi.advanceTimersByTimeAsync(1);
+      expect(summary(session)).toContain('next reset');
+      session.press('C');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.clipboard.copy).toHaveBeenLastCalledWith('model-h1 max claude');
+      expect(summary(session)).toBe('copied: model-h1 max claude');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('copies nothing and flashes nothing to copy while the first round is unsettled', async () => {
+      const session = startSession();
+      session.press('c');
+      session.press('C');
+      expect(session.clipboard.copy).not.toHaveBeenCalled();
+      expect(summary(session)).toBe('nothing to copy');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('copies nothing when the answer is none', async () => {
+      const session = startSession({ state: Object.fromEntries(IDS.map((id) => [id, false])) });
+      await session.settleRound(0);
+      session.press('c');
+      expect(session.clipboard.copy).not.toHaveBeenCalled();
+      expect(summary(session)).toBe('nothing to copy');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('flashes copy failed and keeps running when the clipboard fails', async () => {
+      const session = startSession({ copy: async () => false });
+      await session.settleRound(0);
+      session.press('c');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(summary(session)).toBe('copy failed');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(summary(session)).toContain('next reset');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('does not flash when the copy settles after quit', async () => {
+      let finish: (copied: boolean) => void = () => undefined;
+      const session = startSession({ copy: () => new Promise((resolve) => (finish = resolve)) });
+      await session.settleRound(0);
+      session.press('c');
+      session.press('q');
+      await session.finished;
+      finish(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 });

@@ -1317,7 +1317,7 @@ describe('cursor panel', () => {
       const lines = dashboard.lastFrame().split('\n');
       expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}\x1b[0m\x1b[90mrefreshing…\x1b[0m\x1b[1m · data 0h1m old · 10:01:05\x1b[0m`);
       expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
-      expect(lines.at(-1)).toBe('\x1b[90m↑↓/jk select · space route · r refresh · t reset times · q quit · ? help\x1b[0m');
+      expect(lines.at(-1)).toBe('\x1b[90m↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
       const panels = lines.slice(6, -3).join('\n');
       expect(panels.match(SPINNER_TAIL)).toHaveLength(10);
@@ -1371,7 +1371,7 @@ describe('cursor panel', () => {
       const dashboard = startDashboard(io, LIVE_ENV);
       await settleProbes();
       dashboard.press('?');
-      expect(dashboard.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t reset times · q quit · ? help');
+      expect(dashboard.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?');
       dashboard.press('?');
       expect(dashboard.lastFrame()).not.toContain('keys:');
       dashboard.press('r');

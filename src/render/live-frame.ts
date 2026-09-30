@@ -9,6 +9,7 @@ import {
   summariseFleet,
   type HistorySample,
   type ProviderUsage,
+  type RouteLines,
   type Routes
 } from '../domain/index.ts';
 import {
@@ -30,7 +31,7 @@ const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
 const HIDE_HELP = 'h hide · H show hidden';
 const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back';
-const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t reset times · q quit · ? help';
+const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
 const BOX_WIDTH = 35;
 const BOX_TEXT_CELLS = 31;
 const BOX_GAP = '  ';
@@ -42,6 +43,8 @@ const ROUTES_FILE_ERROR = 'routes file error';
 const FALLBACK_ROWS = 24;
 
 export type LiveSlot = { id: string; usage: ProviderUsage | undefined; probing?: boolean };
+
+export const ROUTE_FLASH = -1;
 
 export type Flash = { index: number; message: string };
 
@@ -200,15 +203,23 @@ function faultAnswer(problem: string): BoxAnswer {
   return { model: ROUTES_FILE_ERROR, account: problem, dimmed: true };
 }
 
+function answerLines(lines: RouteLines, settled: ProviderUsage[], view: LiveView, now: string): [string, string] {
+  const midnight = cachedMidnight(view.zone, now);
+  return [routeLine(lines, settled, now, midnight, view.ineligible), highRouteLine(lines, settled, view.ineligible)];
+}
+
+export function currentRouteLines(view: LiveView, now: string): [string, string] | undefined {
+  const { lines, fault } = view.routes;
+  if (view.settled === undefined || fault !== undefined) return undefined;
+  return answerLines(lines, view.settled, view, now);
+}
+
 function boxAnswers(view: LiveView, now: string): [BoxAnswer, BoxAnswer] {
   const { lines, fault } = view.routes;
   if (view.settled === undefined) return [probingAnswer(view.spinner), probingAnswer(view.spinner)];
   if (fault !== undefined) return [faultAnswer(fault.problem), faultAnswer(fault.problem)];
-  const midnight = cachedMidnight(view.zone, now);
-  return [
-    splitRouteLine(routeLine(lines, view.settled, now, midnight, view.ineligible)),
-    splitRouteLine(highRouteLine(lines, view.settled, view.ineligible))
-  ];
+  const [route, high] = answerLines(lines, view.settled, view, now);
+  return [splitRouteLine(route), splitRouteLine(high)];
 }
 
 function renderBox(title: string, answer: BoxAnswer, noColor: boolean): string[] {
@@ -246,8 +257,12 @@ function regionLines(panels: string[], selected: number | undefined, height: num
   return lines.slice(0, height);
 }
 
+function summaryOrFlash(view: LiveView, usages: ProviderUsage[], now: string): string {
+  return view.flash?.index === ROUTE_FLASH ? view.flash.message : summaryLine(usages, now, absoluteZoneOf(view));
+}
+
 function liveChrome(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string[] {
-  return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now, absoluteZoneOf(view)), noColor), ...routeBoxes(view, noColor, now)];
+  return [liveBanner(view, usages, noColor, now), dim(summaryOrFlash(view, usages, now), noColor), ...routeBoxes(view, noColor, now)];
 }
 
 function liveFooter(noColor: boolean): string[] {
