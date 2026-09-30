@@ -7,10 +7,10 @@ import {
   nextLocalMidnight,
   routeLine,
   summariseFleet,
+  type HistorySample,
   type ProviderUsage,
   type Routes
 } from '../domain/index.ts';
-import { renderHistoryView, type HistoryView } from './history-chart.ts';
 import {
   WIDTH,
   bannerLine,
@@ -29,6 +29,7 @@ import {
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
 const HIDE_HELP = 'h hide · H show hidden';
+const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back';
 const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t reset times · q quit · ? help';
 const BOX_WIDTH = 35;
 const BOX_TEXT_CELLS = 31;
@@ -59,7 +60,7 @@ export type LiveView = {
   selected?: number;
   flash?: Flash;
   rows?: number;
-  graph?: Pick<HistoryView, 'id' | 'samples'>;
+  graph?: { id: string; samples: HistorySample[]; usage: ProviderUsage | undefined };
 };
 
 function settledUsages(slots: LiveSlot[]): ProviderUsage[] {
@@ -250,7 +251,7 @@ function liveChrome(view: LiveView, usages: ProviderUsage[], noColor: boolean, n
 }
 
 function liveFooter(noColor: boolean): string[] {
-  return [dim(HIDE_HELP, noColor), dim(HELP_FOOTER, noColor)];
+  return [dim(HIDE_HELP, noColor), dim(GRAPH_HINT, noColor), dim(HELP_FOOTER, noColor)];
 }
 
 function shownIndexes(view: LiveView): number[] {
@@ -272,6 +273,156 @@ function livePanels(view: LiveView, shown: number[], noColor: boolean, now: stri
 
 function regionHeight(rows: number, chrome: string[], footer: string[]): number {
   return Math.max(0, rows - chrome.length - footer.length);
+}
+
+const Y_LABEL_CELLS = 5;
+const PLOT_CELLS = WIDTH - Y_LABEL_CELLS;
+const MAX_CHART_ROWS = 6;
+const LEVELS = [...'▁▂▃▄▅▆▇█'];
+const FULL_PCT = 100;
+const CHROME_ROWS = 3;
+const WINDOW_OVERHEAD_ROWS = 2;
+const NO_HISTORY = 'no history yet · samples are recorded after each refresh round';
+const GRAPH_PROBING = 'no samples yet · provider still probing';
+const UNAVAILABLE = 'no samples · provider unavailable';
+const NO_WINDOWS = 'no usage windows to chart';
+
+type HistoryView = {
+  id: string;
+  samples: HistorySample[];
+  usage?: ProviderUsage;
+  zone: string;
+  rows: number;
+  now: string;
+};
+
+type Column = { usedPct: number; dropped: boolean } | undefined;
+
+function atMs(sample: HistorySample): number {
+  return Date.parse(sample.at);
+}
+
+type Series = { slot: number; label: string; samples: HistorySample[] };
+
+function seriesOf(samples: HistorySample[]): Series[] {
+  const slots = [...new Set(samples.map((sample) => sample.slot))].sort((a, b) => a - b);
+  return slots.map((slot) => {
+    const own = samples.filter((sample) => sample.slot === slot);
+    return { slot, label: own[own.length - 1].label, samples: own };
+  });
+}
+
+function emptyReason(usage: ProviderUsage | undefined): string {
+  if (usage === undefined) return GRAPH_PROBING;
+  if (usage.status !== 'ok') return UNAVAILABLE;
+  return usage.windows.length === 0 ? NO_WINDOWS : NO_HISTORY;
+}
+
+function bucketOf(sample: HistorySample, from: number, span: number): number {
+  return Math.min(PLOT_CELLS - 1, Math.floor(((atMs(sample) - from) / span) * PLOT_CELLS));
+}
+
+function dropFlags(samples: HistorySample[]): boolean[] {
+  return samples.map((sample, index) => index > 0 && sample.usedPct < samples[index - 1].usedPct);
+}
+
+function columnsOf(samples: HistorySample[], from: number, to: number): Column[] {
+  const columns: Column[] = Array.from({ length: PLOT_CELLS }, () => undefined);
+  const span = Math.max(1, to - from);
+  const drops = dropFlags(samples);
+  samples.forEach((sample, index) => {
+    const at = bucketOf(sample, from, span);
+    columns[at] = { usedPct: sample.usedPct, dropped: drops[index] || columns[at]?.dropped === true };
+  });
+  return columns;
+}
+
+function clampPct(usedPct: number): number {
+  return Math.min(FULL_PCT, Math.max(0, usedPct));
+}
+
+function fillGlyph(filled: number, noColor: boolean): string {
+  if (filled <= 0) return ' ';
+  if (noColor) return '#';
+  return LEVELS[Math.min(LEVELS.length, Math.ceil(filled * LEVELS.length)) - 1];
+}
+
+function cellOf(column: Column, row: number, rows: number, noColor: boolean): string {
+  if (column === undefined) return ' ';
+  return fillGlyph((clampPct(column.usedPct) / FULL_PCT) * rows - row, noColor);
+}
+
+function yLabel(row: number, rows: number): string {
+  if (row === rows - 1) return '100%'.padStart(Y_LABEL_CELLS - 1) + ' ';
+  return row === 0 ? '0%'.padStart(Y_LABEL_CELLS - 1) + ' ' : repeatChar(' ', Y_LABEL_CELLS);
+}
+
+function chartRows(columns: Column[], rows: number, noColor: boolean): string[] {
+  return Array.from({ length: rows }, (_, index) => rows - 1 - index).map(
+    (row) => `${yLabel(row, rows)}${columns.map((column) => cellOf(column, row, rows, noColor)).join('')}`
+  );
+}
+
+function resetRow(columns: Column[], noColor: boolean): string {
+  const mark = noColor ? 'v' : '↓';
+  return `${repeatChar(' ', Y_LABEL_CELLS)}${columns.map((column) => (column?.dropped ? mark : ' ')).join('')}`;
+}
+
+function stamp(ms: number, zone: string): string {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: zone, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(ms);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
+}
+
+function axisRow(from: number, to: number, zone: string): string {
+  const left = stamp(from, zone);
+  const right = stamp(to, zone);
+  return `${repeatChar(' ', Y_LABEL_CELLS)}${left}${repeatChar(' ', PLOT_CELLS - left.length - right.length)}${right}`;
+}
+
+function windowBlock(label: string, samples: HistorySample[], rows: number, range: [number, number], noColor: boolean): string[] {
+  const columns = columnsOf(samples, range[0], range[1]);
+  const latest = samples[samples.length - 1].usedPct;
+  const title = `${cutCells(label, WIDTH - 8)}  ${latest}%`;
+  return [bold(title, noColor), ...chartRows(columns, rows, noColor), dim(resetRow(columns, noColor), noColor)];
+}
+
+function chartHeight(rows: number, windows: number): number {
+  const share = Math.floor((rows - CHROME_ROWS) / windows) - WINDOW_OVERHEAD_ROWS;
+  return Math.min(MAX_CHART_ROWS, Math.max(1, share));
+}
+
+function header(view: HistoryView, span: string, noColor: boolean): string {
+  return bold(`${view.id} · usage over time${span}`, noColor);
+}
+
+function spanOf(from: number, to: number): string {
+  return ` · last ${formatCountdown(new Date(to).toISOString(), new Date(from).toISOString())}`;
+}
+
+function backHint(noColor: boolean): string {
+  return `${noColor ? 'v' : '↓'} usage dropped (reset) · esc/q/g back`;
+}
+
+function visibleBlocks(blocks: string[][], budget: number): string[] {
+  const all = blocks.flat();
+  if (all.length <= budget) return all;
+  const shown = Math.max(0, Math.floor((budget - 1) / blocks[0].length));
+  const hidden = blocks.length - shown;
+  return [...blocks.slice(0, shown).flat(), `… ${hidden} more window${hidden === 1 ? '' : 's'} (enlarge the terminal)`];
+}
+
+function renderHistoryView(view: HistoryView, noColor: boolean): string {
+  const samples = [...view.samples].sort((a, b) => atMs(a) - atMs(b));
+  const hint = dim(backHint(noColor), noColor);
+  if (samples.length === 0) return [header(view, '', noColor), dim(emptyReason(view.usage), noColor), hint].slice(0, view.rows).join('\n');
+  const range: [number, number] = [atMs(samples[0]), Math.max(atMs(samples[samples.length - 1]), Date.parse(view.now))];
+  const series = seriesOf(samples);
+  const height = chartHeight(view.rows, series.length);
+  const blocks = series.map((one) => windowBlock(one.label, one.samples, height, range, noColor));
+  const axis = dim(axisRow(range[0], range[1], view.zone), noColor);
+  const body = visibleBlocks(blocks, Math.max(0, view.rows - CHROME_ROWS));
+  return [header(view, spanOf(range[0], range[1]), noColor), ...body, axis, hint].slice(0, view.rows).join('\n');
 }
 
 export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {

@@ -279,7 +279,7 @@ describe('live session', () => {
     expect(session.historyReplace).toHaveBeenCalledTimes(1);
     const samples = JSON.parse(session.historyReplace.mock.calls[0][1]);
     expect(samples).toHaveLength(IDS.length);
-    expect(samples[0]).toEqual({ id: 'claude', label: 'weekly', usedPct: 10, at: START });
+    expect(samples[0]).toEqual({ id: 'claude', slot: 0, label: 'weekly', usedPct: 10, at: START });
     session.press('q');
     await session.finished;
   });
@@ -302,9 +302,9 @@ describe('live session', () => {
     session.press('j');
     session.press('g');
     const graph = session.lastFrame().split('\n');
-    expect(graph[0]).toBe('agy · usage over time');
+    expect(graph[0]).toBe('agy · usage over time · last 0h0m');
     expect(graph).toContain('weekly  10%');
-    expect(graph.at(-1)).toBe('esc/q/g back to dashboard');
+    expect(graph.at(-1)).toBe('v usage dropped (reset) · esc/q/g back');
     expect(session.lastFrame()).not.toContain('DANDELION');
     session.press('\x1b');
     expect(session.lastFrame()).toContain('DANDELION');
@@ -320,11 +320,38 @@ describe('live session', () => {
     expect(session.stopChildren).toHaveBeenCalled();
   });
 
+  it('redraws the open graph with the new samples when another round settles', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
+    await session.settleRound(0);
+    session.press('g');
+    expect(session.lastFrame()).toContain('claude · usage over time · last 0h0m');
+    await vi.advanceTimersByTimeAsync(1000);
+    await session.settleRound(1);
+    const graph = session.lastFrame();
+    expect(graph.startsWith('claude · usage over time · last 0h')).toBe(true);
+    expect(graph).not.toContain('DANDELION');
+    expect(session.historyReplace).toHaveBeenCalledTimes(2);
+    session.press('q');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('explains why a provider without windows has nothing to graph', async () => {
+    const session = startSession();
+    await session.settleRound(0, { kilo: NO_WINDOWS });
+    IDS.forEach(() => session.press('j'));
+    session.press('g');
+    expect(session.lastFrame().split('\n')[1]).toBe('no usage windows to chart');
+    session.press('q');
+    session.press('q');
+    await session.finished;
+  });
+
   it('opens the graph of the first panel when nothing is selected and ignores other escape sequences', async () => {
     const session = startSession();
     await session.settleRound(0);
     session.press('g');
-    expect(session.lastFrame().split('\n')[0]).toBe('claude · usage over time');
+    expect(session.lastFrame().split('\n')[0]).toBe('claude · usage over time · last 0h0m');
     const count = session.writes.length;
     session.press('\x1b[C');
     expect(session.writes).toHaveLength(count);
@@ -335,7 +362,7 @@ describe('live session', () => {
 
   it('charts the recorded history of the provider, reset drop included', async () => {
     const at = (hour: number) => `2026-09-13T0${hour}:00:00.000Z`;
-    const stored = [80, 95, 3].map((usedPct, index) => ({ id: 'claude', label: 'weekly', usedPct, at: at(index + 6) }));
+    const stored = [80, 95, 3].map((usedPct, index) => ({ id: 'claude', slot: 0, label: 'weekly', usedPct, at: at(index + 6) }));
     const session = startSession({ historyText: JSON.stringify(stored) });
     await session.settleRound(0);
     session.press('g');
@@ -428,7 +455,7 @@ describe('live session', () => {
     expect(claude[6]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 10), 'h hide · H show hidden', '↑↓/jk select · space route · r refresh · t reset times · q quit · ? help']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 9), 'h hide · H show hidden', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t reset times · q quit · ? help']);
     session.press('q');
     await session.finished;
   });

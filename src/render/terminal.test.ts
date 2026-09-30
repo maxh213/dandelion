@@ -15,7 +15,7 @@ import {
   type PanelMarks
 } from './terminal.ts';
 import { renderLiveFrame, type LiveView } from './live-frame.ts';
-import { highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type RouteLines, type UsageWindow } from '../domain/index.ts';
+import { highRouteLine, nextLocalMidnight, routeLine, type HistorySample, type ProviderUsage, type RouteLines, type UsageWindow } from '../domain/index.ts';
 
 const LINES: RouteLines = {
   route: {
@@ -508,7 +508,8 @@ describe('live frame', () => {
     expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
     expect(lines.at(-1)).toBe(`\x1b[90m↑↓/jk select · space route · r refresh · t reset times · q quit · ? help${RESET}`);
-    expect(lines.slice(6, -2).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n').replace(PLAN_CAPTION, '$1 · 0h1m ago'));
+    expect(lines.at(-2)).toBe(`\x1b[90mg usage graph of the selected panel · esc/q/g back${RESET}`);
+    expect(lines.slice(6, -3).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n').replace(PLAN_CAPTION, '$1 · 0h1m ago'));
   });
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
@@ -683,7 +684,7 @@ describe('live frame', () => {
     });
 
     it('keeps the help footer as the last line of the frame', () => {
-      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -1), 'h hide · H show hidden', FOOTER]);
+      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -2), 'h hide · H show hidden', 'g usage graph of the selected panel · esc/q/g back', FOOTER]);
     });
 
     it.each<[number, string[]]>([
@@ -1114,5 +1115,110 @@ describe('style balance', () => {
   it('leaves NO_COLOR output free of escapes', () => {
     expect(renderDashboard(mixed, true, NOW, [], 'UTC')).not.toContain('\x1b');
     expect(renderLiveFrame(liveViewOf(mixed, 12), true, NOW)).not.toContain('\x1b');
+  });
+});
+
+const GRAPH_NOW = '2026-09-30T12:00:00.000Z';
+
+function graphSlot(label: string): number {
+  return label === 'session' ? 1 : 0;
+}
+
+function graphSample(label: string, usedPct: number, at: string): HistorySample {
+  return { id: 'claude', slot: graphSlot(label), label, usedPct, at };
+}
+
+const GRAPH_SAMPLES = [
+  graphSample('weekly', 10, '2026-09-30T00:00:00.000Z'),
+  graphSample('weekly', 90, '2026-09-30T06:00:00.000Z'),
+  graphSample('weekly', 5, '2026-09-30T09:00:00.000Z'),
+  graphSample('session', 50, '2026-09-30T00:00:00.000Z')
+];
+
+function graphView(samples: HistorySample[], rows = 24, zone = 'UTC'): LiveView {
+  return { slots: [], spinner: 0, refreshing: false, footer: false, ineligible: [], zone, routes: { lines: LINES }, rows, graph: { id: 'claude', samples, usage: undefined } };
+}
+
+function renderHistoryView(view: LiveView, noColor: boolean): string {
+  return renderLiveFrame(view, noColor, GRAPH_NOW);
+}
+
+describe('usage graph', () => {
+  it('draws one chart per window with its latest value, reset marks and a local time axis', () => {
+    const lines = renderHistoryView(graphView(GRAPH_SAMPLES), true).split('\n');
+    expect(lines[0]).toBe('claude · usage over time · last 12h0m');
+    expect(lines.filter((line) => line === 'weekly  5%' || line === 'session  50%')).toHaveLength(2);
+    expect(lines.filter((line) => /^ +v +$/.test(line))).toHaveLength(1);
+    expect(lines.at(-2)).toBe(`     09-30 00:00${' '.repeat(72 - 5 - 11 - 11)}09-30 12:00`);
+    expect(lines.at(-1)).toBe('v usage dropped (reset) · esc/q/g back');
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+    expect(lines.join('')).not.toMatch(/[▀-▟]/);
+    expect(lines.join('')).not.toContain('\x1b');
+  });
+
+  it('uses block characters and colour outside NO_COLOR', () => {
+    const text = renderHistoryView(graphView(GRAPH_SAMPLES), false);
+    expect(text).toContain('█');
+    expect(text).toContain('↓');
+    expect(text).toContain('\x1b[');
+  });
+
+  it('labels the axis in the given zone', () => {
+    const lines = renderHistoryView(graphView(GRAPH_SAMPLES, 24, 'Asia/Tokyo'), true).split('\n');
+    expect(lines.at(-2)).toMatch(/^ {5}09-30 09:00 +09-30 21:00$/);
+  });
+
+  it('fits the row budget', () => {
+    for (const rows of [1, 2, 3, 5, 8, 12, 40]) {
+      expect(renderHistoryView(graphView(GRAPH_SAMPLES, rows), true).split('\n').length).toBeLessThanOrEqual(rows);
+    }
+    const tall = renderHistoryView(graphView(GRAPH_SAMPLES, 200), true).split('\n');
+    expect(tall.length).toBeLessThan(30);
+  });
+
+  it('shows partial cells for in-between values and a flat line for one sample', () => {
+    const lines = renderHistoryView(graphView([graphSample('w', 50, GRAPH_NOW), graphSample('w', 12, GRAPH_NOW)], 10), false).split('\n');
+    expect(lines.join('\n')).toMatch(/[▁-▇]/);
+    expect(renderHistoryView(graphView([graphSample('w', 150, GRAPH_NOW)], 10), false)).toContain('█');
+    expect(renderHistoryView(graphView([graphSample('w', 0, GRAPH_NOW)], 10), false)).not.toContain('█');
+  });
+
+  it('uses the arrow in the legend outside NO_COLOR', () => {
+    expect(renderHistoryView(graphView(GRAPH_SAMPLES), false).split('\n').at(-1)).toContain('↓ usage dropped (reset) · esc/q/g back');
+  });
+
+  it('says how long the history spans in days once it is longer than a day', () => {
+    const lines = renderHistoryView(graphView([graphSample('w', 1, '2026-09-27T09:00:00.000Z'), graphSample('w', 2, GRAPH_NOW)]), true).split('\n');
+    expect(lines[0]).toBe('claude · usage over time · last 3d3h');
+  });
+
+  it('charts windows that share a label separately and marks no reset between them', () => {
+    const twin = (slot: number, usedPct: number, at: string): HistorySample => ({ id: 'kimi', slot, label: '5h', usedPct, at });
+    const samples = [twin(0, 80, '2026-09-30T00:00:00.000Z'), twin(1, 10, '2026-09-30T00:00:00.000Z'), twin(0, 85, '2026-09-30T06:00:00.000Z'), twin(1, 20, '2026-09-30T06:00:00.000Z')];
+    const lines = renderHistoryView(graphView(samples), true).split('\n');
+    expect(lines.filter((line) => line.startsWith('5h  '))).toEqual(['5h  85%', '5h  20%']);
+    expect(lines.filter((line) => /^ +v +$/.test(line))).toHaveLength(0);
+  });
+
+  it('tells how many windows were cut off on a short terminal instead of dropping them silently', () => {
+    const many = Array.from({ length: 5 }, (_, slot) => ({ id: 'agy', slot, label: `w${slot}`, usedPct: slot, at: GRAPH_NOW }));
+    const lines = renderHistoryView(graphView(many, 12), true).split('\n');
+    expect(lines).toHaveLength(10);
+    expect(lines.filter((line) => /^w\d /.test(line))).toHaveLength(2);
+    expect(lines.at(-3)).toBe('… 3 more windows (enlarge the terminal)');
+    expect(renderHistoryView(graphView(many, 9), true).split('\n').filter((line) => line.includes('more window'))).toEqual(['… 4 more windows (enlarge the terminal)']);
+    expect(renderHistoryView(graphView(many.slice(0, 2), 8), true)).toContain('… 1 more window (enlarge the terminal)');
+    expect(renderHistoryView(graphView(many, 30), true)).not.toContain('more window');
+  });
+
+  const graphUsage = (windows: UsageWindow[]): ProviderUsage => ({ id: 'claude', displayName: 'claude', status: 'ok', windows, fetchedAt: GRAPH_NOW });
+
+  it.each<[string, ProviderUsage | undefined, string]>([
+    ['probing', undefined, 'no samples yet · provider still probing'],
+    ['unavailable', { id: 'claude', displayName: 'claude', status: 'unavailable' as const, reason: 'no cli', windows: [], fetchedAt: GRAPH_NOW }, 'no samples · provider unavailable'],
+    ['without windows', graphUsage([]), 'no usage windows to chart'],
+    ['waiting for a round', graphUsage([{ label: 'w', kind: 'weekly', usedPct: 1 }]), 'no history yet · samples are recorded after each refresh round']
+  ])('gives the empty graph a reason when the provider is %s', (_name, usage, reason) => {
+    expect(renderHistoryView({ ...graphView([]), graph: { id: 'claude', samples: [], usage } }, true).split('\n')).toEqual(['claude · usage over time', reason, 'v usage dropped (reset) · esc/q/g back']);
   });
 });

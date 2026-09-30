@@ -35,9 +35,7 @@ export {
 
 export { nextLocalMidnight } from './midnight.ts';
 
-export { openEligibility, openHidden, type Eligibility, type Hidden, type StateFile } from './eligibility.ts';
-
-export { openHistory, type History, type HistorySample } from './history.ts';
+export { openEligibility, openHidden, openHistory, type Eligibility, type Hidden, type History, type HistorySample, type StateFile } from './eligibility.ts';
 
 export type UsageWindow = {
   label: string;

@@ -1311,7 +1311,7 @@ describe('cursor panel', () => {
       expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
       expect(lines.at(-1)).toBe('\x1b[90m↑↓/jk select · space route · r refresh · t reset times · q quit · ? help\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
-      const panels = lines.slice(6, -2).join('\n');
+      const panels = lines.slice(6, -3).join('\n');
       expect(panels.match(SPINNER_TAIL)).toHaveLength(10);
       expect(panels.replace(SPINNER_TAIL, '').replace(/ · \d+h\d+m ago/g, '')).toBe(once.split('\n').slice(1).join('\n'));
       dashboard.press('q');

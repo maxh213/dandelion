@@ -80,6 +80,11 @@ function refreshMsOf(env: Record<string, string | undefined>): number {
   return refreshSecondsOf(String(env['DANDELION_REFRESH_SECONDS'])) * 1000;
 }
 
+function graphOf(session: Session): NonNullable<LiveView['graph']> {
+  const { id } = session.probes[session.selected];
+  return { id, samples: session.history.samples(id), usage: session.results[session.selected] };
+}
+
 function viewOf(session: Session): LiveView {
   return {
     slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index], probing: session.inFlight.has(index) })),
@@ -96,7 +101,7 @@ function viewOf(session: Session): LiveView {
     selected: session.selected,
     flash: session.flash,
     rows: session.screen.rows,
-    graph: session.graphing ? { id: session.probes[session.selected].id, samples: session.history.samples(session.probes[session.selected].id) } : undefined
+    graph: session.graphing ? graphOf(session) : undefined
   };
 }
 
@@ -290,14 +295,17 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['H', toggleShowHidden]
 ]);
 
+function keysOf(chunk: string): string[] {
+  return chunk.startsWith('\x1b') ? [] : [...chunk];
+}
+
 function press(session: Session, chunk: string): void {
   const whole = KEYS.get(chunk);
   if (whole) {
     whole(session);
     return;
   }
-  if (chunk.startsWith('\x1b')) return;
-  for (const key of chunk) KEYS.get(key)?.(session);
+  for (const key of keysOf(chunk)) KEYS.get(key)?.(session);
 }
 
 export function startLive(options: LiveOptions): Promise<void> {

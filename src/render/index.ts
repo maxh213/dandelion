@@ -2,4 +2,3 @@ export { isRoutable, openEligibility, openHidden, openHistory, openRoutes, type 
 export { renderRoute, renderRoutesFault, renderSnapshot, type RouteMode, type RouteOutput, type RouteRequest, type SnapshotRequest } from './route.ts';
 export { renderDashboard } from './terminal.ts';
 export { renderLiveFrame, type Flash, type LiveSlot, type LiveView } from './live-frame.ts';
-export { renderHistoryView, type HistoryView } from './history-chart.ts';

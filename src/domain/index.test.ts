@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   HIGH_CHAIN,
   formatCountdown,
@@ -6,6 +6,7 @@ import {
   nextLocalMidnight,
   openEligibility,
   openHidden,
+  openHistory,
   openRoutes,
   routeLine,
   summariseFleet,
@@ -650,5 +651,94 @@ describe('hidden state', () => {
     const hidden = openHidden({}, '/home/u', fileWith('["agy"]', [false]).file);
     expect(hidden.toggle('claude')).toBe(false);
     expect(hidden.ids()).toEqual(['agy']);
+  });
+});
+
+const NOW = '2026-09-30T12:00:00.000Z';
+const OK = { id: 'claude', status: 'ok', windows: [{ label: 'weekly', usedPct: 40, resetsAt: '2026-10-01T00:00:00.000Z' }, { label: 'session', usedPct: 5 }] };
+const FAILED = { id: 'kimi', status: 'error', windows: [{ label: 'weekly', usedPct: 1 }] };
+
+function opened(text: string | Error, env: Record<string, string | undefined> = {}, ok = true) {
+  const replace = vi.fn<(path: string, text: string) => boolean>(() => ok);
+  const read = () => {
+    if (text instanceof Error) throw text;
+    return text;
+  };
+  return { history: openHistory(env, '/home/u', { read, replace }), replace };
+}
+
+describe('usage history', () => {
+  it('records one sample per window of each ok provider and skips failed ones', () => {
+    const { history, replace } = opened('[]');
+    expect(history.record([OK, FAILED], NOW)).toBe(true);
+    expect(history.samples('claude')).toEqual([
+      { id: 'claude', slot: 0, label: 'weekly', usedPct: 40, resetsAt: '2026-10-01T00:00:00.000Z', at: NOW },
+      { id: 'claude', slot: 1, label: 'session', usedPct: 5, at: NOW }
+    ]);
+    expect(history.samples('kimi')).toEqual([]);
+    expect(replace.mock.calls[0][0]).toBe('/home/u/.local/state/dandelion/history.json');
+    expect(JSON.parse(replace.mock.calls[0][1])).toHaveLength(2);
+  });
+
+  it.each([
+    ['XDG_STATE_HOME', { XDG_STATE_HOME: '/x' }, '/x/dandelion/history.json'],
+    ['DANDELION_STATE_FILE', { DANDELION_STATE_FILE: '/s/el.json' }, '/s/history.json'],
+    ['DANDELION_HISTORY_FILE', { DANDELION_STATE_FILE: '/s/el.json', DANDELION_HISTORY_FILE: '/h/h.json' }, '/h/h.json']
+  ])('finds the file through %s', (_name, env, path) => {
+    const { history, replace } = opened('[]', env);
+    history.record([OK], NOW);
+    expect(replace.mock.calls[0][0]).toBe(path);
+  });
+
+  it.each([['missing', new Error('ENOENT')], ['corrupt', '{nope'], ['not a list', '{"a":1}']])('starts empty when the file is %s', (_name, text) => {
+    const { history } = opened(text);
+    expect(history.samples('claude')).toEqual([]);
+    expect(history.record([OK], NOW)).toBe(true);
+    expect(history.samples('claude')).toHaveLength(2);
+  });
+
+  it('drops malformed entries, samples older than 30 days and all but the newest 40000', () => {
+    const good = { id: 'a', slot: 0, label: 'w', usedPct: 1, at: '2026-09-29T00:00:00.000Z' };
+    const old = { ...good, at: '2026-08-01T00:00:00.000Z' };
+    const stored = [good, old, null, { ...good, usedPct: 'x' }, { ...good, at: 'nope' }, { ...good, slot: 0.5 }, { ...good, slot: undefined }, { ...good, id: 3 }, { ...good, label: 3 }, { ...good, at: 3 }, { ...good, resetsAt: 3 }];
+    const { history } = opened(JSON.stringify(stored));
+    history.record([], NOW);
+    expect(history.samples('a')).toEqual([good]);
+    const many = opened(JSON.stringify(Array.from({ length: 40005 }, (_, index) => ({ ...good, at: '2026-09-30T06:00:00.000Z', usedPct: index }))));
+    many.history.record([], NOW);
+    const kept = many.history.samples('a');
+    expect(kept).toHaveLength(40000);
+    expect(kept[0].usedPct).toBe(5);
+  });
+
+  it('keeps samples exactly 30 days old and drops those a millisecond older', () => {
+    const edge = { id: 'a', slot: 0, label: 'w', usedPct: 1, at: '2026-08-31T12:00:00.000Z' };
+    const { history } = opened(JSON.stringify([{ ...edge, at: '2026-08-31T11:59:59.999Z' }, edge]));
+    history.record([], NOW);
+    expect(history.samples('a')).toEqual([edge]);
+  });
+
+  it('keeps every sample of the last day and one per window per hour before that', () => {
+    const base = { id: 'a', slot: 0, label: 'w', usedPct: 1 };
+    const at = (iso: string, extra = {}) => ({ ...base, at: iso, ...extra });
+    const stored = [
+      at('2026-09-20T03:05:00.000Z', { usedPct: 1 }),
+      at('2026-09-20T03:35:00.000Z', { usedPct: 2 }),
+      at('2026-09-20T03:40:00.000Z', { usedPct: 3, slot: 1 }),
+      at('2026-09-20T03:41:00.000Z', { usedPct: 4, id: 'b' }),
+      at('2026-09-20T04:05:00.000Z', { usedPct: 5 }),
+      at('2026-09-29T12:00:00.000Z', { usedPct: 6 }),
+      at('2026-09-29T12:05:00.000Z', { usedPct: 7 })
+    ];
+    const { history } = opened(JSON.stringify(stored));
+    history.record([], NOW);
+    expect(history.samples('a').map((sample) => sample.usedPct)).toEqual([1, 3, 5, 6, 7]);
+    expect(history.samples('b')).toHaveLength(1);
+  });
+
+  it('keeps its samples in memory and reports false when the write fails', () => {
+    const { history } = opened('[]', {}, false);
+    expect(history.record([OK], NOW)).toBe(false);
+    expect(history.samples('claude')).toEqual([]);
   });
 });
