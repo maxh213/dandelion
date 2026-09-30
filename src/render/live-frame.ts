@@ -2,6 +2,7 @@ import {
   HOT_PCT,
   NO_ROUTE,
   formatCountdown,
+  formatResetAt,
   highRouteLine,
   nextLocalMidnight,
   routeLine,
@@ -27,7 +28,7 @@ import {
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
 const HIDE_HELP = 'h hide · H show hidden';
-const HELP_FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
+const HELP_FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help';
 const BOX_WIDTH = 35;
 const BOX_TEXT_CELLS = 31;
 const BOX_GAP = '  ';
@@ -47,6 +48,7 @@ export type LiveView = {
   spinner: number;
   refreshing: boolean;
   footer: boolean;
+  absoluteResets?: boolean;
   ineligible: string[];
   hidden?: string[];
   showHidden?: boolean;
@@ -77,16 +79,24 @@ function hotSegment(hot: number, windows: number): string {
   return hot === 0 ? `all windows below ${HOT_PCT}%` : `${hot}/${windows} windows above ${HOT_PCT}%`;
 }
 
-function resetSegment(head: string, next: { id: string; label: string; resetsAt: string }, now: string): string {
+function resetSuffix(resetsAt: string, now: string, absoluteZone: string | undefined): string {
+  return absoluteZone === undefined ? ` in ${formatCountdown(resetsAt, now)}` : ` at ${formatResetAt(resetsAt, now, absoluteZone)}`;
+}
+
+function resetSegment(head: string, next: { id: string; label: string; resetsAt: string }, now: string, absoluteZone: string | undefined): string {
   const prefix = `${head}${next.id} `;
-  const suffix = ` in ${formatCountdown(next.resetsAt, now)}`;
+  const suffix = resetSuffix(next.resetsAt, now, absoluteZone);
   return `${prefix}${cutCells(next.label, WIDTH - cellCount(prefix) - cellCount(suffix))}${suffix}`;
 }
 
-function summaryLine(usages: ProviderUsage[], now: string): string {
+function summaryLine(usages: ProviderUsage[], now: string, absoluteZone: string | undefined): string {
   const fleet = summariseFleet(usages, now);
   const head = `${hotSegment(fleet.hot, fleet.windows)} · next reset: `;
-  return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now);
+  return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now, absoluteZone);
+}
+
+function absoluteZoneOf(view: LiveView): string | undefined {
+  return view.absoluteResets === true ? view.zone : undefined;
 }
 
 function probingLine(spinner: number): string {
@@ -103,7 +113,7 @@ function isHidden(view: LiveView, slot: LiveSlot): boolean {
 
 function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   const caption = view.flash?.index === index ? view.flash.message : undefined;
-  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption };
+  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view) };
 }
 
 function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
@@ -224,7 +234,7 @@ function regionLines(panels: string[], selected: number | undefined, height: num
 }
 
 function liveChrome(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string[] {
-  return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now), noColor), ...routeBoxes(view, noColor, now)];
+  return [liveBanner(view, usages, noColor, now), dim(summaryLine(usages, now, absoluteZoneOf(view)), noColor), ...routeBoxes(view, noColor, now)];
 }
 
 function liveFooter(noColor: boolean): string[] {

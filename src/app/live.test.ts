@@ -228,7 +228,7 @@ describe('live session', () => {
     const session = startSession();
     await session.settleRound(0);
     session.press('?');
-    expect(session.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
+    expect(session.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help');
     session.press('?');
     expect(session.lastFrame()).not.toContain('keys:');
     const count = session.writes.length;
@@ -237,6 +237,20 @@ describe('live session', () => {
     session.press('\r');
     expect(session.writes).toHaveLength(count);
     expect(session.probes[0].calls).toHaveLength(1);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('toggles absolute reset times with t and back to countdowns', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    const relative = session.lastFrame();
+    const count = session.writes.length;
+    session.press('t');
+    expect(session.writes.length).toBeGreaterThan(count);
+    expect(session.lastFrame()).not.toBe(relative);
+    session.press('t');
+    expect(session.lastFrame()).toBe(relative);
     session.press('q');
     await session.finished;
   });
@@ -252,7 +266,7 @@ describe('live session', () => {
     expect(settled).not.toContain('kilo');
     session.press('?');
     expect(session.lastFrame().split('\n')).toHaveLength(12);
-    expect(session.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
+    expect(session.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help');
     session.press('?');
     expect(session.lastFrame()).not.toContain('keys:');
     expect(session.lastFrame().split('\n')).toHaveLength(12);
@@ -284,7 +298,7 @@ describe('live session', () => {
     expect(claude[6]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 10), 'h hide · H show hidden', 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 10), 'h hide · H show hidden', 'keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help']);
     session.press('q');
     await session.finished;
   });

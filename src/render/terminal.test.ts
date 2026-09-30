@@ -502,15 +502,69 @@ describe('live frame', () => {
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), false, frameNow).split('\n');
     expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
-    expect(lines.at(-1)).toBe(`\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help${RESET}`);
+    expect(lines.at(-1)).toBe(`\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help${RESET}`);
     expect(lines.slice(6, -2).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n'));
   });
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), true, '2026-09-13T10:01:05.000Z').split('\n');
     expect(lines[0]).toBe('DANDELION'.padEnd(34) + 'refreshing… · data 0h1m old · 10:01:05');
-    expect(lines.at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
-    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
+    expect(lines.at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help');
+    expect(lines.slice(0, -1).every((line) => [...line].length <= 72)).toBe(true);
+  });
+
+  describe('absolute reset times', () => {
+    const weekly = (resetsAt?: string): UsageWindow => ({ label: 'Claude and GPT models · Weekly Limit', kind: 'weekly', usedPct: 100, resetsAt });
+    const view = (absoluteResets: boolean, zone = 'UTC'): LiveView => viewOf(background(), { absoluteResets, zone });
+
+    it('switches every window row between countdown and local time and back', () => {
+      const rows = (absoluteResets: boolean): string[] => renderLiveFrame(view(absoluteResets, 'Europe/London'), true, NOW).split('\n').filter((line) => line.includes('↻'));
+      const relative = rows(false);
+      const absolute = rows(true);
+      expect(relative.length).toBeGreaterThan(0);
+      expect(relative.every((line) => /↻ \d+[dh]\d+[hm]$/.test(line))).toBe(true);
+      expect(absolute).toHaveLength(relative.length);
+      expect(absolute.every((line) => /↻ (\w{3} \d{2}:\d{2}|\w{3} \d+ \d{2}:\d{2})$/.test(line))).toBe(true);
+      expect(rows(false)).toEqual(relative);
+    });
+
+    it('renders a reset two days away as weekday and time in the zone and one nine days away as month, day and time', () => {
+      const row = (resetsAt: string): string => renderWindowRow(weekly(resetsAt), true, '2026-10-03T10:00:00Z', 'Europe/London');
+      expect(row('2026-10-05T08:05:00Z')).toMatch(/ ↻ Mon 09:05$/);
+      expect(row('2026-10-12T20:40:00Z')).toMatch(/ ↻ Oct 12 21:40$/);
+      expect(row('2026-10-09T10:00:00Z')).toMatch(/ ↻ Oct 9 11:00$/);
+      expect(row('2026-10-09T09:59:00Z')).toMatch(/ ↻ Fri 10:59$/);
+    });
+
+    it('uses 24-hour time at midnight', () => {
+      expect(renderWindowRow(weekly('2026-10-04T23:00:00Z'), true, '2026-10-03T10:00:00Z', 'Europe/London')).toMatch(/ ↻ Mon 00:00$/);
+    });
+
+    it('never widens a row past 72 cells in either mode and shows nothing without a reset', () => {
+      const widest = (resetsAt: string | undefined, zone: string | undefined): number => cellsOf(renderWindowRow(weekly(resetsAt), true, NOW, zone));
+      const cellsOf = (text: string): number => [...text].length;
+      expect(widest('2026-10-12T20:40:00Z', 'UTC')).toBeLessThanOrEqual(72);
+      expect(widest('2026-09-15T20:40:00Z', 'UTC')).toBeLessThanOrEqual(72);
+      expect(widest('2026-12-30T20:40:00Z', undefined)).toBeLessThanOrEqual(72);
+      expect(renderWindowRow(weekly(), true, NOW, 'UTC')).not.toContain('↻');
+      expect(renderWindowRow(weekly(), true, NOW)).not.toContain('↻');
+    });
+
+    it('turns the summary line into next reset at an absolute time', () => {
+      const summary = (absoluteResets: boolean): string => renderLiveFrame(view(absoluteResets), true, NOW).split('\n')[1];
+      expect(summary(false)).toBe('2/13 windows above 80% · next reset: claude session in 8h40m');
+      expect(summary(true)).toBe('2/13 windows above 80% · next reset: claude session at Sun 18:40');
+    });
+
+    it('renders a stale balance panel without windows', () => {
+      const stale = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: NOW, status: 'ok' as const, snapshotAt: '2026-09-01T10:00:00Z', balance: { amount: 5, currency: '$', reference: 10 } };
+      expect(renderPanelOk(stale, true, NOW, PLAIN)).toContain('balance $5.00');
+    });
+
+    it('marks stale panels with the same absolute times', () => {
+      const stale = okUsage('grok', [{ label: 'credits', kind: 'weekly', usedPct: 10, resetsAt: '2026-09-15T20:40:00Z' }], { snapshotAt: '2026-09-01T10:00:00Z' });
+      expect(renderPanelOk(stale, true, NOW, { ...PLAIN, absoluteZone: 'UTC' })).toContain('↻ Tue 20:40');
+    });
   });
 
   describe('frame height and scrolling', () => {
@@ -518,7 +572,7 @@ describe('live frame', () => {
     const RULE = '='.repeat(72);
     const BANNER = `${'DANDELION'.padEnd(48)}data 0h0m old · 10:00:00`;
     const SUMMARY = '8/14 windows above 80% · next reset: claude session in 3d0h';
-    const FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
+    const FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help';
     const BOX_BLOCK = [
       '+- route -------------------------+  +- route --high ------------------+',
       '| model-a high                    |  | model-h1 max                    |',

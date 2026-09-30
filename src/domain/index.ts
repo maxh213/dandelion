@@ -114,3 +114,17 @@ export function formatCountdown(resetsAt: string, now: string): string {
   if (days > 0) return `${days}d${hours % 24}h`;
   return `${hours}h${minutes}m`;
 }
+
+const WEEKDAY_LIMIT_MS = 6 * 24 * MS_PER_HOUR;
+
+function zonedParts(instant: string, zone: string, fields: Intl.DateTimeFormatOptions): Map<string, string> {
+  const format = new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', ...fields });
+  return new Map(format.formatToParts(new Date(instant)).map((part) => [part.type, part.value]));
+}
+
+export function formatResetAt(resetsAt: string, now: string, zone: string): string {
+  const near = Date.parse(resetsAt) - Date.parse(now) < WEEKDAY_LIMIT_MS;
+  const parts = zonedParts(resetsAt, zone, near ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
+  const clock = `${parts.get('hour')}:${parts.get('minute')}`;
+  return near ? `${parts.get('weekday')} ${clock}` : `${parts.get('month')} ${parts.get('day')} ${clock}`;
+}

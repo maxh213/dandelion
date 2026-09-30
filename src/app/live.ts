@@ -40,6 +40,7 @@ type Session = LiveOptions & {
   spinner: number;
   footer: boolean;
   showHidden: boolean;
+  absoluteResets: boolean;
   running?: boolean;
   rounds: number;
   quitting: boolean;
@@ -82,6 +83,7 @@ function viewOf(session: Session): LiveView {
     spinner: session.spinner,
     refreshing: session.running === true && session.rounds > 1,
     footer: session.footer,
+    absoluteResets: session.absoluteResets,
     ineligible: session.eligibility.ineligible(),
     hidden: session.hidden.ids(),
     showHidden: session.showHidden,
@@ -157,6 +159,11 @@ function isShown(session: Session, index: number): boolean {
 
 function shownIndexes(session: Session): number[] {
   return session.probes.map((_, index) => index).filter((index) => isShown(session, index));
+}
+
+function toggleResetTimes(session: Session): void {
+  session.absoluteResets = !session.absoluteResets;
+  draw(session);
 }
 
 function moveDown(session: Session): void {
@@ -239,6 +246,7 @@ async function quit(session: Session): Promise<void> {
 
 const KEYS = new Map<string, (session: Session) => unknown>([
   ['r', refresh],
+  ['t', toggleResetTimes],
   ['?', toggleFooter],
   ['q', quit],
   ['\x03', quit],
@@ -272,6 +280,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       spinner: 0,
       footer: false,
       showHidden: false,
+      absoluteResets: false,
       rounds: 0,
       selected: -1,
       quitting: false,

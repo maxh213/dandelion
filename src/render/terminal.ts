@@ -1,8 +1,9 @@
-import { HOT_PCT, formatCountdown, type Balance, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { HOT_PCT, formatCountdown, formatResetAt, type Balance, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
 const LABEL_CELLS = 35;
+const ABSOLUTE_LABEL_CELLS = 31;
 const PERCENT_CELLS = 4;
 const BOLD = '\x1b[1m';
 const DIM = '\x1b[90m';
@@ -13,7 +14,7 @@ const ROUTING_OFF = 'routing off';
 const HIDDEN = 'hidden';
 const MARKER = '▸ ';
 
-export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string };
+export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; absoluteZone?: string };
 
 function styled(text: string, code: string, noColor: boolean): string {
   if (noColor) return text;
@@ -141,23 +142,28 @@ export function cutCells(text: string, limit: number): string {
   return cells.length > limit ? `${cells.slice(0, limit - 1).join('').trimEnd()}…` : text;
 }
 
-function fitLabel(label: string): string {
-  return cutCells(label, LABEL_CELLS).padEnd(LABEL_CELLS);
+function fitLabel(label: string, cells = LABEL_CELLS): string {
+  return cutCells(label, cells).padEnd(cells);
 }
 
-function countdown(resetsAt: string | undefined, now: string): string {
-  return resetsAt === undefined ? '' : ` ↻ ${formatCountdown(resetsAt, now)}`;
+function resetText(resetsAt: string, now: string, absoluteZone: string | undefined): string {
+  return absoluteZone === undefined ? formatCountdown(resetsAt, now) : formatResetAt(resetsAt, now, absoluteZone);
 }
 
-function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string): string {
+function countdown(resetsAt: string | undefined, now: string, absoluteZone: string | undefined): string {
+  return resetsAt === undefined ? '' : ` ↻ ${resetText(resetsAt, now, absoluteZone)}`;
+}
+
+function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, absoluteZone?: string): string {
   const gauge = paint(renderGauge(window.usedPct, 100, noColor));
   const percent = paint(`${window.usedPct}%`.padStart(PERCENT_CELLS));
-  return `${fitLabel(window.label)} ${gauge} ${percent}${countdown(window.resetsAt, now)}`;
+  const label = fitLabel(window.label, absoluteZone === undefined ? LABEL_CELLS : ABSOLUTE_LABEL_CELLS);
+  return `${label} ${gauge} ${percent}${countdown(window.resetsAt, now, absoluteZone)}`;
 }
 
-export function renderWindowRow(window: UsageWindow, noColor: boolean, now: string): string {
+export function renderWindowRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone?: string): string {
   const style = STYLE_TOKENS[styleToken(window.usedPct)];
-  return rowWith(window, noColor, now, (text) => styled(text, style, noColor));
+  return rowWith(window, noColor, now, (text) => styled(text, style, noColor), absoluteZone);
 }
 
 function remainingPct(balance: Balance, reference: number): number {
@@ -220,7 +226,7 @@ function snapshotLines(usage: OkUsage, now: string): string[] {
 }
 
 function renderPanelStale(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
-  const rows = panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String), (text) => text);
+  const rows = panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String, marks.absoluteZone), (text) => text);
   return dimPanel([headerLine(usage.displayName, marks, String), ...rows, ...snapshotLines(usage, now), captionLine(usage, marks)], marks, noColor);
 }
 
@@ -228,7 +234,7 @@ function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, marks: 
   return [
     markedRule(marks, noColor),
     headerLine(usage.displayName, marks, (text) => dim(text, noColor)),
-    ...panelBody(usage, noColor, (window) => renderWindowRow(window, noColor, now), usageStyle(noColor)),
+    ...panelBody(usage, noColor, (window) => renderWindowRow(window, noColor, now, marks.absoluteZone), usageStyle(noColor)),
     ...snapshotLines(usage, now).map((line) => dim(line, noColor)),
     dim(captionLine(usage, marks), noColor)
   ].join('\n');
