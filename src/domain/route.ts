@@ -27,7 +27,7 @@ type Candidate = { id: string; windows: RoutableWindow[] };
 
 type Pick = { id: string | undefined; score: number };
 
-type Tonight = { nowMs: number; midnightMs: number };
+export type Tonight = { nowMs: number; midnightMs: number };
 
 export function isRoutable(usage: RoutableUsage | undefined): usage is RoutableUsage {
   return usage?.status === 'ok' && usage.windows.length > 0;
@@ -37,7 +37,7 @@ function eligibleUsages(usages: RoutableUsage[], ineligible: string[]): Routable
   return usages.filter((usage) => !ineligible.includes(usage.id));
 }
 
-function trips(usedPct: number): boolean {
+export function trips(usedPct: number): boolean {
   return usedPct >= TRIP_PCT;
 }
 
@@ -71,7 +71,7 @@ function resetsTonight(window: RoutableWindow, tonight: Tonight): boolean {
   return resetMs > tonight.nowMs && resetMs < tonight.midnightMs;
 }
 
-function evaporates(window: RoutableWindow, tonight: Tonight): boolean {
+export function evaporates(window: RoutableWindow, tonight: Tonight): boolean {
   return window.kind === 'weekly' && leftOf(window) < UNTOUCHED_LEFT && resetsTonight(window, tonight);
 }
 

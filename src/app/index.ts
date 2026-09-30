@@ -39,7 +39,7 @@ import {
   type RoutesFile,
   type StateFile
 } from '../render/index.ts';
-import { startLive, type Keyboard, type Screen } from './live.ts';
+import { startLive, type Keyboard, type Notifier, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
 export type { RouteMode, RouteOutput, RouteRequest } from '../render/index.ts';
@@ -286,6 +286,10 @@ export async function runJson(io: ProbeIo, env: Record<string, string | undefine
   return { out: `${renderSnapshot(routes, usages, eligibilityOf(io, env).ineligible(), request)}\n`, err };
 }
 
+export const realNotifier: Notifier = {
+  notify: (text) => execFile('notify-send', ['--app-name=dandelion', 'dandelion', text], () => undefined)
+};
+
 export function processZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
@@ -309,6 +313,7 @@ export function runLive(
     history: historyOf(io, env),
     routes: routesOf(env),
     zone: processZone(),
+    notifier: realNotifier,
     clock
   });
 }

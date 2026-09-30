@@ -51,10 +51,11 @@ type SessionOverrides = {
   hiddenSaves?: boolean[];
   historyText?: string;
   historyWrites?: boolean;
+  notifier?: { notify(text: string): unknown };
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites } = { historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier } = { notifier: { notify: vi.fn() }, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
@@ -73,13 +74,13 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: hiddenReplace
   });
   const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes: { lines: LINES }, zone });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes: { lines: LINES }, zone, notifier });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { notifier, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -951,5 +952,64 @@ describe('route boxes', () => {
       await end(visible);
       await end(hidden);
     });
+  });
+});
+
+function windowUsage(id: string, window: Usage['windows'][number]): Usage {
+  return { id, displayName: id, planLabel: 'plan', windows: [window], fetchedAt: START, status: 'ok' };
+}
+
+function weekly(usedPct: number, resetsAt = '2026-09-18T10:00:00.000Z'): Usage['windows'][number] {
+  return { label: 'weekly', kind: 'weekly', usedPct, resetsAt };
+}
+
+async function roundsOf(env: Record<string, string | undefined>, windows: Usage['windows'][number][]) {
+  const notify = vi.fn();
+  const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1', ...env }, notifier: { notify } });
+  for (const [round, window] of windows.entries()) {
+    await session.settleRound(round, { claude: windowUsage('claude', window) });
+    await vi.advanceTimersByTimeAsync(1000);
+  }
+  session.press('q');
+  await session.finished;
+  return notify.mock.calls.map(([text]) => text);
+}
+
+describe('notifications', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date(START));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([[undefined], ['']])('never calls the notifier when DANDELION_NOTIFY is %j', async (value) => {
+    expect(await roundsOf({ DANDELION_NOTIFY: value }, [weekly(79), weekly(96)])).toEqual([]);
+  });
+
+  it('notifies once at 80% and once more at 95%', async () => {
+    expect(await roundsOf({ DANDELION_NOTIFY: '1' }, [weekly(79), weekly(80), weekly(94), weekly(95)])).toEqual(['claude weekly at 80%', 'claude weekly at 95%']);
+  });
+
+  it('treats the first round as a baseline and stays quiet while a window stays hot', async () => {
+    expect(await roundsOf({ DANDELION_NOTIFY: '1' }, [weekly(85), weekly(85), weekly(88)])).toEqual([]);
+  });
+
+  it('notifies about a threshold again in a new reset period but not twice in the same one', async () => {
+    const next = '2026-09-25T10:00:00.000Z';
+    const texts = await roundsOf({ DANDELION_NOTIFY: '1' }, [weekly(70), weekly(81), weekly(70), weekly(82), weekly(10, next), weekly(83, next)]);
+    expect(texts).toEqual(['claude weekly at 81%', 'claude weekly at 83%']);
+  });
+
+  it('notifies once when a rolling window recovers from a trip', async () => {
+    const rolling = (usedPct: number) => ({ label: '5h', kind: 'rolling' as const, usedPct, resetsAt: '2026-09-13T15:00:00.000Z' });
+    expect(await roundsOf({ DANDELION_NOTIFY: '1' }, [rolling(91), rolling(40), rolling(30)])).toEqual(['claude 5h recovered at 40%']);
+  });
+
+  it('notifies once when a weekly window starts to evaporate', async () => {
+    const tonight = '2026-09-13T20:00:00.000Z';
+    expect(await roundsOf({ DANDELION_NOTIFY: '1' }, [weekly(2, tonight), weekly(50, tonight), weekly(51, tonight)])).toEqual(['claude weekly is evaporating, resets in 9h59m']);
   });
 });

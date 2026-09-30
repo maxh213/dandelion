@@ -1,10 +1,14 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Routes } from '../render/index.ts';
+import { isRoutable, nextLocalMidnight, notificationEvents, renderLiveFrame, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
   rows?: number;
   on?(event: 'resize', listener: () => void): unknown;
+}
+
+export interface Notifier {
+  notify(text: string): unknown;
 }
 
 export interface Keyboard {
@@ -25,6 +29,7 @@ type LiveOptions = {
   history: History;
   routes: Routes;
   zone: string;
+  notifier: Notifier;
   clock?: () => string;
 };
 
@@ -48,6 +53,7 @@ type Session = LiveOptions & {
   quitting: boolean;
   selected: number;
   graphing: boolean;
+  notified: Set<string>;
   flash?: Flash;
   frameTimer?: Timer;
   refreshTimer?: Timer;
@@ -129,7 +135,22 @@ function tick(session: Session): void {
   scheduleTick(session);
 }
 
+function notifying(session: Session): boolean {
+  return (session.env['DANDELION_NOTIFY'] ?? '') !== '';
+}
+
+function announce(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): void {
+  if (!notifying(session) || previous === undefined || current === undefined) return;
+  const now = session.clock();
+  for (const { key, text } of notificationEvents(previous, current, now, nextLocalMidnight(session.zone, now))) {
+    if (session.notified.has(key)) continue;
+    session.notified.add(key);
+    session.notifier.notify(text);
+  }
+}
+
 function settle(session: Session, index: number, usage: LiveSlot['usage']): void {
+  announce(session, session.results[index], usage);
   session.results[index] = usage;
   session.inFlight.delete(index);
   draw(session);
@@ -325,6 +346,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       rounds: 0,
       selected: -1,
       graphing: false,
+      notified: new Set(),
       quitting: false,
       done
     };

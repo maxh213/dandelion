@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { isEntryFile, routesWarning, runApp, runJson, runLive, runRoute, realIo } from './index.ts';
+import { isEntryFile, routesWarning, runApp, runJson, runLive, runRoute, realIo, realNotifier } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
@@ -1265,7 +1265,7 @@ describe('cursor panel', () => {
       expect(dashboard.writes.join('')).not.toContain('refreshing…');
       await vi.advanceTimersByTimeAsync(295000);
       expect(claudeRuns()).toBe(4);
-      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_REFRESH_SECONDS', 'DANDELION_ROUTES_FILE'].sort());
+      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_NOTIFY', 'DANDELION_REFRESH_SECONDS', 'DANDELION_ROUTES_FILE'].sort());
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -2563,3 +2563,16 @@ describe('hermes panel', () => {
   });
 });
 
+
+describe('real notifier', () => {
+  it('ignores a missing notify-send', async () => {
+    const path = process.env['PATH'];
+    process.env['PATH'] = '';
+    try {
+      expect(() => realNotifier.notify('claude weekly at 80%')).not.toThrow();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    } finally {
+      process.env['PATH'] = path;
+    }
+  });
+});

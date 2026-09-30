@@ -4,6 +4,7 @@ import {
   formatCountdown,
   highRouteLine,
   nextLocalMidnight,
+  notificationEvents,
   openEligibility,
   openHidden,
   openHistory,
@@ -740,5 +741,48 @@ describe('usage history', () => {
     const { history } = opened('[]', {}, false);
     expect(history.record([OK], NOW)).toBe(false);
     expect(history.samples('claude')).toEqual([]);
+  });
+});
+
+describe('notificationEvents', () => {
+  const NOW = '2026-09-13T10:00:00.000Z';
+  const MIDNIGHT = '2026-09-13T23:00:00.000Z';
+  const usageOf = (windows: UsageWindow[], status: 'ok' | 'error' = 'ok'): ProviderUsage =>
+    status === 'ok'
+      ? { id: 'claude', displayName: 'claude', windows, fetchedAt: NOW, status }
+      : { id: 'claude', displayName: 'claude', windows, fetchedAt: NOW, status, reason: 'down' };
+  const week = (usedPct: number, resetsAt = '2026-09-18T10:00:00.000Z'): UsageWindow => ({ label: 'weekly', kind: 'weekly', usedPct, resetsAt });
+  const session = (usedPct: number): UsageWindow => ({ label: '5h', kind: 'rolling', usedPct, resetsAt: '2026-09-13T15:00:00.000Z' });
+  const texts = (before: UsageWindow[], after: UsageWindow[]) => notificationEvents(usageOf(before), usageOf(after), NOW, MIDNIGHT).map((event) => event.text);
+
+  it('reports the highest threshold crossed, keyed by period', () => {
+    expect(texts([week(79)], [week(80)])).toEqual(['claude weekly at 80%']);
+    expect(texts([week(94)], [week(95)])).toEqual(['claude weekly at 95%']);
+    expect(texts([week(70)], [week(97)])).toEqual(['claude weekly at 97%']);
+    expect(notificationEvents(usageOf([week(79)]), usageOf([week(80)]), NOW, MIDNIGHT)[0].key).toContain('2026-09-18T10:00:00.000Z');
+  });
+
+  it('reports nothing for windows already over a threshold or new windows', () => {
+    expect(texts([week(85)], [week(88)])).toEqual([]);
+    expect(texts([], [week(99)])).toEqual([]);
+  });
+
+  it('reports a rolling window dropping below the trip but not a weekly one', () => {
+    expect(texts([session(90)], [session(89)])).toEqual(['claude 5h recovered at 89%']);
+    expect(texts([session(89)], [session(40)])).toEqual([]);
+    expect(texts([week(91)], [week(40)])).toEqual([]);
+  });
+
+  it('reports a weekly window that newly evaporates with the time left', () => {
+    const tonight = '2026-09-13T20:00:00.000Z';
+    expect(texts([week(2, tonight)], [week(50, tonight)])).toEqual(['claude weekly is evaporating, resets in 10h0m']);
+    expect(texts([week(50, tonight)], [week(51, tonight)])).toEqual([]);
+    expect(texts([week(100, tonight)], [week(50, tonight)])).toEqual([]);
+    expect(texts([week(50)], [week(51)])).toEqual([]);
+  });
+
+  it('reports nothing unless both results are ok', () => {
+    expect(notificationEvents(usageOf([week(10)], 'error'), usageOf([week(99)]), NOW, MIDNIGHT)).toEqual([]);
+    expect(notificationEvents(usageOf([week(10)]), usageOf([week(99)], 'error'), NOW, MIDNIGHT)).toEqual([]);
   });
 });

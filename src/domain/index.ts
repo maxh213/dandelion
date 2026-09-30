@@ -1,4 +1,4 @@
-import type { WindowKind } from './route.ts';
+import { evaporates, trips, type Tonight, type WindowKind } from './route.ts';
 
 export {
   ProbeUnavailable,
@@ -127,4 +127,48 @@ export function formatResetAt(resetsAt: string, now: string, zone: string): stri
   const parts = zonedParts(resetsAt, zone, near ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
   const clock = `${parts.get('hour')}:${parts.get('minute')}`;
   return near ? `${parts.get('weekday')} ${clock}` : `${parts.get('month')} ${parts.get('day')} ${clock}`;
+}
+
+export const CRITICAL_PCT = 95;
+
+export type Notification = { key: string; text: string };
+
+type WindowPair = { id: string; previous: UsageWindow; current: UsageWindow };
+
+function crossed(pair: WindowPair, pct: number): boolean {
+  return pair.previous.usedPct < pct && pair.current.usedPct >= pct;
+}
+
+function notification(pair: WindowPair, event: string, text: string): Notification[] {
+  return [{ key: `${pair.id}|${pair.current.label}|${pair.current.resetsAt}|${event}`, text }];
+}
+
+function thresholdEvents(pair: WindowPair): Notification[] {
+  const text = `${pair.id} ${pair.current.label} at ${pair.current.usedPct}%`;
+  if (crossed(pair, CRITICAL_PCT)) return notification(pair, 'critical', text);
+  return crossed(pair, HOT_PCT) ? notification(pair, 'hot', text) : [];
+}
+
+function recoveryEvents(pair: WindowPair): Notification[] {
+  const recovered = pair.current.kind === 'rolling' && trips(pair.previous.usedPct) && !trips(pair.current.usedPct);
+  return recovered ? notification(pair, 'recovered', `${pair.id} ${pair.current.label} recovered at ${pair.current.usedPct}%`) : [];
+}
+
+function evaporationEvents(pair: WindowPair, tonight: Tonight, now: string): Notification[] {
+  if (evaporates(pair.previous, tonight) || !evaporates(pair.current, tonight)) return [];
+  const left = formatCountdown(String(pair.current.resetsAt), now);
+  return notification(pair, 'evaporating', `${pair.id} ${pair.current.label} is evaporating, resets in ${left}`);
+}
+
+function pairEvents(pair: WindowPair, now: string, midnight: string): Notification[] {
+  const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
+  return [...thresholdEvents(pair), ...recoveryEvents(pair), ...evaporationEvents(pair, tonight, now)];
+}
+
+export function notificationEvents(previous: ProviderUsage, current: ProviderUsage, now: string, midnight: string): Notification[] {
+  if (previous.status !== 'ok' || current.status !== 'ok') return [];
+  return current.windows.flatMap((window) => {
+    const before = previous.windows.find((each) => each.label === window.label);
+    return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, now, midnight);
+  });
 }
