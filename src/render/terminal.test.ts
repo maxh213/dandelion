@@ -239,7 +239,7 @@ describe('terminal renderer', () => {
       snapshotAt: '2026-09-10T17:14:22.812Z'
     };
     expect(renderPanelOk(usage, false, NOW, PLAIN)).toBe(
-      `\x1b[90m${'━'.repeat(72)}\ngrok\n${'credits'.padEnd(35)} ${'█'.repeat(19)}░  96%\nstale snapshot 2d16h old\ngrok · grok${RESET}`
+      `\x1b[90m${'━'.repeat(72)}${RESET}\n\x1b[90mgrok${RESET}\n\x1b[90m${'credits'.padEnd(35)} ${'█'.repeat(19)}░  96%${RESET}\n\x1b[90mstale snapshot 2d16h old${RESET}\n\x1b[90mgrok · grok${RESET}`
     );
     expect(renderPanelOk({ ...usage, windows: [] }, true, NOW, PLAIN).split('\n')[2]).toBe(' '.repeat(72));
   });
@@ -448,7 +448,7 @@ describe('live frame', () => {
     const plain = renderLiveFrame(viewOf([undefined], { spinner: 11 }), true, NOW).split('\n').slice(6);
     expect(plain).toEqual(['='.repeat(72), 'p0', '⠙ probing…']);
     const coloured = renderLiveFrame({ ...viewOf([]), slots: [{ id: 'kimi', usage: undefined }] }, false, NOW);
-    expect(coloured.split('\n').slice(6).join('\n')).toBe(`\x1b[90m${'━'.repeat(72)}\nkimi\n⠋ probing…${RESET}`);
+    expect(coloured.split('\n').slice(6).join('\n')).toBe(`\x1b[90m${'━'.repeat(72)}${RESET}\n\x1b[90mkimi${RESET}\n\x1b[90m⠋ probing…${RESET}`);
     expect([...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'].map((frame, spinner) => renderLiveFrame(viewOf([undefined], { spinner }), true, NOW).endsWith(`${frame} probing…`))).toEqual(Array(10).fill(true));
   });
 
@@ -630,10 +630,10 @@ describe('panel marks', () => {
   const panelOf = (view: LiveView, noColor = false) => renderLiveFrame(view, noColor, NOW).split('\n').slice(6).join('\n');
 
   it.each<[string, ProviderUsage | undefined, number | undefined, string]>([
-    ['unavailable, not selected', unavailableClaude, undefined, `${DIM}${'━'.repeat(72)}\nclaude${' '.repeat(55)}routing off\n${REASON}\n${CAPTION}${RESET}`],
-    ['unavailable, selected', unavailableClaude, 0, `${DIM}▸ claude${' '.repeat(53)}routing off\n${REASON}\n${CAPTION}${RESET}`],
-    ['pending, not selected', undefined, undefined, `${DIM}${'━'.repeat(72)}\nclaude${' '.repeat(55)}routing off\n⠋ probing…${RESET}`],
-    ['pending, selected', undefined, 0, `${DIM}▸ claude${' '.repeat(53)}routing off\n⠋ probing…${RESET}`]
+    ['unavailable, not selected', unavailableClaude, undefined, `${DIM}${'━'.repeat(72)}${RESET}\n${DIM}claude${' '.repeat(55)}routing off${RESET}\n${DIM}${REASON}${RESET}\n${DIM}${CAPTION}${RESET}`],
+    ['unavailable, selected', unavailableClaude, 0, `${DIM}▸ claude${' '.repeat(53)}routing off${RESET}\n${DIM}${REASON}${RESET}\n${DIM}${CAPTION}${RESET}`],
+    ['pending, not selected', undefined, undefined, `${DIM}${'━'.repeat(72)}${RESET}\n${DIM}claude${' '.repeat(55)}routing off${RESET}\n${DIM}⠋ probing…${RESET}`],
+    ['pending, selected', undefined, 0, `${DIM}▸ claude${' '.repeat(53)}routing off${RESET}\n${DIM}⠋ probing…${RESET}`]
   ])('keeps the tag inside the dim span of an all-dim panel: %s', (_case, usage, selected, bytes) => {
     expect(panelOf(liveView(usage, { selected }))).toBe(bytes);
   });
@@ -661,7 +661,7 @@ describe('panel marks', () => {
     const view: LiveView = { ...liveView(unavailableClaude), slots: [{ id: 'claude', usage: unavailableClaude }, { id: 'kilo', usage: kilo }], ineligible: [] };
     const message = 'not routable (no usage windows)';
     expect(panelOf({ ...view, flash: { index: 1, message } }).split('\n').slice(-2)).toEqual([' '.repeat(72), `${DIM}${message}${RESET}`]);
-    expect(panelOf({ ...view, flash: { index: 0, message } })).toContain(`\n${REASON}\n${message}${RESET}\n`);
+    expect(panelOf({ ...view, flash: { index: 0, message } })).toContain(`\n${DIM}${REASON}${RESET}\n${DIM}${message}${RESET}\n`);
     expect(panelOf({ ...view, flash: { index: 0, message } })).toContain(`${DIM}api balance · kilo${RESET}`);
   });
 
@@ -915,5 +915,66 @@ describe('route boxes', () => {
   it('never draws the boxes in the once dashboard', () => {
     expect(renderDashboard(ROUTED, true, NOW, [])).not.toContain('+- route');
     expect(renderDashboard(ROUTED, false, NOW, [])).not.toContain('┌─ route');
+  });
+});
+
+describe('style balance', () => {
+  const SGR = /\x1b\[[0-9;]*m/g;
+  const closed = (line: string): boolean => (line.match(SGR)?.at(-1) ?? RESET) === RESET;
+  const okOf = (id: string, snapshotAt?: string): ProviderUsage => ({
+    id,
+    displayName: id,
+    windows: [{ label: 'credits', kind: 'weekly', usedPct: 60, resetsAt: '2026-09-13T21:15:36.133Z' }],
+    fetchedAt: NOW,
+    status: 'ok',
+    snapshotAt
+  });
+  const mixed: ProviderUsage[] = [
+    okOf('claude'),
+    okOf('grok', '2026-09-10T17:14:22.812Z'),
+    okOf('junie', '2026-09-13T09:00:00.000Z'),
+    { id: 'hermes', displayName: 'hermes', windows: [], fetchedAt: NOW, status: 'unavailable', reason: 'token expired' },
+    { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: NOW, status: 'error', reason: 'boom' }
+  ];
+  const dimJunie: ProviderUsage[] = [okOf('claude'), okOf('junie', '2026-09-10T17:14:22.812Z')];
+  const liveViewOf = (usages: ProviderUsage[], rows: number): LiveView => ({
+    slots: [...usages.map((usage) => ({ id: usage.id, usage })), { id: 'pending', usage: undefined }],
+    spinner: 0,
+    refreshing: false,
+    footer: true,
+    ineligible: ['hermes'],
+    zone: 'UTC',
+    routes: { lines: LINES },
+    settled: usages,
+    selected: -1,
+    rows
+  });
+
+  it('closes every styled line of the once dashboard', () => {
+    const lines = renderDashboard(mixed, false, NOW, ['kilo']).split('\n');
+    expect(lines.filter((line) => line.includes('\x1b['))).not.toHaveLength(0);
+    expect(lines.every(closed)).toBe(true);
+    expect(lines.filter((line) => line.includes('token expired') || line.includes('stale'))).toSatisfy((dimmed: string[]) =>
+      dimmed.every((line) => line.startsWith('\x1b[90m') && line.endsWith(RESET))
+    );
+  });
+
+  it.each([60, 12, 8, 7, 6])('closes every styled line of a live frame with %i rows', (rows) => {
+    const lines = renderLiveFrame(liveViewOf(mixed, rows), false, NOW).split('\n');
+    expect(lines.every(closed)).toBe(true);
+  });
+
+  it('closes a dim junie panel cut after its rule and header', () => {
+    const full = renderLiveFrame(liveViewOf(dimJunie, 60), false, NOW).split('\n');
+    const rows = full.findIndex((line) => line.includes('junie')) + 1;
+    const lines = renderLiveFrame({ ...liveViewOf(dimJunie, rows), footer: false }, false, NOW).split('\n');
+    expect(lines.at(-1)).toBe(`\x1b[90mjunie${RESET}`);
+    expect(lines.at(-2)).toBe(`\x1b[90m${'━'.repeat(72)}${RESET}`);
+    expect(lines.every(closed)).toBe(true);
+  });
+
+  it('leaves NO_COLOR output free of escapes', () => {
+    expect(renderDashboard(mixed, true, NOW, [])).not.toContain('\x1b');
+    expect(renderLiveFrame(liveViewOf(mixed, 12), true, NOW)).not.toContain('\x1b');
   });
 });

@@ -16,7 +16,10 @@ export type PanelMarks = { selected: boolean; ineligible: boolean; caption?: str
 
 function styled(text: string, code: string, noColor: boolean): string {
   if (noColor) return text;
-  return `${code}${text}${RESET}`;
+  return text
+    .split('\n')
+    .map((line) => `${code}${line}${RESET}`)
+    .join('\n');
 }
 
 export function bold(text: string, noColor: boolean): string {

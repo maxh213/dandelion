@@ -109,7 +109,7 @@ function codexSpawner(lines: string[] = codexLines(), spawned: string[][] = []):
   };
 }
 
-const LIVE_CLEAR = '\x1b[H\x1b[2J';
+const LIVE_CLEAR = '\x1b[H\x1b[2J\x1b[0m';
 const ROUTES_FILE = fileURLToPath(new URL('../routes.fixture.json', import.meta.url));
 
 async function routeWith(io: ProbeIo, env: Record<string, string | undefined>, request: Parameters<typeof runRoute>[2]) {
@@ -271,7 +271,7 @@ describe('claude and agy windows', () => {
     ['all-models-less', { stdout: 'Current week (Fable): 100% used', stderr: '' }, 'Could not parse usage from output']
   ])('renders a dim unavailable panel for a %s claude', async (_case, result, reason) => {
     const output = await runApp(routedRunner({ claude: result }), {}, NOW);
-    expect(output).toContain(`${DIM}${RULE}\nclaude\n${reason}\nclaude · personal · claude\x1b[0m`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}claude\x1b[0m\n${DIM}${reason}\x1b[0m\n${DIM}claude · personal · claude\x1b[0m`);
     expect(panelOf(output, 'agy')).toHaveLength(6);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
   });
@@ -284,7 +284,7 @@ describe('claude and agy windows', () => {
     ['greeting', { stdout: 'hello world', stderr: '' }, 'Could not parse usage from output']
   ])('renders a dim unavailable panel for a %s agy', async (_case, result, reason) => {
     const output = await runApp(routedRunner({ agy: result }), {}, NOW);
-    expect(output).toContain(`${DIM}${RULE}\nagy\n${reason}\nagy · agy\x1b[0m`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}agy\x1b[0m\n${DIM}${reason}\x1b[0m\n${DIM}agy · agy\x1b[0m`);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
   });
@@ -345,16 +345,16 @@ describe('claude and agy windows', () => {
     const output = await runApp(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW);
     expect(output).toContain(
       [
-        `${DIM}${RULE}\nclaude\nclaude CLI not found in PATH\nclaude · personal · claude\x1b[0m`,
-        `${DIM}${RULE}\nclaude-work\nclaude CLI not found in PATH\nclaude · work · claude-work\x1b[0m`,
-        `${DIM}${RULE}\nagy\nagy CLI not found in PATH\nagy · agy\x1b[0m`,
-        `${DIM}${RULE}\nkimi\nkimi CLI not found in PATH\nkimi code · kimi\x1b[0m`,
-        `${DIM}${RULE}\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m`,
-        `${DIM}${RULE}\ncodex\ncodex CLI not found in PATH\ncodex · codex\x1b[0m`,
-        `${DIM}${RULE}\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor\x1b[0m`,
-        `${DIM}${RULE}\njunie\nno junie quota snapshot — run junie once\njunie · junie\x1b[0m`,
-        `${DIM}${RULE}\nhermes\nno hermes auth — run hermes portal login\nhermes · hermes\x1b[0m`,
-        `${DIM}${RULE}\nkilo\nkilo CLI not found in PATH\napi balance · kilo\x1b[0m`
+        `${DIM}${RULE}\x1b[0m\n${DIM}claude\x1b[0m\n${DIM}claude CLI not found in PATH\x1b[0m\n${DIM}claude · personal · claude\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}claude-work\x1b[0m\n${DIM}claude CLI not found in PATH\x1b[0m\n${DIM}claude · work · claude-work\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}agy\x1b[0m\n${DIM}agy CLI not found in PATH\x1b[0m\n${DIM}agy · agy\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}kimi\x1b[0m\n${DIM}kimi CLI not found in PATH\x1b[0m\n${DIM}kimi code · kimi\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}grok\x1b[0m\n${DIM}no grok billing snapshot — run grok once\x1b[0m\n${DIM}grok · grok\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}codex\x1b[0m\n${DIM}codex CLI not found in PATH\x1b[0m\n${DIM}codex · codex\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}cursor\x1b[0m\n${DIM}no cursor auth — run cursor-agent login\x1b[0m\n${DIM}cursor · cursor\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}junie\x1b[0m\n${DIM}no junie quota snapshot — run junie once\x1b[0m\n${DIM}junie · junie\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}hermes\x1b[0m\n${DIM}no hermes auth — run hermes portal login\x1b[0m\n${DIM}hermes · hermes\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}kilo\x1b[0m\n${DIM}kilo CLI not found in PATH\x1b[0m\n${DIM}api balance · kilo\x1b[0m`
       ].join('\n')
     );
   });
@@ -423,7 +423,7 @@ describe('claude-work panel', () => {
     const isDirectory = async (path: string) => path === '/elsewhere';
     const { io, configDirs } = recordingIo({}, isDirectory);
     const output = await runApp(io, { ...GROK_ENV, ...env }, NOW);
-    expect(output).toContain(`${DIM}${RULE}\nclaude-work\n${NO_WORK_CONFIG}\n${WORK_CAPTION}\x1b[0m\n`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}claude-work\x1b[0m\n${DIM}${NO_WORK_CONFIG}\x1b[0m\n${DIM}${WORK_CAPTION}\x1b[0m\n`);
     expect(configDirs).toEqual(['-']);
     const noColor = await runApp(recordingIo({}, isDirectory).io, { ...GROK_ENV, ...env, NO_COLOR: '1' }, NOW);
     expect(noColor.split('\n').filter((line) => [...line].length > 72)).toEqual([NO_WORK_CONFIG]);
@@ -446,7 +446,7 @@ describe('claude-work panel', () => {
     ['prints only a session line', { stdout: 'Current session: 0% used', stderr: '' }, 'Could not parse usage from output']
   ])('keeps the personal panel when the work claude %s', async (_case, result, reason) => {
     const output = await runApp(routedRunner({ 'claude-work': result }), {}, NOW);
-    expect(output).toContain(`${DIM}${RULE}\nclaude-work\n${reason}\n${WORK_CAPTION}\x1b[0m\n`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}claude-work\x1b[0m\n${DIM}${reason}\x1b[0m\n${DIM}${WORK_CAPTION}\x1b[0m\n`);
     expect(plain(output)).toContain(`\nclaude\n${'session'.padEnd(35)} █`);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'claude').at(-1)).toBe(PERSONAL_CAPTION);
@@ -579,7 +579,7 @@ describe('kimi panel', () => {
   it('renders a dim kimi panel with the reason while the others render normally', async () => {
     const launcher: Launcher = { launch: async () => ({ ...KIMI_CHILD, output: async () => '', hasExited: () => true }) };
     const output = await runApp(routedRunner({}, launcher), {}, NOW);
-    expect(output).toContain(`${DIM}${RULE}\nkimi\nkimi web exited without printing a token\nkimi code · kimi\x1b[0m`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}kimi\x1b[0m\n${DIM}kimi web exited without printing a token\x1b[0m\n${DIM}kimi code · kimi\x1b[0m`);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'agy')).toHaveLength(6);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
@@ -631,13 +631,13 @@ describe('grok panel', () => {
     const grok = noColor.indexOf('grok');
     expect(noColor.slice(grok + 1, grok + 3)).toEqual(['credits                             ###############-----  75% ↻ 11h15m', line]);
     const output = await runApp(grokIo(grokLog(ts)), GROK_ENV, NOW);
-    expect(output.includes(`${DIM}${RULE}\ngrok\n`)).toBe(stale);
+    expect(output.includes(`${DIM}${RULE}\x1b[0m\n${DIM}grok\x1b[0m\n`)).toBe(stale);
   });
 
   it('dims a stale grok panel throughout without a ramp escape', async () => {
     const output = await runApp(grokIo(grokLog('2026-09-10T17:14:22.812Z')), GROK_ENV, NOW);
     expect(output).toContain(
-      `${DIM}${RULE}\ngrok\n${'credits'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 11h15m\nstale snapshot 2d16h old\nSuperGrok Heavy · grok\x1b[0m\n`
+      `${DIM}${RULE}\x1b[0m\n${DIM}grok\x1b[0m\n${DIM}${'credits'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 11h15m\x1b[0m\n${DIM}stale snapshot 2d16h old\x1b[0m\n${DIM}SuperGrok Heavy · grok\x1b[0m\n`
     );
     expect(output).toContain(`${DIM}claude · personal · claude\x1b[0m`);
     expect(output).toContain(`\x1b[31m${'█'.repeat(17)}`);
@@ -694,7 +694,7 @@ describe('grok panel', () => {
     ['50,000 unusable billing lines', LONG_UNUSABLE]
   ])('renders a dim unavailable grok panel with %s while the others render normally', async (_case, log) => {
     const output = await runApp(grokIo(log), GROK_ENV, NOW);
-    expect(output).toContain(`${DIM}${RULE}\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\x1b[0m\n`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}grok\x1b[0m\n${DIM}no grok billing snapshot — run grok once\x1b[0m\n${DIM}grok · grok\x1b[0m\n`);
     expect(plain(output)).not.toMatch(/^(stale )?snapshot /m);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'kimi')).toHaveLength(4);
@@ -762,9 +762,9 @@ describe('real grok reader', () => {
     const empty = join(home, 'empty');
     mkdirSync(empty);
     const emptyBefore = tree(empty);
-    expect(await runApp(io, { DANDELION_GROK_HOME: empty, DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(plain(await runApp(io, { DANDELION_GROK_HOME: empty, DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW))).toContain('grok\nno grok billing snapshot — run grok once');
     expect(tree(empty)).toEqual(emptyBefore);
-    expect(await runApp(io, { DANDELION_GROK_HOME: join(home, 'missing'), DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW)).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(plain(await runApp(io, { DANDELION_GROK_HOME: join(home, 'missing'), DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW))).toContain('grok\nno grok billing snapshot — run grok once');
     expect(readdirSync(home).sort()).toEqual(['empty', 'logs']);
   });
 });
@@ -849,7 +849,7 @@ describe('codex panel', () => {
     ['a null result', CODEX_CHATGPT, ['{"id":2,"result":null}'], 'Could not parse rate limits from response']
   ])('renders a dim codex panel for %s while the others render normally', async (_case, login, lines, reason) => {
     const output = await runApp(codexIo(login, codexSpawner(lines)), GROK_ENV, NOW);
-    expect(output).toContain(`${DIM}${RULE}\ncodex\n${reason}\ncodex · codex\x1b[0m\n`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}codex\x1b[0m\n${DIM}${reason}\x1b[0m\n${DIM}codex · codex\x1b[0m\n`);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'grok')).toHaveLength(4);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
@@ -1125,7 +1125,7 @@ describe('cursor panel', () => {
     ['a null plan usage', { status: 200, body: '{"planUsage":null}' }, { '/cursor/auth.json': AUTH }, 'Could not parse usage from response']
   ])('renders a dim cursor panel for %s while the others render normally', async (_case, usage, auth, reason) => {
     const output = await runApp(cursorIo(usage, undefined, auth), CURSOR_ENV, NOW);
-    expect(output).toContain(`${DIM}${RULE}\ncursor\n${reason}\ncursor · cursor\x1b[0m\n`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}cursor\x1b[0m\n${DIM}${reason}\x1b[0m\n${DIM}cursor · cursor\x1b[0m\n`);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
     expect(plain(output).split('\n').filter((line) => /^(claude|agy|kimi|grok|codex|cursor|junie|kilo)$/.test(line))).toEqual(['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo']);
@@ -1263,14 +1263,14 @@ describe('cursor panel', () => {
       expect(earlier).toContain(`\n${DIM}snapshot 1d23h old\x1b[0m\n`);
       await vi.advanceTimersByTimeAsync(120100);
       const later = dashboard.lastFrame();
-      expect(later).toContain(`${DIM}${RULE}\ngrok\n${'credits'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 11h13m\nstale snapshot 2d0h old\nSuperGrok Heavy · grok\x1b[0m\n`);
+      expect(later).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}grok\x1b[0m\n${DIM}${'credits'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 11h13m\x1b[0m\n${DIM}stale snapshot 2d0h old\x1b[0m\n${DIM}SuperGrok Heavy · grok\x1b[0m\n`);
       dashboard.press('q');
       await dashboard.finished;
     });
 
     it('colours a refreshing frame with the footer and keeps every panel as its once rendering', async () => {
       const dashboard = startDashboard({ ...cursorIo(), launcher: kimiOnlyOnce() }, CURSOR_ENV);
-      expect(dashboard.lastFrame()).toContain(`${DIM}${RULE}\nkimi\n⠋ probing…\x1b[0m`);
+      expect(dashboard.lastFrame()).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}kimi\x1b[0m\n${DIM}⠋ probing…\x1b[0m`);
       await settleProbes();
       dashboard.press('?');
       await vi.advanceTimersByTimeAsync(65000);
@@ -1453,7 +1453,7 @@ describe('wiring', () => {
     const runner = mockRunner({ stdout: '', stderr: '', failure: 'missing' });
     const output = await runApp(runner, {}, NOW);
     expect(output).toContain('DANDELION');
-    expect(output).toContain('\x1b[90m' + '━'.repeat(72) + '\nkilo\nkilo CLI not found in PATH');
+    expect(output).toContain('\x1b[90m' + '━'.repeat(72) + '\x1b[0m\n\x1b[90mkilo\x1b[0m\n\x1b[90mkilo CLI not found in PATH\x1b[0m');
   });
 
   it('renders a dim unavailable panel for unparseable output', async () => {
@@ -1987,7 +1987,7 @@ describe('junie panel', () => {
     const fresh = await runApp(junieIo(), JUNIE_ENV, JUNIE_NOW);
     expect(fresh).toContain(`\njunie\n${'credits'.padEnd(35)} ${CALM}${'█'.repeat(6)}${'░'.repeat(14)}\x1b[0m ${CALM} 30%\x1b[0m\n${DIM}snapshot 6h6m old\x1b[0m\n${DIM}701513 credits · junie\x1b[0m\n`);
     const stale = await runApp(junieIo(), JUNIE_ENV, '2026-09-20T12:53:51Z');
-    expect(stale).toContain(`${DIM}${RULE}\njunie\n${'credits'.padEnd(35)} ${'█'.repeat(6)}${'░'.repeat(14)}  30%\nstale snapshot 2d0h old\n701513 credits · junie\x1b[0m\n`);
+    expect(stale).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}junie\x1b[0m\n${DIM}${'credits'.padEnd(35)} ${'█'.repeat(6)}${'░'.repeat(14)}  30%\x1b[0m\n${DIM}stale snapshot 2d0h old\x1b[0m\n${DIM}701513 credits · junie\x1b[0m\n`);
   });
 
   it.each<[string, Record<string, string>]>([
@@ -1998,7 +1998,7 @@ describe('junie panel', () => {
     ['only Unknown lines, noise and bad lines', { 'sessions/index.jsonl': INDEX, 'sessions/session-new/events.jsonl': [...NOISE, UNKNOWN_LINE, 'not json at all'].join('\n'), 'sessions/session-old/events.jsonl': UNKNOWN_LINE }]
   ])('renders a dim unavailable junie panel with %s while the others render normally', async (_case, tree) => {
     const output = await runApp(junieIo(tree), JUNIE_ENV, JUNIE_NOW);
-    expect(output).toContain(`${DIM}${RULE}\njunie\nno junie quota snapshot — run junie once\njunie · junie\x1b[0m\n`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}junie\x1b[0m\n${DIM}no junie quota snapshot — run junie once\x1b[0m\n${DIM}junie · junie\x1b[0m\n`);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
   });
@@ -2299,7 +2299,7 @@ describe('hermes panel', () => {
   ])('renders a dim hermes panel for %s while the others render normally', async (_case, accountAnswer, files, reason) => {
     const { io, requests } = hermesIo(accountAnswer ?? { status: 200, body: JSON.stringify(account()) }, files);
     const output = await runApp(io, HERMES_ENV, HERMES_NOW);
-    expect(output).toContain(`${DIM}${RULE}\nhermes\n${reason}\nhermes · hermes\x1b[0m\n`);
+    expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}hermes\x1b[0m\n${DIM}${reason}\x1b[0m\n${DIM}hermes · hermes\x1b[0m\n`);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
     expect(output).not.toContain(AGENT);

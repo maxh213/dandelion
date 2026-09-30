@@ -22,7 +22,7 @@ type Usage = Awaited<ReturnType<ProviderProbe['probe']>>;
 type PendingCall = { now: string; resolve(usage: Usage): void; reject(error: Error): void };
 
 const START = '2026-09-13T10:00:00.000Z';
-const CLEAR = '\x1b[H\x1b[2J';
+const CLEAR = '\x1b[H\x1b[2J\x1b[0m';
 const ENTER_ALTERNATE = '\x1b[?1049h\x1b[?25l';
 const LEAVE_ALTERNATE = '\x1b[?25h\x1b[?1049l';
 const IDS = ['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
@@ -97,6 +97,17 @@ describe('live session', () => {
     const lines = session.lastFrame().split('\n');
     expect(lines.slice(0, 2)).toEqual(['DANDELION'.padEnd(63) + '10:00:00Z', 'all windows below 80% · next reset: none']);
     expect(lines.slice(6)).toEqual(IDS.flatMap((id) => ['='.repeat(72), id, '⠋ probing…']));
+    session.press('q');
+    await session.finished;
+  });
+
+  it('resets the style after clearing the screen before the banner of every frame', async () => {
+    const session = startSession();
+    await vi.advanceTimersByTimeAsync(100);
+    const drawn = session.writes.filter((text) => text.startsWith('\x1b[H\x1b[2J'));
+    expect(drawn.length).toBeGreaterThan(1);
+    expect(drawn.every((text) => text.indexOf('\x1b[0m') < text.indexOf('DANDELION'))).toBe(true);
+    expect(drawn.every((text) => text.startsWith('\x1b[H\x1b[2J\x1b[0m'))).toBe(true);
     session.press('q');
     await session.finished;
   });

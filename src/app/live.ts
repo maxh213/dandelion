@@ -54,7 +54,7 @@ function wallClock(): string {
 }
 
 const ENTER_ALTERNATE = '\x1b[?1049h\x1b[?25l';
-const CLEAR = '\x1b[H\x1b[2J';
+const CLEAR = '\x1b[H\x1b[2J\x1b[0m';
 const LEAVE_ALTERNATE = '\x1b[?25h\x1b[?1049l';
 const PENDING_TICK_MS = 100;
 const SETTLED_TICK_MS = 1000;

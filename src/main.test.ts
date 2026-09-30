@@ -551,7 +551,7 @@ describe('main', () => {
       ['junie', 'no junie quota snapshot — run junie once', 'junie · junie'],
       ['hermes', 'no hermes auth — run hermes portal login', 'hermes · hermes'],
       ['kilo', 'kilo CLI not found in PATH', 'api balance · kilo']
-    ].map((lines) => `\x1b[90m${'━'.repeat(72)}\n${lines.join('\n')}\x1b[0m`);
+    ].map((lines) => `\x1b[90m${'━'.repeat(72)}\x1b[0m\n\x1b[90m${lines.join('\x1b[0m\n\x1b[90m')}\x1b[0m`);
     expect(result.stdout).toBe(`${result.stdout.split('\n')[0]}\n${panels.join('\n')}\n`);
     expect(result.stdout).not.toContain('Command failed');
   });

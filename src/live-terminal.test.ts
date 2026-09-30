@@ -232,7 +232,7 @@ describe('route eligibility on a real terminal', () => {
   }, 60000);
 });
 
-const SCREEN_ESCAPES = ['\x1b[?1049h', '\x1b[?25l', '\x1b[H', '\x1b[2J', '\x1b[?25h', '\x1b[?1049l'];
+const SCREEN_ESCAPES = ['\x1b[?1049h', '\x1b[?25l', '\x1b[H', '\x1b[2J', '\x1b[0m', '\x1b[?25h', '\x1b[?1049l'];
 
 function splitRoute(line: string): string[] {
   if (line === 'none') return ['none', 'no subscription available'];
