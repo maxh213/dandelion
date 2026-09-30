@@ -102,7 +102,7 @@ function weeklyFrom(entry: unknown): UsageWindow[] {
 }
 
 function rollingFrom(entry: unknown): UsageWindow[] {
-  return windowFrom(entry, { label: '5h', kind: 'rolling' });
+  return windowFrom(entry, { label: '5h', kind: 'rolling' }, validInstant(fieldOf(entry, 'resetAt')));
 }
 
 function windowsOf(usages: unknown): UsageWindow[] {

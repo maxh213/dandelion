@@ -203,6 +203,18 @@ describe('terminal renderer', () => {
     expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n').at(-1)).toBe('Plus · $5.50 of $22 · hermes · no paid access');
   });
 
+  it('ends a kimi 5h row with its reset countdown', () => {
+    const usage: ProviderUsage = {
+      id: 'kimi',
+      displayName: 'kimi',
+      planLabel: 'kimi code',
+      windows: [{ label: '5h', kind: 'rolling', usedPct: 42, resetsAt: '2026-09-13T15:00:00Z' }],
+      fetchedAt: 'now',
+      status: 'ok'
+    };
+    expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n')[2]).toMatch(/ 42% ↻ 5h0m$/);
+  });
+
   it('renders window rows between the name and the caption', () => {
     const usage: ProviderUsage = {
       id: 'claude',

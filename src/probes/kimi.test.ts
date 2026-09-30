@@ -36,7 +36,8 @@ function envelope(usages: unknown = HAPPY_USAGES): Record<string, unknown> {
 
 const BODY = JSON.stringify(envelope());
 const WEEKLY_59 = { label: 'weekly', kind: 'weekly', usedPct: 59, resetsAt: WEEKLY_RESET };
-const ROLLING_42 = { label: '5h', kind: 'rolling', usedPct: 42 };
+const ROLLING_42_BARE = { label: '5h', kind: 'rolling', usedPct: 42 };
+const ROLLING_42 = { ...ROLLING_42_BARE, resetsAt: ROLLING_RESET };
 const OK_WINDOWS = [WEEKLY_59, ROLLING_42];
 
 type FakeChild = LaunchedProcess & { log: string; exited: boolean; stops: number };
@@ -103,7 +104,7 @@ describe('probeKimi', () => {
       status: 'ok',
       windows: [
         { label: 'weekly', kind: 'weekly', usedPct: 59, resetsAt: '2026-09-18T10:00:00Z' },
-        { label: '5h', kind: 'rolling', usedPct: 42 }
+        { label: '5h', kind: 'rolling', usedPct: 42, resetsAt: '2026-09-13T15:00:00Z' }
       ]
     });
     expect(child.stops).toBe(1);
@@ -159,7 +160,7 @@ describe('probeKimi', () => {
       status: 'ok',
       windows: [
         { label: 'weekly', kind: 'weekly', usedPct: 0, resetsAt: '2026-09-25T12:58:50Z' },
-        { label: '5h', kind: 'rolling', usedPct: 0 }
+        { label: '5h', kind: 'rolling', usedPct: 0, resetsAt: '2026-09-19T14:58:50Z' }
       ]
     });
     expect(child.stops).toBe(1);
@@ -178,19 +179,22 @@ describe('probeKimi', () => {
   });
 
   it.each<[unknown, unknown[]]>([
-    [envelope({ limit5h: { usedRatio: 0, resetAt: ROLLING_RESET }, limit7d: { usedRatio: 0, resetAt: WEEKLY_RESET } }), [{ label: 'weekly', kind: 'weekly', usedPct: 0, resetsAt: WEEKLY_RESET }, { label: '5h', kind: 'rolling', usedPct: 0 }]],
+    [envelope({ limit5h: { usedRatio: 0, resetAt: ROLLING_RESET }, limit7d: { usedRatio: 0, resetAt: WEEKLY_RESET } }), [{ label: 'weekly', kind: 'weekly', usedPct: 0, resetsAt: WEEKLY_RESET }, { label: '5h', kind: 'rolling', usedPct: 0, resetsAt: ROLLING_RESET }]],
     [envelope(), OK_WINDOWS],
-    [envelope({ limit5h: { usedRatio: 1, resetAt: ROLLING_RESET }, limit7d: { usedRatio: 1, resetAt: WEEKLY_RESET } }), [{ label: 'weekly', kind: 'weekly', usedPct: 100, resetsAt: WEEKLY_RESET }, { label: '5h', kind: 'rolling', usedPct: 100 }]],
-    [envelope({ limit5h: { usedRatio: 0, resetAt: ROLLING_RESET }, limit7d: { usedRatio: 1.2, resetAt: WEEKLY_RESET } }), [{ label: 'weekly', kind: 'weekly', usedPct: 100, resetsAt: WEEKLY_RESET }, { label: '5h', kind: 'rolling', usedPct: 0 }]],
+    [envelope({ limit5h: { usedRatio: 1, resetAt: ROLLING_RESET }, limit7d: { usedRatio: 1, resetAt: WEEKLY_RESET } }), [{ label: 'weekly', kind: 'weekly', usedPct: 100, resetsAt: WEEKLY_RESET }, { label: '5h', kind: 'rolling', usedPct: 100, resetsAt: ROLLING_RESET }]],
+    [envelope({ limit5h: { usedRatio: 0, resetAt: ROLLING_RESET }, limit7d: { usedRatio: 1.2, resetAt: WEEKLY_RESET } }), [{ label: 'weekly', kind: 'weekly', usedPct: 100, resetsAt: WEEKLY_RESET }, { label: '5h', kind: 'rolling', usedPct: 0, resetsAt: ROLLING_RESET }]],
     [envelope({ limit7d: { usedRatio: 0.59, resetAt: WEEKLY_RESET } }), [WEEKLY_59]],
     [envelope({ limit5h: { usedRatio: 0.42, resetAt: ROLLING_RESET } }), [ROLLING_42]],
     [envelope({ limit7d: { usedRatio: 0.59, resetAt: WEEKLY_RESET }, limit5h: { usedRatio: 'x', resetAt: ROLLING_RESET } }), [WEEKLY_59]],
     [envelope({ limit7d: { usedRatio: -1, resetAt: WEEKLY_RESET }, limit5h: { usedRatio: 0.42, resetAt: ROLLING_RESET } }), [ROLLING_42]],
+    [envelope({ limit5h: { usedRatio: 0.42, resetAt: 'soon' } }), [ROLLING_42_BARE]],
+    [envelope({ limit5h: { usedRatio: 0.42, resetAt: 42 } }), [ROLLING_42_BARE]],
+    [envelope({ limit5h: { usedRatio: 0.42, resetAt: [ROLLING_RESET] } }), [ROLLING_42_BARE]],
     [envelope({ limit7d: { usedRatio: 0.59, resetAt: 'soon' } }), [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
     [envelope({ limit7d: { usedRatio: 0.59, resetAt: 42 } }), [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
     [envelope({ limit7d: { usedRatio: 0.59, resetAt: [WEEKLY_RESET] } }), [{ label: 'weekly', kind: 'weekly', usedPct: 59 }]],
-    [envelope({ limit7d: { usedRatio: Number.POSITIVE_INFINITY, resetAt: WEEKLY_RESET }, limit5h: { usedRatio: 0.42 } }), [ROLLING_42]],
-    [envelope({ limit7d: { usedRatio: Number.NaN }, limit5h: { usedRatio: 0.42 } }), [ROLLING_42]],
+    [envelope({ limit7d: { usedRatio: Number.POSITIVE_INFINITY, resetAt: WEEKLY_RESET }, limit5h: { usedRatio: 0.42 } }), [ROLLING_42_BARE]],
+    [envelope({ limit7d: { usedRatio: Number.NaN }, limit5h: { usedRatio: 0.42 } }), [ROLLING_42_BARE]],
     [{ ...envelope(), extraUsage: { usedRatio: 0.99 } }, OK_WINDOWS],
     [{ data: { kind: 'ok', quota: { usages: HAPPY_USAGES, extraUsage: { usedRatio: 1 } } } }, OK_WINDOWS],
     [envelope({ ...HAPPY_USAGES, limit1d: { usedRatio: 0.99, resetAt: WEEKLY_RESET } }), OK_WINDOWS]
@@ -200,10 +204,10 @@ describe('probeKimi', () => {
     expect(usage.windows).toStrictEqual(windows);
   });
 
-  it('emits weekly then 5h even when the JSON lists limit5h first, and never copies limit5h.resetAt', async () => {
+  it('emits weekly then 5h even when the JSON lists limit5h first, and copies limit5h.resetAt', async () => {
     const usage = await probeKimi(ioWith(fakeChild(), bodyOf(envelope())).io, PORT, NOW);
     expect(usage.windows).toStrictEqual(OK_WINDOWS);
-    expect(usage.windows[1]).not.toHaveProperty('resetsAt');
+    expect(usage.windows[1]).toHaveProperty('resetsAt', ROLLING_RESET);
   });
 
   it.each<[string, FetchOutcome, string]>([

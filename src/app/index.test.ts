@@ -500,7 +500,7 @@ describe('kimi panel', () => {
       '='.repeat(72),
       'kimi',
       'weekly                              ############--------  59% ↻ 5d0h',
-      '5h                                  ########------------  42%',
+      '5h                                  ########------------  42% ↻ 5h0m',
       'kimi code · kimi',
       '='.repeat(72)
     ]);
@@ -515,7 +515,7 @@ describe('kimi panel', () => {
     const output = await runApp(routedRunner(), {}, NOW);
     const WARM = '\x1b[33m';
     expect(output).toContain(
-      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(12)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m\n${DIM}kimi code · kimi\x1b[0m\n`
+      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(12)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 5h0m\n${DIM}kimi code · kimi\x1b[0m\n`
     );
   });
 
@@ -529,7 +529,7 @@ describe('kimi panel', () => {
       '='.repeat(72),
       'kimi',
       'weekly                              --------------------   0% ↻ 6d0h',
-      '5h                                  --------------------   0%',
+      '5h                                  --------------------   0% ↻ 2h0m',
       'kimi code · kimi',
       '='.repeat(72)
     ]);
@@ -1218,7 +1218,7 @@ describe('cursor panel', () => {
       await settleProbes();
       const frame = dashboard.lastFrame();
       expect(frame).not.toContain('probing…');
-      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(48) + 'data 0h0m old · 10:00:00', '2/16 windows above 80% · next reset: claude session in 8h40m']);
+      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(48) + 'data 0h0m old · 10:00:00', '2/16 windows above 80% · next reset: kimi 5h in 5h0m']);
       expect(frame.split('\n').every((line) => [...line].length <= 72)).toBe(true);
       dashboard.press('q');
       await dashboard.finished;
@@ -1285,7 +1285,7 @@ describe('cursor panel', () => {
       const count = dashboard.frames().length;
       await vi.advanceTimersByTimeAsync(65100);
       const frame = dashboard.lastFrame();
-      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(48) + 'data 0h1m old · 10:01:05', '2/16 windows above 80% · next reset: claude session in 8h38m']);
+      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(48) + 'data 0h1m old · 10:01:05', '2/16 windows above 80% · next reset: kimi 5h in 4h58m']);
       expect(sessionRow(frame)).toMatch(/ ↻ 8h38m$/);
       expect(dashboard.frames().length - count).toBe(66);
       dashboard.press('q');
@@ -1316,7 +1316,7 @@ describe('cursor panel', () => {
       dashboard.press('r');
       const lines = dashboard.lastFrame().split('\n');
       expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}\x1b[0m\x1b[90mrefreshing…\x1b[0m\x1b[1m · data 0h1m old · 10:01:05\x1b[0m`);
-      expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
+      expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: kimi 5h in 4h58m\x1b[0m');
       expect(lines.at(-1)).toBe('\x1b[90m↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
       const panels = lines.slice(6, -3).join('\n');
