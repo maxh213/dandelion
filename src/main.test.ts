@@ -26,7 +26,7 @@ vi.mock('./app/index.ts', async (importOriginal) => {
 });
 
 const { main, runIfMain } = await import('./main.ts');
-const { runRoute } = await import('./app/index.ts');
+const { runRoute, realRunSpawner } = await import('./app/index.ts');
 const { highRouteLine, routeLine } = await import('./domain/index.ts');
 
 const routeIo: ProbeIo = {
@@ -348,6 +348,27 @@ describe('main', () => {
     const bad = procOf(['node', MAIN, 'route', '--json'], false, false, { DANDELION_ROUTES_FILE: '/nonexistent/routes.json' });
     await runIfMain(MAIN_URL, MAIN, routeIo, bad.proc);
     expect([bad.output(), bad.errors(), bad.proc.exit.mock.calls]).toEqual(['', 'dandelion: routes file /nonexistent/routes.json: cannot be read\n', [[2]]]);
+  });
+
+  it.each<[string[], string[]]>([
+    [['run'], ['--model', 'model-a', '--effort', 'high']],
+    [['run', '--high', 'x'], ['--model', 'model-h1', '--effort', 'max', 'x']],
+    [['run', '--', '--high'], ['--model', 'model-a', '--effort', 'high', '--high']]
+  ])('runIfMain %j launches the routed CLI and exits with its code', async (args, expected) => {
+    const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(4);
+    const { proc, output, errors } = procOf(['node', MAIN, ...args], true, true);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(spawn.mock.calls[0][0].args).toEqual(expected);
+    expect(proc.exit).toHaveBeenCalledWith(4);
+    expect([output(), errors()]).toEqual(['', '']);
+    spawn.mockRestore();
+  });
+
+  it('runIfMain run prints none on stderr and exits 1 when nothing routes', async () => {
+    const { proc, output, errors } = procOf(['node', MAIN, 'run'], true, true);
+    await runIfMain(MAIN_URL, MAIN, profileIo, proc);
+    expect([output(), errors()]).toEqual(['', 'none\n']);
+    expect(proc.exit).toHaveBeenCalledWith(1);
   });
 
   it('runIfMain route prints none and exits 1 when nothing routes', async () => {

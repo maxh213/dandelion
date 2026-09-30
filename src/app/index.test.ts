@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { isEntryFile, routesWarning, runApp, runJson, runLive, runRoute, realIo, realNotifier } from './index.ts';
+import { isEntryFile, routesWarning, runApp, runJson, runLive, runRoute, runRun, realIo, realNotifier, realRunSpawner } from './index.ts';
+import type { RunSpawner } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const execFileSpy = vi.hoisted(() => vi.fn());
@@ -1698,6 +1699,84 @@ describe('isEntryFile', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('runRun', () => {
+  const headroom = { mode: 'headroom', now: NOW, zone: 'UTC' } as const;
+  const high = { mode: 'high', now: NOW, zone: 'UTC' } as const;
+  const env = { DANDELION_ROUTES_FILE: ROUTES_FILE };
+
+  function fakeSpawner(result: number | 'missing' = 0) {
+    const spawn = vi.fn(async (_launch: Parameters<RunSpawner['spawn']>[0]) => result);
+    return { spawn, spawner: { spawn } };
+  }
+
+  it('spawns claude with the model and effort and exits with the child code', async () => {
+    const { spawn, spawner } = fakeSpawner(3);
+    expect(await runRun(routedRunner(), env, headroom, [], spawner)).toEqual({ err: '', code: 3 });
+    expect(spawn).toHaveBeenCalledWith({ command: 'claude', args: ['--model', 'model-a', '--effort', 'max'], env: {} });
+  });
+
+  it('sets CLAUDE_CONFIG_DIR for claude-work from the env, else ~/.claude-work', async () => {
+    const work = { ...headroom, zone: 'Etc/GMT-2' };
+    const explicit = fakeSpawner();
+    const io = routedRunner();
+    await runRun({ ...io, reader: { ...io.reader, isDirectory: async () => true } }, { ...env, DANDELION_CLAUDE_WORK_CONFIG_DIR: '/cfg/work' }, work, [], explicit.spawner);
+    expect(explicit.spawn.mock.calls[0][0]).toEqual({ command: 'claude', args: ['--model', 'model-a', '--effort', 'high'], env: { CLAUDE_CONFIG_DIR: '/cfg/work' } });
+    const fallback = fakeSpawner();
+    await runRun(routedRunner(), { ...env, DANDELION_CLAUDE_WORK_CONFIG_DIR: '' }, work, [], fallback.spawner);
+    expect(fallback.spawn.mock.calls[0][0].env).toEqual({ CLAUDE_CONFIG_DIR: WORK_CONFIG_DIR });
+  });
+
+  it('launches what route --high prints, dropping --high and appending args after --', async () => {
+    const { spawn, spawner } = fakeSpawner();
+    await runRun(routedRunner(), env, high, ['--high', '-p', 'hi', '--', '--high', 'x'], spawner);
+    expect(spawn).toHaveBeenCalledWith({ command: 'claude', args: ['--model', 'model-h1', '--effort', 'max', '-p', 'hi', '--high', 'x'], env: { CLAUDE_CONFIG_DIR: WORK_CONFIG_DIR } });
+  });
+
+  it('passes only the model to other CLIs', async () => {
+    const { spawn, spawner } = fakeSpawner();
+    const unavailable = routedRunner({ claude: { stdout: '', stderr: '', failure: 'missing' } });
+    await runRun(unavailable, env, { ...headroom, mode: 'high' }, [], spawner);
+    const [{ args }] = spawn.mock.calls[0];
+    expect(args.slice(0, 2)).toEqual(['--model', expect.any(String)]);
+  });
+
+  it('prints none on stderr, exits 1 and spawns nothing when nothing routes', async () => {
+    const { spawn, spawner } = fakeSpawner();
+    expect(await runRun(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), env, headroom, [], spawner)).toEqual({ err: 'none\n', code: 1 });
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('prints the routes fault, exits 2 and spawns nothing for a bad routes file', async () => {
+    const { spawn, spawner } = fakeSpawner();
+    const path = join(tmpdir(), 'dandelion-no-such-routes.json');
+    expect(await runRun(routedRunner(), { DANDELION_ROUTES_FILE: path }, headroom, [], spawner)).toEqual({ err: `dandelion: routes file ${path}: cannot be read\n`, code: 2 });
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('exits 127 naming the command when it is not on PATH', async () => {
+    expect(await runRun(routedRunner(), env, headroom, [], fakeSpawner('missing').spawner)).toEqual({ err: 'dandelion: claude: command not found\n', code: 127 });
+  });
+
+  it('leaves route output identical to a run of the same inputs', async () => {
+    const before = await runRoute(routedRunner(), env, headroom);
+    await runRun(routedRunner(), env, headroom, [], fakeSpawner().spawner);
+    expect(await runRoute(routedRunner(), env, headroom)).toEqual(before);
+    expect(before).toEqual({ out: 'model-a max claude\n', err: '', code: 0 });
+  });
+
+  describe('realRunSpawner', () => {
+    it('inherits stdio and resolves the exit code, merging env over the process env', async () => {
+      const launch = (args: string[], env = {}) => realRunSpawner.spawn({ command: process.execPath, args, env });
+      expect(await launch(['-e', 'process.exit(process.env.DANDELION_RUN_TEST === "yes" ? 5 : 6)'], { DANDELION_RUN_TEST: 'yes' })).toBe(5);
+      expect(await launch(['-e', 'process.kill(process.pid, "SIGTERM")'])).toBe(143);
+    });
+
+    it('resolves missing when the command does not exist', async () => {
+      expect(await realRunSpawner.spawn({ command: 'dandelion-no-such-cli', args: [], env: {} })).toBe('missing');
+    });
   });
 });
 

@@ -2,7 +2,7 @@ import { execFile, spawn, type ChildProcess, type ChildProcessByStdio, type Exec
 import { once } from 'node:events';
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { constants as osConstants, homedir, tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { PassThrough, pipeline, type Readable, type Writable } from 'node:stream';
@@ -40,11 +40,13 @@ import {
   type StateFile
 } from '../render/index.ts';
 import { openClipboard, type CommandTry } from './clipboard.ts';
+import { extraArgs, launchOf, type RunSpawner } from './launch.ts';
 import { startLive, type Keyboard, type Notifier, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
 export type { RouteMode, RouteOutput, RouteRequest } from '../render/index.ts';
 export type { Keyboard, Screen } from './live.ts';
+export type { Launch, RunSpawner } from './launch.ts';
 
 export type JsonOutput = { out: string; err: string };
 
@@ -290,6 +292,34 @@ export async function runJson(io: ProbeIo, env: Record<string, string | undefine
 export const realNotifier: Notifier = {
   notify: (text) => execFile('notify-send', ['--app-name=dandelion', 'dandelion', text], () => undefined)
 };
+
+function statusOf(code: number | null, signal: NodeJS.Signals | null): number {
+  return code ?? 128 + (signal === null ? 0 : osConstants.signals[signal]);
+}
+
+export const realRunSpawner: RunSpawner = {
+  spawn({ command, args, env }) {
+    return new Promise((resolve) => {
+      const child = spawn(command, args, { stdio: 'inherit', env: { ...process.env, ...env } });
+      child.once('error', () => resolve('missing'));
+      child.once('close', (code, signal) => resolve(statusOf(code, signal)));
+    });
+  }
+};
+
+export type RunOutput = { err: string; code: number };
+
+function missingCommand(command: string): RunOutput {
+  return { err: `dandelion: ${command}: command not found\n`, code: 127 };
+}
+
+export async function runRun(io: ProbeIo, env: Record<string, string | undefined>, request: RouteRequest, args: string[], spawner: RunSpawner): Promise<RunOutput> {
+  const routed = await runRoute(io, env, request);
+  if (routed.code !== 0) return { err: routed.code === 1 ? 'none\n' : routed.err, code: routed.code };
+  const launch = launchOf(routed.out.trimEnd(), extraArgs(args), env, io.reader.homeDir());
+  const status = await spawner.spawn(launch);
+  return status === 'missing' ? missingCommand(launch.command) : { err: '', code: status };
+}
 
 export function processZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isEntryFile, processZone, routesWarning, runApp, runJson, runLive, runRoute, realIo, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
+import { isEntryFile, processZone, routesWarning, runApp, runJson, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -38,6 +38,17 @@ async function json(io: ProbeIo, proc: Proc): Promise<void> {
   proc.stderr.write(err);
 }
 
+async function run(io: ProbeIo, proc: Proc): Promise<void> {
+  const { err, code } = await runRun(io, proc.env, { mode: runModeOf(proc.argv.slice(3)), now: new Date().toISOString(), zone: processZone() }, proc.argv.slice(3), realRunSpawner);
+  proc.stderr.write(err);
+  proc.exit(code);
+}
+
+function runModeOf(args: string[]): RouteMode {
+  const split = args.indexOf('--');
+  return (split === -1 ? args : args.slice(0, split)).includes('--high') ? 'high' : 'headroom';
+}
+
 function isLive(proc: Proc): boolean {
   return !proc.argv.includes('--once') && proc.stdin.isTTY === true && proc.stdout.isTTY === true;
 }
@@ -49,6 +60,7 @@ async function live(io: ProbeIo, proc: Proc): Promise<void> {
 
 function dispatch(io: ProbeIo, proc: Proc): Promise<void> {
   if (proc.argv[2] === 'route') return route(io, proc);
+  if (proc.argv[2] === 'run') return run(io, proc);
   if (proc.argv.includes('--json')) return json(io, proc);
   if (isLive(proc)) return live(io, proc);
   return main(io, proc.env, proc, new Date().toISOString());
