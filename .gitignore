@@ -11,7 +11,7 @@ StrykerOutput/
 .sonarqube/
 .idea/
 .vscode/
-node_modules/
+node_modules
 dist/
 ts-coverage/
 coverage/
