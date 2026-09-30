@@ -39,7 +39,7 @@ const PROBING = 'probing…';
 const ROUTES_FILE_ERROR = 'routes file error';
 const FALLBACK_ROWS = 24;
 
-export type LiveSlot = { id: string; usage: ProviderUsage | undefined };
+export type LiveSlot = { id: string; usage: ProviderUsage | undefined; probing?: boolean };
 
 export type Flash = { index: number; message: string };
 
@@ -99,8 +99,12 @@ function absoluteZoneOf(view: LiveView): string | undefined {
   return view.absoluteResets === true ? view.zone : undefined;
 }
 
+function spinnerFrame(spinner: number): string {
+  return SPINNER_FRAMES[spinner % SPINNER_FRAMES.length];
+}
+
 function probingLine(spinner: number): string {
-  return `${SPINNER_FRAMES[spinner % SPINNER_FRAMES.length]} ${PROBING}`;
+  return `${spinnerFrame(spinner)} ${PROBING}`;
 }
 
 function pendingPanel(id: string, spinner: number, noColor: boolean, marks: PanelMarks): string {
@@ -116,8 +120,14 @@ function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view) };
 }
 
+function settledMarks(slot: LiveSlot, usage: ProviderUsage, spinner: number, now: string, marks: PanelMarks): PanelMarks {
+  const age = ` · ${formatCountdown(now, usage.fetchedAt)} ago`;
+  return { ...marks, age, spinner: slot.probing === true ? spinnerFrame(spinner) : undefined };
+}
+
 function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
-  return slot.usage === undefined ? pendingPanel(slot.id, spinner, noColor, marks) : renderPanel(slot.usage, noColor, now, marks);
+  if (slot.usage === undefined) return pendingPanel(slot.id, spinner, noColor, marks);
+  return renderPanel(slot.usage, noColor, now, settledMarks(slot, slot.usage, spinner, now, marks));
 }
 
 type BoxAnswer = { model: string; account: string; dimmed: boolean };

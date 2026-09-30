@@ -181,6 +181,7 @@ function routedRunner(overrides: Record<string, CommandRunnerResult> = {}, launc
   return ioOf({ run: async (command, _args, _timeoutMs, env) => results[env?.CLAUDE_CONFIG_DIR === undefined ? command : 'claude-work'] }, launcher, reader);
 }
 
+const SPINNER_TAIL = new RegExp(` [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏](?=${String.fromCharCode(27)}|\\n|$)`, 'g');
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 
 function plain(output: string): string {
@@ -1292,7 +1293,7 @@ describe('cursor panel', () => {
       expect(earlier).toContain(`\n${DIM}snapshot 1d23h old\x1b[0m\n`);
       await vi.advanceTimersByTimeAsync(120100);
       const later = dashboard.lastFrame();
-      expect(later).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}grok\x1b[0m\n${DIM}${'credits'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 11h13m\x1b[0m\n${DIM}stale snapshot 2d0h old\x1b[0m\n${DIM}SuperGrok Heavy · grok\x1b[0m\n`);
+      expect(later).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}grok\x1b[0m\n${DIM}${'credits'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 11h13m\x1b[0m\n${DIM}stale snapshot 2d0h old\x1b[0m\n${DIM}SuperGrok Heavy · grok · 0h2m ago\x1b[0m\n`);
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -1309,7 +1310,9 @@ describe('cursor panel', () => {
       expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
       expect(lines.at(-1)).toBe('\x1b[90m↑↓/jk select · space route · r refresh · t reset times · q quit · ? help\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
-      expect(lines.slice(6, -2).join('\n')).toBe(once.split('\n').slice(1).join('\n'));
+      const panels = lines.slice(6, -2).join('\n');
+      expect(panels.match(SPINNER_TAIL)).toHaveLength(10);
+      expect(panels.replace(SPINNER_TAIL, '').replace(/ · \d+h\d+m ago/g, '')).toBe(once.split('\n').slice(1).join('\n'));
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -1985,7 +1988,7 @@ describe('route eligibility state file', () => {
     dashboard.press(' ');
     expect(dashboard.lastFrame().split('\n').at(-1)).toBe('not routable (no usage windows)');
     await vi.advanceTimersByTimeAsync(2000);
-    expect(dashboard.lastFrame().split('\n').at(-1)).toBe('api balance · kilo');
+    expect(dashboard.lastFrame().split('\n').at(-1)).toBe('api balance · kilo · 0h0m ago');
     expect(readdirSync(scratch)).toEqual([]);
     await quit(dashboard);
   });
@@ -2203,7 +2206,7 @@ describe('junie panel', () => {
       expect(lines[lines.indexOf('▸ junie') + 3]).toBe('not routable (no usage windows)');
       await vi.advanceTimersByTimeAsync(2000);
       const later = unreferenced.lastFrame().split('\n');
-      expect(later[later.indexOf('▸ junie') + 3]).toBe('701513 credits · junie');
+      expect(later[later.indexOf('▸ junie') + 3]).toBe('701513 credits · junie · 0h0m ago');
       expect(readdirSync(scratch)).toEqual([]);
       unreferenced.press('q');
       await unreferenced.finished;
@@ -2498,7 +2501,7 @@ describe('hermes panel', () => {
       expect(lines[lines.indexOf('▸ hermes') + 2]).toBe('not routable (no usage windows)');
       await vi.advanceTimersByTimeAsync(2000);
       const later = unroutable.lastFrame().split('\n');
-      expect(later[later.indexOf('▸ hermes') + 2]).toBe('hermes · hermes');
+      expect(later[later.indexOf('▸ hermes') + 2]).toBe('hermes · hermes · 0h0m ago');
       expect(readdirSync(scratch)).toEqual([]);
       unroutable.press('q');
       await unroutable.finished;

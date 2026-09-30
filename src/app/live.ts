@@ -34,6 +34,7 @@ type SettledRound = NonNullable<LiveSlot['usage']>[];
 type Session = LiveOptions & {
   clock: () => string;
   results: LiveSlot['usage'][];
+  inFlight: Set<number>;
   settled: SettledRound | undefined;
   noColor: boolean;
   refreshMs: number;
@@ -79,7 +80,7 @@ function refreshMsOf(env: Record<string, string | undefined>): number {
 
 function viewOf(session: Session): LiveView {
   return {
-    slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index] })),
+    slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index], probing: session.inFlight.has(index) })),
     spinner: session.spinner,
     refreshing: session.running === true && session.rounds > 1,
     footer: session.footer,
@@ -106,7 +107,7 @@ function redrawOnResize(session: Session): void {
 }
 
 function anyPending(session: Session): boolean {
-  return session.results.includes(undefined);
+  return session.results.includes(undefined) || session.inFlight.size > 0;
 }
 
 function scheduleTick(session: Session): void {
@@ -122,11 +123,13 @@ function tick(session: Session): void {
 
 function settle(session: Session, index: number, usage: LiveSlot['usage']): void {
   session.results[index] = usage;
+  session.inFlight.delete(index);
   draw(session);
 }
 
 function endRound(session: Session): void {
   session.running = false;
+  session.inFlight.clear();
   session.settled = session.results.filter((usage) => usage !== undefined);
   if (session.quitting) return;
   session.refreshTimer = setTimeout(() => refresh(session), session.refreshMs);
@@ -137,6 +140,7 @@ function startRound(session: Session): void {
   session.running = true;
   session.rounds += 1;
   const now = session.clock();
+  session.probes.forEach((_, index) => session.inFlight.add(index));
   const settling = session.probes.map(({ probe }, index) => probe(now).then((usage) => settle(session, index, usage)));
   void Promise.allSettled(settling).then(() => endRound(session));
 }
@@ -274,6 +278,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       ...options,
       clock: options.clock ?? wallClock,
       results: options.probes.map(() => undefined),
+      inFlight: new Set(),
       settled: undefined,
       noColor: options.env['NO_COLOR'] !== undefined,
       refreshMs: refreshMsOf(options.env),

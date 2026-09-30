@@ -38,6 +38,9 @@ vi.mock('../domain/index.ts', async (importOriginal) => {
 
 const NOW = '2026-09-13T10:00:00.000Z';
 const RESET = '\x1b[0m';
+const ESCAPE = String.fromCharCode(27);
+const ANSI_CODE = new RegExp(`${ESCAPE}\\[\\d+m`, 'g');
+const PLAN_CAPTION = new RegExp(`(plan · [\\w-]+)(?=${ESCAPE})`, 'g');
 const PLAIN: PanelMarks = { selected: false, ineligible: false };
 
 describe('terminal renderer', () => {
@@ -126,7 +129,7 @@ describe('terminal renderer', () => {
       status: 'ok',
       balance: { amount, currency: '$', reference }
     });
-    const strip = (text: string): string => text.replace(new RegExp(`${String.fromCharCode(27)}\\[\\d+m`, 'g'), '');
+    const strip = (text: string): string => text.replace(ANSI_CODE, '');
     const balanceRow = (usage: ProviderUsage, noColor: boolean): string => renderPanelOk(usage as Extract<ProviderUsage, { status: 'ok' }>, noColor, NOW, PLAIN).split('\n')[2];
     const weeklyRow = (noColor: boolean): string => renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct: 10, resetsAt: '2026-09-13T22:00:00Z' }, noColor, NOW);
 
@@ -263,6 +266,8 @@ describe('terminal renderer', () => {
       `\x1b[90m${'━'.repeat(72)}${RESET}\n\x1b[90mgrok${RESET}\n\x1b[90m${'credits'.padEnd(35)} ${'█'.repeat(19)}░  96%${RESET}\n\x1b[90mstale snapshot 2d16h old${RESET}\n\x1b[90mgrok · grok${RESET}`
     );
     expect(renderPanelOk({ ...usage, windows: [] }, true, NOW, PLAIN).split('\n')[2]).toBe(' '.repeat(72));
+    const credits = renderPanelOk({ ...usage, windows: [], balance: { amount: 5, currency: '$', reference: 20 } }, true, NOW, PLAIN).split('\n')[2];
+    expect(credits).toBe(`${'balance $5.00'.padEnd(35)} #####---------------  25%`.padEnd(72));
   });
 
   it('draws the balance row of a stale panel dim', () => {
@@ -503,7 +508,7 @@ describe('live frame', () => {
     expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
     expect(lines.at(-1)).toBe(`\x1b[90m↑↓/jk select · space route · r refresh · t reset times · q quit · ? help${RESET}`);
-    expect(lines.slice(6, -2).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n'));
+    expect(lines.slice(6, -2).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n').replace(PLAN_CAPTION, '$1 · 0h1m ago'));
   });
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
@@ -585,7 +590,7 @@ describe('live frame', () => {
       'session                             #-------------------   3% ↻ 3d0h',
       'weekly                              #################---  86% ↻ 3d0h',
       'weekly Fable                        #################### 100% ↻ 3d0h',
-      'claude · personal · claude'
+      'claude · personal · claude · 0h0m ago'
     ];
     const WORK_PANEL = [
       RULE,
@@ -593,14 +598,14 @@ describe('live frame', () => {
       'session                             --------------------   0% ↻ 3d0h',
       'weekly                              ##------------------  12% ↻ 3d0h',
       'weekly Fable                        #####---------------  23% ↻ 3d0h',
-      'claude · work · claude-work'
+      'claude · work · claude-work · 0h0m ago'
     ];
     const AGY_PANEL = [
       RULE,
       'agy',
       'Gemini Models · Five Hour Limit     ##########----------  50% ↻ 3d0h',
       'Gemini Models · Weekly Limit        ##########----------  50% ↻ 3d0h',
-      'agy · agy'
+      'agy · agy · 0h0m ago'
     ];
     const win = (label: string, kind: 'rolling' | 'weekly', usedPct: number): UsageWindow => ({ label, kind, usedPct, resetsAt: LATER });
     const down = (id: string, reason: string): ProviderUsage => ({ id, displayName: id, planLabel: id, windows: [], fetchedAt: NOW, status: 'unavailable', reason });
@@ -655,7 +660,7 @@ describe('live frame', () => {
     });
 
     it('scrolls the region so the selected panel’s header is its first line', () => {
-      expect(frameOf({ selected: 9 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ kilo', `${'balance $14.15'.padEnd(35)} ##############------  71%`.padEnd(72), 'api balance · kilo']);
+      expect(frameOf({ selected: 9 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ kilo', `${'balance $14.15'.padEnd(35)} ##############------  71%`.padEnd(72), 'api balance · kilo · 0h0m ago']);
       expect(frameOf({ selected: 6 })).toEqual([
         BANNER,
         SUMMARY,
@@ -664,7 +669,7 @@ describe('live frame', () => {
         'total                               ################----  80% ↻ 3d0h',
         'auto                                ################----  80% ↻ 3d0h',
         'api                                 ################----  80% ↻ 3d0h',
-        'Ultra · cursor',
+        'Ultra · cursor · 0h0m ago',
         RULE
       ]);
     });
@@ -712,7 +717,7 @@ describe('panel marks', () => {
   const BOLD = '\x1b[1m';
   const DIM = '\x1b[90m';
   const REASON = 'claude CLI not found in PATH';
-  const CAPTION = 'claude · personal · claude';
+  const CAPTION = 'claude · personal · claude · 0h0m ago';
   const WEEKLY: UsageWindow = { label: 'weekly', kind: 'weekly', usedPct: 86 };
   const freshClaude: ProviderUsage = { id: 'claude', displayName: 'claude', planLabel: 'claude · personal', windows: [WEEKLY], fetchedAt: NOW, status: 'ok' };
   const unavailableClaude: ProviderUsage = { id: 'claude', displayName: 'claude', planLabel: 'claude · personal', windows: [], fetchedAt: NOW, status: 'unavailable', reason: REASON };
@@ -744,7 +749,7 @@ describe('panel marks', () => {
       [`▸ claude${' '.repeat(53)}${DIM}routing off${RESET}`, row, `${DIM}${CAPTION}${RESET}`].join('\n')
     );
     expect(panelOf(liveView(freshClaude, { ineligible: [], selected: 0 }))).toBe(`▸ claude\n${row}\n${DIM}${CAPTION}${RESET}`);
-    expect(panelOf(liveView(freshClaude, { ineligible: ['claude-work'] }))).toBe(renderPanelOk(freshClaude, false, NOW, PLAIN));
+    expect(panelOf(liveView(freshClaude, { ineligible: ['claude-work'] }))).toBe(renderPanelOk(freshClaude, false, NOW, { ...PLAIN, age: ' · 0h0m ago' }));
   });
 
   it('keeps the plain rule and ends the tag at column 72 under NO_COLOR', () => {
@@ -761,7 +766,39 @@ describe('panel marks', () => {
     const message = 'not routable (no usage windows)';
     expect(panelOf({ ...view, flash: { index: 1, message } }).split('\n').slice(-2)).toEqual([' '.repeat(72), `${DIM}${message}${RESET}`]);
     expect(panelOf({ ...view, flash: { index: 0, message } })).toContain(`\n${DIM}${REASON}${RESET}\n${DIM}${message}${RESET}\n`);
-    expect(panelOf({ ...view, flash: { index: 0, message } })).toContain(`${DIM}api balance · kilo${RESET}`);
+    expect(panelOf({ ...view, flash: { index: 0, message } })).toContain(`${DIM}api balance · kilo · 0h0m ago${RESET}`);
+  });
+
+  it('appends the spinner frame of the tick after the name of a probing slot and keeps its windows and age caption', () => {
+    const slot = (probing?: boolean) => ({ id: 'claude', usage: freshClaude, probing });
+    const header = (extra: Partial<LiveView>, probing?: boolean) => panelOf({ ...liveView(freshClaude, { ineligible: [], ...extra }), slots: [slot(probing)] }, true).split('\n');
+    expect(header({ spinner: 13 }, true)).toEqual(['='.repeat(72), 'claude ⠸', renderWindowRow(WEEKLY, true, NOW), 'claude · personal · claude · 0h0m ago']);
+    expect(header({ spinner: 13 }, false)[1]).toBe('claude');
+    expect(header({ spinner: 13 })[1]).toBe('claude');
+    expect(header({ selected: 0 }, true)[0]).toBe('▸ claude ⠋');
+    expect(header({ ineligible: ['claude'] }, true)[1]).toBe(`claude ⠋${' '.repeat(53)}routing off`);
+    expect(panelOf({ ...liveView(freshClaude, { ineligible: [] }), slots: [slot(true)] }).split('\n')[1]).toBe('claude ⠋');
+    expect(panelOf({ ...liveView(unavailableClaude), slots: [{ id: 'claude', usage: unavailableClaude, probing: true }], ineligible: [] }).split('\n')[1]).toBe(`${DIM}claude ⠋${RESET}`);
+  });
+
+  it('still shows the pending panel for a slot with no result even when it is probing', () => {
+    const view = { ...liveView(undefined, { ineligible: [] }), slots: [{ id: 'claude', usage: undefined, probing: true }] };
+    expect(panelOf(view, true).split('\n')).toEqual(['='.repeat(72), 'claude', '⠋ probing…']);
+  });
+
+  it('ends every settled caption with the age from its fetch time and cuts the caption to keep 72 cells', () => {
+    const longName = 'x'.repeat(80);
+    const old = { ...freshClaude, planLabel: longName, fetchedAt: '2026-09-11T09:00:00.000Z' };
+    const caption = panelOf(liveView(old, { ineligible: [] }), true).split('\n').at(-1) ?? '';
+    expect(caption.endsWith(' · 2d1h ago')).toBe(true);
+    expect([...caption]).toHaveLength(72);
+    expect(caption).toContain('…');
+    expect(panelOf(liveView({ ...freshClaude, fetchedAt: '2026-09-13T09:57:00.000Z' }, { ineligible: [] }), true).split('\n').at(-1)).toBe('claude · personal · claude · 0h3m ago');
+  });
+
+  it('replaces the whole caption with the flash and adds no age to it', () => {
+    const view = { ...liveView(freshClaude, { ineligible: [] }), flash: { index: 0, message: 'saved' } };
+    expect(panelOf(view, true).split('\n').at(-1)).toBe('saved');
   });
 
   it('tags the ineligible panels of the once dashboard and nothing else', () => {

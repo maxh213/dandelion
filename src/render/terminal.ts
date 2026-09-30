@@ -14,7 +14,7 @@ const ROUTING_OFF = 'routing off';
 const HIDDEN = 'hidden';
 const MARKER = '▸ ';
 
-export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; absoluteZone?: string };
+export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; age?: string; spinner?: string; absoluteZone?: string };
 
 function styled(text: string, code: string, noColor: boolean): string {
   if (noColor) return text;
@@ -89,7 +89,8 @@ function flagsOf(marks: PanelMarks): string {
 }
 
 function headerLine(name: string, marks: PanelMarks, tag: (text: string) => string): string {
-  const lead = marks.selected ? `${MARKER}${name}` : name;
+  const titled = marks.spinner === undefined ? name : `${name} ${marks.spinner}`;
+  const lead = marks.selected ? `${MARKER}${titled}` : titled;
   const flags = flagsOf(marks);
   if (flags === '') return lead;
   return `${lead}${repeatChar(' ', WIDTH - cellCount(lead) - cellCount(flags))}${tag(flags)}`;
@@ -200,8 +201,13 @@ function caption(usage: ProviderUsage): string {
   return `${taggedCaption(usage)}${usage.captionSuffix ?? ''}`;
 }
 
+function agedCaption(usage: ProviderUsage, age: string | undefined): string {
+  if (age === undefined) return caption(usage);
+  return `${cutCells(caption(usage), WIDTH - cellCount(age))}${age}`;
+}
+
 function captionLine(usage: ProviderUsage, marks: PanelMarks): string {
-  return marks.caption ?? caption(usage);
+  return marks.caption ?? agedCaption(usage, marks.age);
 }
 
 type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;

@@ -25,6 +25,7 @@ const START = '2026-09-13T10:00:00.000Z';
 const CLEAR = '\x1b[H\x1b[2J\x1b[0m';
 const ENTER_ALTERNATE = '\x1b[?1049h\x1b[?25l';
 const LEAVE_ALTERNATE = '\x1b[?25h\x1b[?1049l';
+const SPINNING = /^\S+ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]$/;
 const IDS = ['claude', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
 
 function usageOf(id: string, fetchedAt: string): Usage {
@@ -143,7 +144,7 @@ describe('live session', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(session.frames()).toHaveLength(2);
     const lines = session.lastFrame().split('\n');
-    expect(lines.slice(10, 14)).toEqual(['agy', `${'weekly'.padEnd(35)} ##------------------  10%`, 'plan · agy', '='.repeat(72)]);
+    expect(lines.slice(10, 14)).toEqual(['agy', `${'weekly'.padEnd(35)} ##------------------  10%`, 'plan · agy · 0h0m ago', '='.repeat(72)]);
     expect(lines.filter((line) => line === '⠋ probing…')).toHaveLength(6);
     expect(lines[0]).toBe('DANDELION'.padEnd(48) + 'data 0h0m old · 10:00:00');
     session.press('q');
@@ -180,6 +181,49 @@ describe('live session', () => {
     expect(session.lastFrame().split('\n')[0]).toBe('DANDELION'.padEnd(48) + 'data 0h0m old · 10:00:01');
     await vi.advanceTimersByTimeAsync(1000);
     expect(session.probes[0].calls).toHaveLength(3);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('keeps each panel on its previous windows with a spinner after its name until its own probe settles', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
+    await session.settleRound(0);
+    expect(session.lastFrame().split('\n')).not.toContainEqual(expect.stringMatching(SPINNING));
+    await vi.advanceTimersByTimeAsync(1000);
+    const during = session.lastFrame().split('\n');
+    expect(during.filter((line) => SPINNING.test(line))).toHaveLength(IDS.length);
+    expect(during.filter((line) => line.startsWith('weekly'))).toHaveLength(IDS.length);
+    expect(session.lastFrame()).not.toContain('probing…');
+    const [claude] = session.probes;
+    claude.calls[1].resolve(usageOf('claude', claude.calls[1].now));
+    await vi.advanceTimersByTimeAsync(0);
+    const partly = session.lastFrame().split('\n');
+    expect(partly).toContain('claude');
+    expect(partly.filter((line) => SPINNING.test(line))).toHaveLength(IDS.length - 1);
+    await session.settleRound(1, {});
+    expect(session.lastFrame().split('\n').filter((line) => SPINNING.test(line))).toEqual([]);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('ends the spinner of a slot whose probe rejects when its round ends', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
+    await session.settleRound(0);
+    await vi.advanceTimersByTimeAsync(1000);
+    session.probes.slice(1).forEach(({ probe, calls }) => calls[1].resolve(usageOf(probe.id, calls[1].now)));
+    session.probes[0].calls[1].reject(new Error('boom'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.lastFrame().split('\n').filter((line) => SPINNING.test(line))).toEqual([]);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('ends each panel caption with its data age counted from its own fetch time', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '3600' } });
+    await session.settleRound(0);
+    await vi.advanceTimersByTimeAsync(181000);
+    const captions = session.lastFrame().split('\n').filter((line) => line.startsWith('plan · '));
+    expect(captions).toEqual(IDS.map((id) => `plan · ${id} · 0h3m ago`));
     session.press('q');
     await session.finished;
   });
@@ -431,7 +475,7 @@ describe('live session', () => {
     await vi.advanceTimersByTimeAsync(1999);
     expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('not routable (no usage windows)');
     await vi.advanceTimersByTimeAsync(1);
-    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('plan · kilo');
+    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('plan · kilo · 0h0m ago');
     ['k', 'k', 'k', 'k', 'k', 'k', ' '].forEach(session.press);
     expect(lineAfter(session.lastFrame(), '▸ claude', 2)).toBe('not routable (no usage windows)');
     expect(session.replace).not.toHaveBeenCalled();
@@ -449,17 +493,17 @@ describe('live session', () => {
     session.press('k');
     session.press('k');
     expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('not routable (no usage windows)');
-    expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('plan · codex');
+    expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('plan · codex · 0h0m ago');
     await vi.advanceTimersByTimeAsync(1000);
     session.press(' ');
-    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('plan · kilo');
+    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('plan · kilo · 0h0m ago');
     expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('not routable (no usage windows)');
     await vi.advanceTimersByTimeAsync(500);
     expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('not routable (no usage windows)');
     await vi.advanceTimersByTimeAsync(1499);
     expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('not routable (no usage windows)');
     await vi.advanceTimersByTimeAsync(1);
-    expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('plan · codex');
+    expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('plan · codex · 0h0m ago');
     session.press('q');
     await session.finished;
   });
@@ -474,7 +518,7 @@ describe('live session', () => {
     expect(session.saved().at(-1)).toEqual({ claude: false });
     expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('not routable (no usage windows)');
     await vi.advanceTimersByTimeAsync(1000);
-    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('plan · kilo');
+    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('plan · kilo · 0h0m ago');
     session.press('q');
     await session.finished;
   });

@@ -25,13 +25,13 @@ require('node:fs').writeFileSync(require('node:path').join(__dirname, 'kimi.pid'
 setInterval(() => {}, 1000);
 `;
 const OTHER_PANELS = [
-  /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude · personal · claude\n/,
-  /\nclaude-work\nweekly +#+-* +86%( ↻ \S+)?\nclaude · work · claude-work\n/,
-  /\nagy\nGemini Models · Weekly Limit +-+ +0%( ↻ \S+)?\nagy · agy\n/,
-  /\nkimi\nkimi web exited without printing a token\nkimi code · kimi\n/,
-  /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\n/,
-  /\ncodex\napi-key billing · no usage windows\ncodex · codex\n/,
-  /\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor\n/
+  /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude · personal · claude · \d+h\d+m ago\n/,
+  /\nclaude-work\nweekly +#+-* +86%( ↻ \S+)?\nclaude · work · claude-work · \d+h\d+m ago\n/,
+  /\nagy\nGemini Models · Weekly Limit +-+ +0%( ↻ \S+)?\nagy · agy · \d+h\d+m ago\n/,
+  /\nkimi\nkimi web exited without printing a token\nkimi code · kimi · \d+h\d+m ago\n/,
+  /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok · \d+h\d+m ago\n/,
+  /\ncodex\napi-key billing · no usage windows\ncodex · codex · \d+h\d+m ago\n/,
+  /\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor · \d+h\d+m ago\n/
 ];
 const KILO_PENDING = /\nkilo\n\S probing…$/;
 const KILO_TIMED_OUT = '\nkilo\nCommand timed out after 20s\napi balance · kilo';
