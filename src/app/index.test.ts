@@ -634,6 +634,35 @@ describe('grok panel', () => {
     expect(output.includes(`${DIM}${RULE}\x1b[0m\n${DIM}grok\x1b[0m\n`)).toBe(stale);
   });
 
+  describe('with a grok billing period that has ended', () => {
+    const ended = (end: string, percent = 96) =>
+      JSON.stringify({
+        ts: '2026-09-12T16:00:00.000Z',
+        msg: 'billing: fetched credits config',
+        ctx: { config: { creditUsagePercent: percent, currentPeriod: { ...PERIOD, end } }, subscriptionTier: 'SuperGrok' }
+      });
+
+    it('renders 0% with no reset countdown, the suffixed caption and the snapshot age', async () => {
+      const output = await runApp(grokIo(ended('2026-09-13T09:00:00Z')), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
+      const lines = output.split('\n');
+      const grok = lines.indexOf('grok');
+      expect(lines.slice(grok + 1, grok + 4)).toEqual([
+        'credits                             --------------------   0%',
+        'snapshot 18h0m old',
+        'SuperGrok · grok · period ended since snapshot'
+      ]);
+      expect(lines[grok + 1]).not.toContain('↻');
+    });
+
+    it('routes --high to grok instead of none when it is the only chain entry', async () => {
+      const missing = { run: async () => ({ stdout: '', stderr: '', failure: 'missing' as const }) };
+      const only = (log: string) => ioOf(missing, MISSING_KIMI, grokReader(log));
+      const high = { mode: 'high' as const, now: NOW, zone: 'UTC' };
+      expect(await routeWith(only(ended('2026-09-13T09:00:00Z')), GROK_ENV, high)).toEqual({ line: 'model-e xhigh grok', routed: true });
+      expect(await routeWith(only(ended('2026-09-13T21:00:00Z')), GROK_ENV, high)).toEqual({ line: 'none', routed: false });
+    });
+  });
+
   it('dims a stale grok panel throughout without a ramp escape', async () => {
     const output = await runApp(grokIo(grokLog('2026-09-10T17:14:22.812Z')), GROK_ENV, NOW);
     expect(output).toContain(

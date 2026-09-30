@@ -112,6 +112,37 @@ describe('probeGrok', () => {
     expect(usage.windows).toStrictEqual(expected.windows);
   });
 
+  describe('a snapshot at 96% with its billing period', () => {
+    const logWithEnd = (end: string | undefined) =>
+      JSON.stringify({ ...EVENT_75, ctx: { ...EVENT_75.ctx, config: { creditUsagePercent: 96, currentPeriod: end === undefined ? {} : { ...PERIOD, end } } } });
+
+    it.each([['before now', '2026-09-13T09:59:59Z'], ['exactly at now', NOW]])('reports 0% used with no reset and a caption suffix when it ended %s', async (_case, end) => {
+      const usage = await probeGrok(ioWithLog(logWithEnd(end)), HOME, NOW);
+      expect(usage).toStrictEqual({
+        id: 'grok',
+        displayName: 'grok',
+        planLabel: 'SuperGrok Heavy',
+        fetchedAt: NOW,
+        windows: [{ label: 'credits', kind: 'weekly', usedPct: 0 }],
+        status: 'ok',
+        snapshotAt: '2026-09-12T16:00:00.000Z',
+        captionSuffix: ' · period ended since snapshot'
+      });
+    });
+
+    it('keeps the snapshot usage and reset, without a suffix, when it ends after now', async () => {
+      const usage = await probeGrok(ioWithLog(logWithEnd('2026-09-13T10:00:01Z')), HOME, NOW);
+      expect(usage.windows).toStrictEqual([{ label: 'credits', kind: 'weekly', usedPct: 96, resetsAt: '2026-09-13T10:00:01Z' }]);
+      expect(usage).not.toHaveProperty('captionSuffix');
+    });
+
+    it('keeps the snapshot usage, without a suffix, when it has no end', async () => {
+      const usage = await probeGrok(ioWithLog(logWithEnd(undefined)), HOME, NOW);
+      expect(usage.windows).toStrictEqual([{ label: 'credits', kind: 'weekly', usedPct: 96 }]);
+      expect(usage).not.toHaveProperty('captionSuffix');
+    });
+  });
+
   it.each<[string, Record<string, string>]>([
     ['a missing log', {}],
     ['an empty log', { '/grok/logs/unified.jsonl': '' }],

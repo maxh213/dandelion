@@ -2,9 +2,10 @@ import { fieldOf, isCount, isFilled, matchesOnJsonLine, newestLineMatch, validIn
 
 export type GrokIo = { reader: FileReader };
 
-type Snapshot = { window: UsageWindow; tier: string; ts: string };
+type Snapshot = { window: UsageWindow; tier: string; ts: string; ended: boolean };
 
 const BILLING_MSG = 'billing: fetched credits config';
+const PERIOD_ENDED = ' · period ended since snapshot';
 const UNAVAILABLE = 'no grok billing snapshot — run grok once';
 
 function grokHome(reader: FileReader, env: Record<string, string | undefined>): string {
@@ -21,28 +22,34 @@ function tierOf(ctx: unknown): string {
   return isFilled(tier) ? tier : 'grok';
 }
 
-function creditsWindow(usedPct: number, config: unknown): UsageWindow {
-  const resetsAt = validInstant(fieldOf(fieldOf(config, 'currentPeriod'), 'end'));
-  return withReset({ label: 'credits', kind: 'weekly', usedPct }, resetsAt);
+function periodEnded(end: string | undefined, now: string): boolean {
+  return end !== undefined && Date.parse(end) <= Date.parse(now);
 }
 
-function usableSnapshots(event: unknown): Snapshot[] {
+function creditsWindow(usedPct: number, resetsAt: string | undefined, ended: boolean): UsageWindow {
+  return ended ? { label: 'credits', kind: 'weekly', usedPct: 0 } : withReset({ label: 'credits', kind: 'weekly', usedPct }, resetsAt);
+}
+
+function usableSnapshots(event: unknown, now: string): Snapshot[] {
   const ctx = fieldOf(event, 'ctx');
   const config = fieldOf(ctx, 'config');
   const usedPct = usedPercent(config);
   const ts = validInstant(fieldOf(event, 'ts'));
   if (usedPct === undefined || ts === undefined) return [];
-  return [{ window: creditsWindow(usedPct, config), tier: tierOf(ctx), ts }];
+  const resetsAt = validInstant(fieldOf(fieldOf(config, 'currentPeriod'), 'end'));
+  const ended = periodEnded(resetsAt, now);
+  return [{ window: creditsWindow(usedPct, resetsAt, ended), tier: tierOf(ctx), ts, ended }];
 }
 
-function snapshotsOn(line: string): Snapshot[] {
-  return matchesOnJsonLine(line, (event) => (fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshots(event) : []));
+function snapshotsOn(line: string, now: string): Snapshot[] {
+  return matchesOnJsonLine(line, (event) => (fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshots(event, now) : []));
 }
 
 export async function probeGrok(io: GrokIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
   const log = await io.reader.read(`${grokHome(io.reader, env)}/logs/unified.jsonl`);
-  const snapshot = log === undefined ? undefined : newestLineMatch(log, BILLING_MSG, snapshotsOn);
+  const snapshot = log === undefined ? undefined : newestLineMatch(log, BILLING_MSG, (line) => snapshotsOn(line, now));
   const usage = { id: 'grok', displayName: 'grok', fetchedAt: now };
   if (snapshot === undefined) return { ...usage, planLabel: 'grok', windows: [], status: 'unavailable', reason: UNAVAILABLE };
-  return { ...usage, planLabel: snapshot.tier, windows: [snapshot.window], status: 'ok', snapshotAt: snapshot.ts };
+  const ok = { ...usage, planLabel: snapshot.tier, windows: [snapshot.window], status: 'ok' as const, snapshotAt: snapshot.ts };
+  return snapshot.ended ? { ...ok, captionSuffix: PERIOD_ENDED } : ok;
 }
