@@ -50,6 +50,13 @@ describe('probeKilo', () => {
     expect(res).not.toHaveProperty('balance.reference');
   });
 
+  it.each(['abc', '-5', '0'])('treats invalid reference %s as no reference', async (raw) => {
+    const runner = mockRunner({ stdout: 'Balance: $14.15', stderr: '' });
+    const res = await probeKilo(runner, 'now', { DANDELION_KILO_REFERENCE: raw });
+    expect(res).toMatchObject({ status: 'ok', balance: { amount: 14.15 } });
+    expect(res).not.toHaveProperty('balance.reference');
+  });
+
   it.each<[string, CommandRunnerResult, string]>([
     ['missing CLI', { stdout: '', stderr: '', failure: 'missing' }, 'kilo CLI not found in PATH'],
     ['timeout', { stdout: '', stderr: '', failure: 'timeout' }, 'Command timed out after 20s'],

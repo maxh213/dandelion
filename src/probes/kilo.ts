@@ -7,7 +7,8 @@ const BALANCE_LINE = /Balance:\s*\$([0-9.]+)/;
 function parseReference(rawReference: string | undefined): number | undefined {
   if (rawReference === undefined) return DEFAULT_REFERENCE;
   if (rawReference === '') return undefined;
-  return Number.parseFloat(rawReference);
+  const reference = Number.parseFloat(rawReference);
+  return reference > 0 ? reference : undefined;
 }
 
 function amountIn(stdout: string): number | undefined {
