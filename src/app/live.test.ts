@@ -512,7 +512,9 @@ describe('live session', () => {
     expect(session.probes.map(({ calls }) => calls.length)).toEqual([1, 1, 2, 1, 1, 1, 1]);
     expect(session.probes[2].calls[1].now).toBe('2026-09-13T10:00:03.000Z');
     expect(session.lastFrame()).toMatch(/▸ kimi [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
-    expect(session.lastFrame().split('\n').slice(0, 6)).toEqual(before.split('\n').slice(0, 6));
+    const lines = (frame: string) => frame.split('\n');
+    const spinning = lines(session.lastFrame()).findIndex((line) => line.startsWith('▸ kimi'));
+    expect(lines(session.lastFrame()).filter((_, index) => index !== spinning)).toEqual(lines(before).filter((_, index) => index !== spinning));
     session.probes[2].calls[1].resolve({ ...usageOf('kimi', '2026-09-13T10:00:03.000Z'), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 77 }] });
     await vi.advanceTimersByTimeAsync(0);
     expect(session.lastFrame()).toContain('77%');
@@ -807,6 +809,20 @@ describe('route boxes', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(boxRowsOf(session.lastFrame())).toEqual(settled);
     session.probes[6].calls[1].resolve(usageOf('kilo', session.probes[6].calls[1].now));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-f', 'cursor'));
+    session.press('q');
+    await session.finished;
+  });
+
+  it('recomputes both boxes when a single panel settles', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '100000' } });
+    await session.settleRound(0);
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-a high', 'claude', 'model-h1 max', 'claude'));
+    session.press('j');
+    session.press('R');
+    const down: Usage = { id: 'claude', displayName: 'claude', windows: [], fetchedAt: START, status: 'unavailable', reason: 'gone' };
+    session.probes[0].calls[1].resolve(down);
     await vi.advanceTimersByTimeAsync(0);
     expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-f', 'cursor'));
     session.press('q');
