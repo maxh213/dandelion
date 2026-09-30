@@ -129,7 +129,7 @@ export function formatResetAt(resetsAt: string, now: string, zone: string): stri
   return near ? `${parts.get('weekday')} ${clock}` : `${parts.get('month')} ${parts.get('day')} ${clock}`;
 }
 
-export const CRITICAL_PCT = 95;
+const CRITICAL_PCT = 95;
 
 export type Notification = { key: string; text: string };
 

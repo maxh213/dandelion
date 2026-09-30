@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { isRoutable, nextLocalMidnight, notificationEvents, renderLiveFrame, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Routes } from '../render/index.ts';
+import { isRoutable, nextLocalMidnight, notificationEvents, renderLiveFrame, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -139,14 +139,20 @@ function notifying(session: Session): boolean {
   return (session.env['DANDELION_NOTIFY'] ?? '') !== '';
 }
 
-function announce(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): void {
-  if (!notifying(session) || previous === undefined || current === undefined) return;
+function fresh(session: Session, key: string): boolean {
+  const isNew = !session.notified.has(key);
+  session.notified.add(key);
+  return isNew;
+}
+
+function eventsOf(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): Notification[] {
+  if (!notifying(session) || previous === undefined || current === undefined) return [];
   const now = session.clock();
-  for (const { key, text } of notificationEvents(previous, current, now, nextLocalMidnight(session.zone, now))) {
-    if (session.notified.has(key)) continue;
-    session.notified.add(key);
-    session.notifier.notify(text);
-  }
+  return notificationEvents(previous, current, now, nextLocalMidnight(session.zone, now));
+}
+
+function announce(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): void {
+  for (const { key, text } of eventsOf(session, previous, current)) if (fresh(session, key)) session.notifier.notify(text);
 }
 
 function settle(session: Session, index: number, usage: LiveSlot['usage']): void {
