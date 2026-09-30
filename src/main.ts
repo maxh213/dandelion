@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isEntryFile, processZone, routesWarning, runApp, runLive, runRoute, realIo, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
+import { isEntryFile, processZone, routesWarning, runApp, runJson, runLive, runRoute, realIo, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -32,6 +32,12 @@ async function route(io: ProbeIo, proc: Proc): Promise<void> {
   if (code !== 0) proc.exit(code);
 }
 
+async function json(io: ProbeIo, proc: Proc): Promise<void> {
+  const { out, err } = await runJson(io, proc.env, { now: new Date().toISOString(), zone: processZone() });
+  proc.stdout.write(out);
+  proc.stderr.write(err);
+}
+
 function isLive(proc: Proc): boolean {
   return !proc.argv.includes('--once') && proc.stdin.isTTY === true && proc.stdout.isTTY === true;
 }
@@ -41,11 +47,15 @@ async function live(io: ProbeIo, proc: Proc): Promise<void> {
   proc.exit(0);
 }
 
-export function runIfMain(metaUrl: string, argv1: string, io: ProbeIo, proc: Proc): Promise<void> {
-  if (!isEntryFile(metaUrl, argv1)) return Promise.resolve();
+function dispatch(io: ProbeIo, proc: Proc): Promise<void> {
   if (proc.argv[2] === 'route') return route(io, proc);
+  if (proc.argv.includes('--json')) return json(io, proc);
   if (isLive(proc)) return live(io, proc);
   return main(io, proc.env, proc, new Date().toISOString());
+}
+
+export function runIfMain(metaUrl: string, argv1: string, io: ProbeIo, proc: Proc): Promise<void> {
+  return isEntryFile(metaUrl, argv1) ? dispatch(io, proc) : Promise.resolve();
 }
 
 await runIfMain(import.meta.url, process.argv[1], realIo, process);

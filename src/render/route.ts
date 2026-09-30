@@ -1,4 +1,4 @@
-import { NO_ROUTE, highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type RouteLines, type RoutesFault } from '../domain/index.ts';
+import { NO_ROUTE, highRouteLine, nextLocalMidnight, routeLine, type ProviderUsage, type RouteLines, type Routes, type RoutesFault } from '../domain/index.ts';
 
 export type RouteOutput = { out: string; err: string; code: number };
 
@@ -32,4 +32,38 @@ export function renderRoute(lines: RouteLines, usages: ProviderUsage[], ineligib
 
 export function renderRoutesFault({ path, problem }: RoutesFault): RouteOutput {
   return { out: '', err: `dandelion: routes file ${path}: ${problem}\n`, code: 2 };
+}
+
+export type SnapshotRequest = { now: string; zone: string };
+
+function statusFields(usage: ProviderUsage): Record<string, unknown> {
+  if (usage.status !== 'ok') return { reason: usage.reason };
+  return { balance: usage.balance, snapshotAt: usage.snapshotAt, note: usage.note };
+}
+
+function providerEntry(usage: ProviderUsage, ineligible: string[]): Record<string, unknown> {
+  return {
+    id: usage.id,
+    displayName: usage.displayName,
+    status: usage.status,
+    planLabel: usage.planLabel,
+    eligible: !ineligible.includes(usage.id),
+    windows: usage.windows.map(({ label, kind, usedPct, resetsAt }) => ({ label, kind, usedPct, resetsAt })),
+    ...statusFields(usage),
+    fetchedAt: usage.fetchedAt
+  };
+}
+
+function routeFields(routes: Routes, usages: ProviderUsage[], ineligible: string[], { now, zone }: SnapshotRequest): Record<string, unknown> {
+  const { lines, fault } = routes;
+  if (fault !== undefined) return { route: null, routeHigh: null, routesError: `${fault.path}: ${fault.problem}` };
+  return { route: routeLine(lines, usages, now, nextLocalMidnight(zone, now), ineligible), routeHigh: highRouteLine(lines, usages, ineligible) };
+}
+
+export function renderSnapshot(routes: Routes, usages: ProviderUsage[], ineligible: string[], request: SnapshotRequest): string {
+  return JSON.stringify({
+    generatedAt: request.now,
+    providers: usages.map((usage) => providerEntry(usage, ineligible)),
+    ...routeFields(routes, usages, ineligible, request)
+  });
 }

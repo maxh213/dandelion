@@ -1,12 +1,12 @@
 import { ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { isEntryFile, routesWarning, runApp, runLive, runRoute, realIo } from './index.ts';
+import { isEntryFile, routesWarning, runApp, runJson, runLive, runRoute, realIo } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const NOW = '2026-09-13T10:00:00.000Z';
@@ -1706,6 +1706,57 @@ describe('runRoute', () => {
       expect(routesWarning({ DANDELION_ROUTES_FILE: path })).toBe(`dandelion: routes file ${path}: is not valid JSON\n`);
       expect(routesWarning({ DANDELION_ROUTES_FILE: ROUTES_FILE })).toBe('');
     });
+  });
+});
+
+describe('runJson', () => {
+  const ORDER = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+  let scratch = '';
+
+  beforeEach(() => {
+    scratch = mkdtempSync(join(tmpdir(), 'dandelion-json-'));
+  });
+
+  afterEach(() => {
+    rmSync(scratch, { recursive: true, force: true });
+  });
+
+  async function snapshotOf(env: Record<string, string | undefined>, mode: 'headroom' | 'high' = 'headroom') {
+    const request = { now: NOW, zone: 'UTC' };
+    const { out, err } = await runJson(routedRunner(), { DANDELION_ROUTES_FILE: ROUTES_FILE, ...env }, request);
+    const route = await runRoute(routedRunner(), { DANDELION_ROUTES_FILE: ROUTES_FILE, ...env }, { mode, ...request });
+    return { out, err, snapshot: JSON.parse(out), line: route.out.slice(0, -1) };
+  }
+
+  it('prints one line of JSON with the ten providers in dashboard order and the exact route lines', async () => {
+    const { out, err, snapshot, line } = await snapshotOf({ DANDELION_STATE_FILE: join(scratch, 'state.json') });
+    expect(out.endsWith('}\n')).toBe(true);
+    expect(out.slice(0, -1)).not.toContain('\n');
+    expect(err).toBe('');
+    expect(snapshot.generatedAt).toBe(NOW);
+    expect(snapshot.providers.map((entry: { id: string }) => entry.id)).toEqual(ORDER);
+    expect(snapshot.route).toBe(line);
+    expect(snapshot.routeHigh).toBe((await snapshotOf({ DANDELION_STATE_FILE: join(scratch, 'state.json') }, 'high')).line);
+  });
+
+  it('marks the providers the state file disables, and never writes the state file', async () => {
+    const state = join(scratch, 'state.json');
+    writeFileSync(state, '{"agy":false,"kimi":true}');
+    const { snapshot } = await snapshotOf({ DANDELION_STATE_FILE: state });
+    expect(snapshot.providers.filter((entry: { eligible: boolean }) => !entry.eligible).map((entry: { id: string }) => entry.id)).toEqual(['agy']);
+    expect(readFileSync(state, 'utf8')).toBe('{"agy":false,"kimi":true}');
+    const missing = join(scratch, 'state', 'none.json');
+    await snapshotOf({ DANDELION_STATE_FILE: missing });
+    expect(existsSync(dirname(missing))).toBe(false);
+  });
+
+  it('nulls the routes, names the file and warns on stderr with a bad routes file', async () => {
+    const path = join(scratch, 'bad.json');
+    writeFileSync(path, '{"route":');
+    const { snapshot, err } = await snapshotOf({ DANDELION_ROUTES_FILE: path });
+    expect([snapshot.route, snapshot.routeHigh, snapshot.routesError]).toEqual([null, null, `${path}: is not valid JSON`]);
+    expect(err).toBe(`dandelion: routes file ${path}: is not valid JSON\n`);
+    expect(snapshot.providers).toHaveLength(10);
   });
 });
 

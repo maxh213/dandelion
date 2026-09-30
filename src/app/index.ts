@@ -26,9 +26,11 @@ import {
   renderDashboard,
   renderRoute,
   renderRoutesFault,
+  renderSnapshot,
   type Eligibility,
   type RouteOutput,
   type RouteRequest,
+  type SnapshotRequest,
   type Routes,
   type RoutesFile,
   type StateFile
@@ -38,6 +40,8 @@ import { startLive, type Keyboard, type Screen } from './live.ts';
 export type { ProbeIo } from '../probes/index.ts';
 export type { RouteMode, RouteOutput, RouteRequest } from '../render/index.ts';
 export type { Keyboard, Screen } from './live.ts';
+
+export type JsonOutput = { out: string; err: string };
 
 type Stop = () => Promise<void>;
 
@@ -261,6 +265,13 @@ export async function runRoute(io: ProbeIo, env: Record<string, string | undefin
   const { lines, fault } = routesOf(env);
   if (fault !== undefined) return renderRoutesFault(fault);
   return renderRoute(lines, await probeOnce(io, env, request.now), eligibilityOf(io, env).ineligible(), request);
+}
+
+export async function runJson(io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest): Promise<JsonOutput> {
+  const routes = routesOf(env);
+  const usages = await probeOnce(io, env, request.now);
+  const err = routes.fault === undefined ? '' : renderRoutesFault(routes.fault).err;
+  return { out: `${renderSnapshot(routes, usages, eligibilityOf(io, env).ineligible(), request)}\n`, err };
 }
 
 export function processZone(): string {

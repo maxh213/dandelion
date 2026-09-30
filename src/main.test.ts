@@ -290,6 +290,47 @@ describe('main', () => {
     expect(vi.mocked(runRoute).mock.calls[0][2].mode).toBe(mode);
   });
 
+  it.each<[string[]]>([[['--json']], [['--once', '--json']], [['--json', '--once']], [['x', '--json']]])('runIfMain %j prints one JSON line on two terminals without live mode and exits 0', async (args) => {
+    const { proc, output, errors, keyboard } = procOf(['node', MAIN, ...args], true, true);
+    const before = new Date().toISOString();
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    const after = new Date().toISOString();
+    const snapshot = JSON.parse(output());
+    expect(output().endsWith('}\n')).toBe(true);
+    expect(output().slice(0, -1)).not.toContain('\n');
+    expect(snapshot.generatedAt >= before && snapshot.generatedAt <= after).toBe(true);
+    expect(snapshot.providers).toHaveLength(10);
+    expect([snapshot.route, snapshot.routeHigh]).toEqual(['model-a high claude', 'model-h1 max claude']);
+    expect(errors()).toBe('');
+    expect(keyboard.setRawMode).not.toHaveBeenCalled();
+    expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it('runIfMain --json with a bad routes file nulls the routes, warns on stderr and does not exit', async () => {
+    const { proc, output, errors } = procOf(['node', MAIN, '--json'], true, true, { DANDELION_ROUTES_FILE: '/nonexistent/routes.json' });
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    const snapshot = JSON.parse(output());
+    expect([snapshot.route, snapshot.routeHigh, snapshot.routesError]).toEqual([null, null, '/nonexistent/routes.json: cannot be read']);
+    expect(errors()).toBe('dandelion: routes file /nonexistent/routes.json: cannot be read\n');
+    expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it.each<[string[], string]>([[['route', '--json'], 'model-a high claude\n'], [['route', '--high', '--json'], 'model-h1 max claude\n']])('runIfMain %j ignores --json', async (args, line) => {
+    const { proc, output, errors } = procOf(['node', MAIN, ...args], true, true);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect([output(), errors()]).toEqual([line, '']);
+    expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it('runIfMain route --json keeps exit code 1 for none and exit code 2 for a bad routes file', async () => {
+    const none = procOf(['node', MAIN, 'route', '--json'], false, false);
+    await runIfMain(MAIN_URL, MAIN, profileIo, none.proc);
+    expect([none.output(), none.proc.exit.mock.calls]).toEqual(['none\n', [[1]]]);
+    const bad = procOf(['node', MAIN, 'route', '--json'], false, false, { DANDELION_ROUTES_FILE: '/nonexistent/routes.json' });
+    await runIfMain(MAIN_URL, MAIN, routeIo, bad.proc);
+    expect([bad.output(), bad.errors(), bad.proc.exit.mock.calls]).toEqual(['', 'dandelion: routes file /nonexistent/routes.json: cannot be read\n', [[2]]]);
+  });
+
   it('runIfMain route prints none and exits 1 when nothing routes', async () => {
     const { proc, output } = procOf(['node', MAIN, 'route'], undefined, undefined);
     await runIfMain(MAIN_URL, MAIN, profileIo, proc);
