@@ -21,6 +21,7 @@ export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
 const FULL_LEFT = 100;
 const TRIP_PCT = 90;
+const OFF_ROUTE_LABELS: Record<string, readonly string[]> = { cursor: ['api'] };
 
 type Candidate = { id: string; windows: RoutableWindow[] };
 
@@ -44,10 +45,16 @@ function onAccount(line: string, id: string): string {
   return `${line} ${id}`;
 }
 
+function onRoute(id: string, windows: RoutableWindow[]): RoutableWindow[] {
+  const offRoute = OFF_ROUTE_LABELS[id] ?? [];
+  return windows.filter((window) => !offRoute.includes(window.label));
+}
+
 function candidatesOf(usages: RoutableUsage[]): Candidate[] {
   return ROUTED_IDS.flatMap((id) => {
     const usage = usages.find((each) => each.id === id);
-    return isRoutable(usage) ? [{ id, windows: usage.windows }] : [];
+    const windows = isRoutable(usage) ? onRoute(id, usage.windows) : [];
+    return windows.length > 0 ? [{ id, windows }] : [];
   });
 }
 

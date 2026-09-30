@@ -205,6 +205,20 @@ describe('routeLine', () => {
     expect(routeLine(LINES, liveCase(session).split('; ').map(usageOf), LIVE_NOW, MIDNIGHT, [])).toBe(line);
   });
 
+  it('routes cursor on its auto pool, ignoring a spent api pool', () => {
+    const labelled = (text: string): ProviderUsage => ({
+      id: 'cursor', displayName: 'cursor', fetchedAt: NOW, status: 'ok',
+      windows: text.split(', ').map((each) => {
+        const [label, used] = each.split(' ');
+        return { label, kind: 'weekly', usedPct: Number(used), resetsAt: '2026-09-14T15:00:00.000Z' };
+      })
+    });
+    const agy = usageOf('agy: rolling 0 @-, weekly 50 @2026-09-20T00:00:00.000Z');
+    expect(routeLine(LINES, [labelled('total 59, auto 56, api 100'), agy], NOW, MIDNIGHT, [])).toBe('model-f cursor');
+    expect(routeLine(LINES, [labelled('api 50'), agy], NOW, MIDNIGHT, [])).toBe('model-c high agy');
+    expect(routeLine(LINES, [labelled('auto 50, api 10')], NOW, MIDNIGHT, [])).toBe('model-f cursor');
+  });
+
   it('inclusive trip at exactly 90 skips the rolling account', () => {
     expect(routeOf('claude: rolling 90 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z')).toBe('model-e xhigh grok');
     expect(routeOf('claude: rolling 89.999 @-; grok: weekly 95 @2026-09-20T00:00:00.000Z')).toBe('model-a high claude');

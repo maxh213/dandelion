@@ -5,7 +5,7 @@
     "agy":         { "standard": "gemini-3.8-flash-high high", "max": "gemini-3.1-pro-high high" },
     "kimi":        { "standard": "kimi-code/k3 max",           "max": "kimi-code/k3 max" },
     "grok":        { "standard": "grok-4.7 xhigh",             "max": "grok-4.7 xhigh" },
-    "cursor":      { "standard": "kimi-k3-max",                "max": "kimi-k3-max" },
+    "cursor":      { "standard": "auto",                       "max": "auto" },
     "junie":       { "standard": "gemini-3.8-flash high",      "max": "gemini-3.8-flash high" },
     "hermes":      { "standard": "x-ai/grok-4.7 xhigh",        "max": "x-ai/grok-4.7 xhigh" }
   },

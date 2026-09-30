@@ -37,7 +37,7 @@ The app runs once when stdout or stdin is not a terminal, as if `--once` were gi
 
 `route` must be the first argument; later arguments are ignored, except that `--high` anywhere after it switches to the quality chain below. It routes among `claude`, `claude-work`, `agy`, `kimi`, `grok`, `cursor`, `junie` and `hermes`, in dashboard order, taking each one that is ok and has at least one usage window. `kilo` is never routed, because it reports a balance rather than windows, and `codex` is never routed, because it has no subscription windows to route on.
 
-Each window is rolling (claude session, kimi 5h, agy Five Hour Limit), weekly (any other label containing "week", grok credits, cursor total, auto and api, junie credits, hermes credits) or other, which route ignores. A window's left is 100 minus its used percent, compared without rounding.
+Each window is rolling (claude session, kimi 5h, agy Five Hour Limit), weekly (any other label containing "week", grok credits, cursor total, auto and api, junie credits, hermes credits) or other, which route ignores. The plain route leaves out the cursor api window, because its cursor line is `auto`, which draws on the auto pool; `--high` still gates cursor on all its windows. A window's left is 100 minus its used percent, compared without rounding.
 
 1. Evaporation: a weekly window evaporates when it resets after now and before the next local midnight with less than 97% left. If any provider has one, route prints the max line of the provider whose evaporating window has the most left.
 2. Most headroom: otherwise each provider's binding is the lowest left over its rolling and weekly windows (100 when it has neither), and route prints the standard line of the provider with the highest binding.
