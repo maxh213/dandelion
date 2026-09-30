@@ -15,3 +15,7 @@ node_modules/
 dist/
 ts-coverage/
 coverage/
+
+# slop-cannon
+.slop-cannon/
+.env
