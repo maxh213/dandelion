@@ -77,7 +77,7 @@ function freePort() {
 
 async function runApp(dir) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, NO_COLOR: '1', DANDELION_KIMI_PORT: String(await freePort()), DANDELION_JUNIE_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(dir, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json') };
+  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, NO_COLOR: '1', DANDELION_KIMI_HOME: dir, DANDELION_KIMI_PORT: String(await freePort()), DANDELION_JUNIE_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(dir, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json') };
   const started = Date.now();
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   const elapsed = Date.now() - started;
@@ -123,7 +123,7 @@ async function kimiServesUsage() {
     const { stdout } = await runApp(dir);
     const { lines, kimi, kilo } = assertKimiBetweenAgyAndKilo(stdout);
     const weekly = lineIndex(lines, /^weekly {30}#{12}-{8} {2}59% ↻ (5d0h|4d23h)$/);
-    const fiveHour = lineIndex(lines, /^5h {34}#{8}-{12} {2}42%$/);
+    const fiveHour = lineIndex(lines, /^5h {34}#{8}-{12} {2}42% ↻ (5d0h|4d23h)$/);
     const caption = lines.indexOf('kimi code · kimi');
     assert.ok(kimi < weekly && weekly < fiveHour && fiveHour < caption && caption < kilo, `kimi rows not inside the kimi panel:\n${stdout}`);
     assert.ok(!stdout.includes('test-token'), `token leaked:\n${stdout}`);
@@ -139,10 +139,9 @@ async function kimiServesLiveZero() {
     const { stdout } = await runApp(dir);
     const { lines, kimi, kilo } = assertKimiBetweenAgyAndKilo(stdout);
     const weekly = lineIndex(lines, /^weekly {30}-{20} {3}0% ↻ \S+$/);
-    const fiveHour = lineIndex(lines, /^5h {34}-{20} {3}0%$/);
+    const fiveHour = lineIndex(lines, /^5h {34}-{20} {3}0% ↻ 0h0m$/);
     const caption = lines.indexOf('kimi code · kimi');
     assert.ok(kimi < weekly && weekly < fiveHour && fiveHour < caption && caption < kilo, `kimi live 0% rows not inside the kimi panel:\n${stdout}`);
-    assert.ok(!lines[fiveHour].includes('↻'), `5h row shows a countdown:\n${stdout}`);
     assert.ok(!stdout.includes('Could not parse usage from response'), `live 0% body was parse failure:\n${stdout}`);
     assert.ok(!stdout.includes('test-token'), `token leaked:\n${stdout}`);
     await assertKimiGone(dir);

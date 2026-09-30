@@ -44,7 +44,7 @@ run() { echo "$1" > "$FX/mode"; rm -f "$FX/kimi.pid"; time timeout "$2" env PATH
    - **Expected:** exits 0. Every `*.e2e.mjs` prints PASS, including the 001, 002 and new 003 kimi e2es. The e2es create their fixture dirs under the temp prefix `allowance-qa-` (003 uses `allowance-qa-003-`), so `pgrep` prints nothing: no fixture process is left.
 
 2. Run `run ok 30`.
-   - **Expected:** `exit=0` and `GONE`. Panels appear in the order `claude`, `agy`, `kimi`, `kilo`. The kimi panel reads `weekly                              ############--------  59% ↻ 5d0h` (or `↻ 4d23h` once 5 minutes have passed), then `5h                                  ########------------  42%` with no `↻`, then the caption `kimi code · kimi`. The claude, agy and kilo panels look as in step 2 of `qa/002-claude-agy.md`. No line is over 72 columns.
+   - **Expected:** `exit=0` and `GONE`. Panels appear in the order `claude`, `agy`, `kimi`, `kilo`. The kimi panel reads `weekly                              ############--------  59% ↻ 5d0h` (or `↻ 4d23h` once 5 minutes have passed), then `5h                                  ########------------  42% ↻ 5d0h` (or `↻ 4d23h`), then the caption `kimi code · kimi`. The claude, agy and kilo panels look as in step 2 of `qa/002-claude-agy.md`. No line is over 72 columns.
 
 3. Run `echo ok > "$FX/mode"; PATH="$FX:$NODEDIR" ALLOWANCE_KIMI_PORT=$KP npm start`.
    - **Expected:** the kimi `weekly` gauge and percent are the warm colour and the `5h` ones are calm, like the other panels' ramp. The caption is dim.

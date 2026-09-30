@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FetchOutcome } from '../domain/index.ts';
+import type { FetchOutcome, FileReader } from '../domain/index.ts';
 import { probeKimi, type KimiIo, type LaunchedProcess, type Launcher } from './kimi.ts';
 
 const NOW = '2026-09-13T10:00:00Z';
@@ -56,7 +56,11 @@ function fakeChild(log = 'kimi web ready: http://127.0.0.1:48123/?token=test-tok
   return child;
 }
 
-function ioWith(child: FakeChild | undefined, outcome: FetchOutcome = { status: 200, body: BODY }) {
+function readerOf(files: Record<string, string> = {}): FileReader {
+  return { homeDir: () => '/home/tester', read: async (path) => files[path], isDirectory: async () => false };
+}
+
+function ioWith(child: FakeChild | undefined, outcome: FetchOutcome = { status: 200, body: BODY }, files: Record<string, string> = {}) {
   const launches: [string, string[]][] = [];
   const requests: [string, Record<string, string>, number][] = [];
   const launcher: Launcher = {
@@ -72,7 +76,7 @@ function ioWith(child: FakeChild | undefined, outcome: FetchOutcome = { status: 
       return outcome;
     }
   };
-  const io: KimiIo = { launcher, fetcher };
+  const io: KimiIo = { launcher, fetcher, reader: readerOf(files) };
   return { io, launches, requests };
 }
 
@@ -123,7 +127,7 @@ describe('probeKimi', () => {
       }
     };
     const fetcher: KimiIo['fetcher'] = { get: async () => ({ status: 200, body: BODY }) };
-    const usage = await probeKimi({ launcher, fetcher }, PORT, NOW);
+    const usage = await probeKimi({ launcher, fetcher, reader: readerOf() }, PORT, NOW);
     expect(usage.status).toBe('ok');
     expect(usage.windows).toStrictEqual(OK_WINDOWS);
     expect(child.exited).toBe(false);
@@ -329,4 +333,195 @@ describe('probeKimi', () => {
       expect(launches).toEqual([]);
     }
   );
+});
+
+const LEGACY = {
+  usage: { limit: '100', used: '29', remaining: '71', resetTime: '2026-10-02T12:58:51.471957Z' },
+  limits: [{
+    window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' },
+    detail: { limit: '100', used: '88', remaining: '12', resetTime: '2026-10-01T01:58:51.471957Z' }
+  }],
+  usages: {
+    limit_5h: { used_ratio: 0, reset_time: '2026-10-01T01:58:50Z' },
+    limit_7d: { used_ratio: 0, reset_time: '2026-10-02T12:58:50Z' }
+  }
+};
+const FUTURE = 4070908800;
+const CONFIG = [
+  '[providers."managed:kimi-code"]',
+  'base_url = "https://api.kimi.ai/coding/v1/"',
+  'key = "oauth/scoped-key"'
+].join('\n');
+const HOME = '/home/tester/.kimi-code';
+
+function credential(expiresAt: number = FUTURE, token = 'access-token'): string {
+  return JSON.stringify({ access_token: token, expires_at: expiresAt });
+}
+
+function filesFor(body: string, name: string, config: string): Record<string, string> {
+  return { [`${HOME}/config.toml`]: config, [`${HOME}/credentials/${name}.json`]: body };
+}
+
+function scoped(body: string = credential()): Record<string, string> {
+  return filesFor(body, 'scoped-key', CONFIG);
+}
+
+describe('probeKimi coding API', () => {
+  it('reads legacy counters and ignores zeroed used_ratio', async () => {
+    const { io, launches, requests } = ioWith(fakeChild(), bodyOf(LEGACY), scoped());
+    const usage = await probeKimi(io, PORT, NOW);
+    expect(launches).toEqual([]);
+    expect(requests).toEqual([[
+      'https://api.kimi.ai/coding/v1/usages',
+      { Authorization: 'Bearer access-token', Accept: 'application/json', 'User-Agent': 'kimi-code-cli/2.1.1' },
+      10000
+    ]]);
+    expect(usage).toMatchObject({
+      status: 'ok',
+      windows: [
+        { label: 'weekly', kind: 'weekly', usedPct: 29, resetsAt: '2026-10-02T12:58:51.471957Z' },
+        { label: '5h', kind: 'rolling', usedPct: 88, resetsAt: '2026-10-01T01:58:51.471957Z' }
+      ]
+    });
+    expect(JSON.stringify(usage)).not.toContain('access-token');
+  });
+
+  it('lets a present counter win over a nonzero ratio, including a real zero', async () => {
+    const body = {
+      usage: { limit: 100, used: 0, resetTime: WEEKLY_RESET },
+      limits: [{ window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' }, detail: { limit: 3, used: 1, resetTime: 'soon' } }],
+      usages: { limit_7d: { used_ratio: 0.59, reset_time: WEEKLY_RESET }, limit_5h: { used_ratio: 0.42, reset_time: ROLLING_RESET } }
+    };
+    const usage = await probeKimi(ioWith(fakeChild(), bodyOf(body), scoped()).io, PORT, NOW);
+    expect(usage.windows).toStrictEqual([
+      { label: 'weekly', kind: 'weekly', usedPct: 0, resetsAt: WEEKLY_RESET },
+      { label: '5h', kind: 'rolling', usedPct: 33 }
+    ]);
+  });
+
+  it('falls back to snake_case ratios when the counters are absent', async () => {
+    const body = { usages: { limit_5h: { used_ratio: 0.42, reset_time: ROLLING_RESET }, limit_7d: { used_ratio: 0.595, reset_time: WEEKLY_RESET } } };
+    const usage = await probeKimi(ioWith(fakeChild(), bodyOf(body), scoped()).io, PORT, NOW);
+    expect(usage.windows).toStrictEqual([
+      { label: 'weekly', kind: 'weekly', usedPct: 60, resetsAt: WEEKLY_RESET },
+      ROLLING_42
+    ]);
+  });
+
+  it('uses the default host and kimi-code credential when config.toml is missing', async () => {
+    const files = { [`${HOME}/credentials/kimi-code.json`]: credential() };
+    const { io, requests } = ioWith(undefined, bodyOf(LEGACY), files);
+    const usage = await probeKimi(io, PORT, NOW);
+    expect(requests[0][0]).toBe('https://api.kimi.com/coding/v1/usages');
+    expect(usage.status).toBe('ok');
+  });
+
+  it('keeps a credential key that is not under oauth/', async () => {
+    const config = 'base_url = "https://api.kimi.com/coding/v1"\nkey = "plain-key"';
+    const { io, requests } = ioWith(undefined, bodyOf(LEGACY), filesFor(credential(), 'plain-key', config));
+    await probeKimi(io, {}, NOW);
+    expect(requests[0][0]).toBe('https://api.kimi.com/coding/v1/usages');
+  });
+
+  it.each([
+    ['an empty base and key', 'base_url = ""\nkey = ""', 'kimi-code', 'https://api.kimi.com/coding/v1/usages'],
+    ['a blank oauth key', 'key = "oauth/"', 'kimi-code', 'https://api.kimi.com/coding/v1/usages']
+  ])('accepts %s', async (_label, config, name, url) => {
+    const { io, requests } = ioWith(undefined, bodyOf(LEGACY), filesFor(credential(), name, config));
+    expect((await probeKimi(io, {}, NOW)).status).toBe('ok');
+    expect(requests[0][0]).toBe(url);
+  });
+
+  it('reads DANDELION_KIMI_HOME and ignores an invalid port', async () => {
+    const home = '/kimi-home';
+    const files = { [`${home}/config.toml`]: CONFIG, [`${home}/credentials/scoped-key.json`]: credential() };
+    const { io, launches } = ioWith(undefined, bodyOf(LEGACY), files);
+    const usage = await probeKimi(io, { DANDELION_KIMI_HOME: home, DANDELION_KIMI_PORT: 'abc' }, NOW);
+    expect(usage.status).toBe('ok');
+    expect(launches).toEqual([]);
+  });
+
+  it('treats an empty DANDELION_KIMI_HOME as the default home', async () => {
+    const { io, requests } = ioWith(undefined, bodyOf(LEGACY), scoped());
+    await probeKimi(io, { DANDELION_KIMI_HOME: '' }, NOW);
+    expect(requests[0][0]).toBe('https://api.kimi.ai/coding/v1/usages');
+  });
+
+  it.each([
+    ['expires_at 0', credential(0)],
+    ['a millisecond expiry', credential(Date.parse('2099-01-01T00:00:00Z'))],
+    ['no expires_at', JSON.stringify({ access_token: 'access-token' })],
+    ['a string expiry', JSON.stringify({ access_token: 'access-token', expires_at: 'soon' })]
+  ])('accepts %s', async (_label, body) => {
+    const usage = await probeKimi(ioWith(undefined, bodyOf(LEGACY), scoped(body)).io, {}, NOW);
+    expect(usage.status).toBe('ok');
+  });
+
+  it('clamps a counter above the limit and drops a bad reset', async () => {
+    const body = {
+      usage: { limit: '100', used: '140', resetTime: 'soon' },
+      limits: [{ window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' }, detail: { limit: '0', used: '1', resetTime: ROLLING_RESET } }],
+      usages: { limit_5h: { used_ratio: 0.42, reset_time: 42 } }
+    };
+    const usage = await probeKimi(ioWith(undefined, bodyOf(body), scoped()).io, {}, NOW);
+    expect(usage.windows).toStrictEqual([
+      { label: 'weekly', kind: 'weekly', usedPct: 100 },
+      ROLLING_42_BARE
+    ]);
+  });
+
+  it('ignores a counter too large to be a finite number', async () => {
+    const body = {
+      usage: { limit: '100', used: '9'.repeat(400), resetTime: WEEKLY_RESET },
+      limits: [{ window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' }, detail: { limit: '100', used: 'n/a' } }],
+      usages: { limit_7d: { used_ratio: 0.59, reset_time: WEEKLY_RESET } }
+    };
+    const usage = await probeKimi(ioWith(undefined, bodyOf(body), scoped()).io, {}, NOW);
+    expect(usage.windows).toStrictEqual([WEEKLY_59]);
+  });
+
+  it('ignores a limit that is not the 300-minute window', async () => {
+    const body = {
+      limits: [{ window: { duration: 60, timeUnit: 'TIME_UNIT_MINUTE' }, detail: { limit: '100', used: '9' } }],
+      usages: { limit_7d: { used_ratio: 0.59, reset_time: WEEKLY_RESET } }
+    };
+    const usage = await probeKimi(ioWith(undefined, bodyOf(body), scoped()).io, {}, NOW);
+    expect(usage.windows).toStrictEqual([WEEKLY_59]);
+  });
+
+  it.each<[string, FetchOutcome, string]>([
+    ['HTTP 401', { status: 401, body: '{}' }, 'kimi usage request failed: HTTP 401'],
+    ['a network failure', { failure: 'network' }, 'kimi usage request failed'],
+    ['a timeout', { failure: 'timeout' }, 'kimi usage request timed out after 10s'],
+    ['code 1', bodyOf({ code: 1, msg: 'quota denied', ...LEGACY }), 'kimi usage request failed: quota denied'],
+    ['an empty object', bodyOf({}), PARSE_FAILURE],
+    ['truncated JSON', bodyOf('{"usage":'), PARSE_FAILURE]
+  ])('does not launch kimi web on %s', async (_label, outcome, reason) => {
+    const { io, launches } = ioWith(fakeChild(), outcome, scoped());
+    const usage = await probeKimi(io, PORT, NOW);
+    expect(usage).toMatchObject({ status: 'unavailable', reason });
+    expect(launches).toEqual([]);
+  });
+
+  it.each([
+    ['expired', credential(Math.floor(Date.parse(NOW) / 1000)), 'kimi token expired — run kimi once'],
+    ['expired by one millisecond', credential((Date.parse(NOW) - 1) / 1000), 'kimi token expired — run kimi once'],
+    ['missing access_token', JSON.stringify({ expires_at: FUTURE }), 'no kimi auth — run kimi login'],
+    ['an empty access_token', JSON.stringify({ access_token: '', expires_at: FUTURE }), 'no kimi auth — run kimi login'],
+    ['bad JSON', '{', 'no kimi auth — run kimi login'],
+    ['null', 'null', 'no kimi auth — run kimi login']
+  ])('is unavailable on a %s credential and does not launch', async (_label, body, reason) => {
+    const { io, launches, requests } = ioWith(fakeChild(), bodyOf(LEGACY), scoped(body));
+    const usage = await probeKimi(io, PORT, NOW);
+    expect(usage).toMatchObject({ status: 'unavailable', reason });
+    expect(launches).toEqual([]);
+    expect(requests).toEqual([]);
+    expect(JSON.stringify(usage)).not.toContain('access-token');
+  });
+
+  it('accepts a token that expires one second after now', async () => {
+    const body = credential(Math.floor(Date.parse(NOW) / 1000) + 1);
+    const usage = await probeKimi(ioWith(undefined, bodyOf(LEGACY), scoped(body)).io, {}, NOW);
+    expect(usage.status).toBe('ok');
+  });
 });

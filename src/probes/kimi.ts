@@ -11,6 +11,7 @@ import {
   validInstant,
   withReset,
   type Fetcher,
+  type FileReader,
   type ProviderUsage,
   type UsageWindow
 } from '../domain/index.ts';
@@ -25,14 +26,24 @@ export interface Launcher {
   launch(command: string, args: string[]): Promise<LaunchedProcess | undefined>;
 }
 
-export type KimiIo = { launcher: Launcher; fetcher: Pick<Fetcher, 'get'> };
+export type KimiIo = { launcher: Launcher; fetcher: Pick<Fetcher, 'get'>; reader: FileReader };
+
+type Env = Record<string, string | undefined>;
+
+type Auth = { base: string; token: string };
 
 const DEFAULT_PORT = 59177;
 const MAX_PORT = 65535;
 const POLL_MS = 500;
 const TOKEN_WAIT_MS = 20000;
 const REQUEST_TIMEOUT_MS = 10000;
+const DEFAULT_BASE = 'https://api.kimi.com/coding/v1';
+const USER_AGENT = 'kimi-code-cli/2.1.1';
+const NO_AUTH = 'no kimi auth — run kimi login';
+const EXPIRED = 'kimi token expired — run kimi once';
 const TOKEN = /token=([A-Za-z0-9._-]+)|Bearer ([A-Za-z0-9._-]+)/;
+const WEEKLY = { label: 'weekly', kind: 'weekly' } as const;
+const ROLLING = { label: '5h', kind: 'rolling' } as const;
 
 function isDefaultPort(raw: string | undefined): raw is undefined | '' {
   return raw === undefined || raw === '';
@@ -73,9 +84,8 @@ async function waitForToken(child: LaunchedProcess, waitedMs: number): Promise<s
   return waitForToken(child, waitedMs + POLL_MS);
 }
 
-async function requestUsage(fetcher: KimiIo['fetcher'], port: number, token: string): Promise<string> {
-  const url = `http://127.0.0.1:${port}/api/v1/oauth/usage`;
-  const outcome = await fetcher.get(url, { Authorization: `Bearer ${token}` }, REQUEST_TIMEOUT_MS);
+async function requestUsage(fetcher: KimiIo['fetcher'], url: string, headers: Record<string, string>): Promise<string> {
+  const outcome = await fetcher.get(url, headers, REQUEST_TIMEOUT_MS);
   return successBody(outcome, 'kimi usage request', REQUEST_TIMEOUT_MS);
 }
 
@@ -88,27 +98,77 @@ function envelopeFailure(body: unknown): string | undefined {
   return code === undefined || code === 0 ? undefined : requestFailed(fieldOf(body, 'msg'));
 }
 
+function parsedCount(value: string): number | undefined {
+  if (!/^\d+(\.\d+)?$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return isCount(parsed) ? parsed : undefined;
+}
+
+function countOf(value: unknown): number | undefined {
+  if (isCount(value)) return value;
+  return typeof value === 'string' ? parsedCount(value) : undefined;
+}
+
 function usedPctOf(ratio: unknown): number | undefined {
   return isCount(ratio) ? Math.min(100, Math.round(100 * ratio)) : undefined;
 }
 
-function windowFrom(entry: unknown, identity: Pick<UsageWindow, 'label' | 'kind'>, resetsAt?: string): UsageWindow[] {
-  const usedPct = usedPctOf(fieldOf(entry, 'usedRatio'));
+function counterPct(entry: unknown): number | undefined {
+  const used = countOf(fieldOf(entry, 'used'));
+  const limit = countOf(fieldOf(entry, 'limit'));
+  if (used === undefined || limit === undefined || limit === 0) return undefined;
+  return Math.min(100, Math.round((100 * used) / limit));
+}
+
+function windowFrom(usedPct: number | undefined, identity: Pick<UsageWindow, 'label' | 'kind'>, resetsAt?: string): UsageWindow[] {
   return usedPct === undefined ? [] : [withReset({ ...identity, usedPct }, resetsAt)];
 }
 
-function weeklyFrom(entry: unknown): UsageWindow[] {
-  return windowFrom(entry, { label: 'weekly', kind: 'weekly' }, validInstant(fieldOf(entry, 'resetAt')));
+function ratioEntry(usages: unknown, camel: string, snake: string): unknown {
+  return fieldOf(usages, camel) ?? fieldOf(usages, snake);
 }
 
-function rollingFrom(entry: unknown): UsageWindow[] {
-  return windowFrom(entry, { label: '5h', kind: 'rolling' }, validInstant(fieldOf(entry, 'resetAt')));
+function ratioReset(entry: unknown): string | undefined {
+  return validInstant(fieldOf(entry, 'resetAt') ?? fieldOf(entry, 'reset_time'));
 }
 
-function windowsOf(usages: unknown): UsageWindow[] {
-  const windows = isRecord(usages)
-    ? [...weeklyFrom(fieldOf(usages, 'limit7d')), ...rollingFrom(fieldOf(usages, 'limit5h'))]
-    : [];
+function ratioWindow(entry: unknown, identity: Pick<UsageWindow, 'label' | 'kind'>): UsageWindow[] {
+  const ratio = fieldOf(entry, 'usedRatio') ?? fieldOf(entry, 'used_ratio');
+  return windowFrom(usedPctOf(ratio), identity, ratioReset(entry));
+}
+
+function counterWindow(entry: unknown, identity: Pick<UsageWindow, 'label' | 'kind'>): UsageWindow[] {
+  return windowFrom(counterPct(entry), identity, validInstant(fieldOf(entry, 'resetTime')));
+}
+
+function isFiveHour(entry: unknown): boolean {
+  const window = fieldOf(entry, 'window');
+  return fieldOf(window, 'duration') === 300 && fieldOf(window, 'timeUnit') === 'TIME_UNIT_MINUTE';
+}
+
+function fiveHourDetail(limits: unknown): unknown {
+  if (!Array.isArray(limits)) return undefined;
+  const entry: unknown = limits.find(isFiveHour);
+  return fieldOf(entry, 'detail');
+}
+
+function ratioUsages(parsed: unknown): unknown {
+  const direct = fieldOf(parsed, 'usages');
+  if (isRecord(direct)) return direct;
+  const data = fieldOf(parsed, 'data');
+  return fieldOf(data, 'kind') === 'ok' ? fieldOf(fieldOf(data, 'quota'), 'usages') : undefined;
+}
+
+function prefer(counter: UsageWindow[], ratio: UsageWindow[]): UsageWindow[] {
+  return counter.length > 0 ? counter : ratio;
+}
+
+function windowsOf(parsed: unknown): UsageWindow[] {
+  const ratios = ratioUsages(parsed);
+  const windows = [
+    ...prefer(counterWindow(fieldOf(parsed, 'usage'), WEEKLY), ratioWindow(ratioEntry(ratios, 'limit7d', 'limit_7d'), WEEKLY)),
+    ...prefer(counterWindow(fiveHourDetail(fieldOf(parsed, 'limits')), ROLLING), ratioWindow(ratioEntry(ratios, 'limit5h', 'limit_5h'), ROLLING))
+  ];
   if (windows.length === 0) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
   return windows;
 }
@@ -117,26 +177,83 @@ function parseUsage(body: string): UsageWindow[] {
   const parsed = parseJson(body);
   const failure = envelopeFailure(parsed);
   if (failure !== undefined) throw new ProbeUnavailable(failure);
-  const data = fieldOf(parsed, 'data');
-  const usages = fieldOf(data, 'kind') === 'ok' ? fieldOf(fieldOf(data, 'quota'), 'usages') : undefined;
-  return windowsOf(usages);
+  return windowsOf(parsed);
 }
 
-async function readKimi(io: KimiIo, env: Record<string, string | undefined>): Promise<UsageWindow[]> {
+function kimiHome(reader: FileReader, env: Env): string {
+  const home = env['DANDELION_KIMI_HOME'];
+  return home === undefined || home === '' ? `${reader.homeDir()}/.kimi-code` : home;
+}
+
+function tomlValue(config: string | undefined, key: string): string | undefined {
+  if (config === undefined) return undefined;
+  return new RegExp(`^${key} = "([^"]*)"`, 'm').exec(config)?.[1];
+}
+
+function credentialName(config: string | undefined): string {
+  const key = tomlValue(config, 'key') ?? '';
+  const name = key.startsWith('oauth/') ? key.slice('oauth/'.length) : key;
+  return name === '' ? 'kimi-code' : name;
+}
+
+function apiBase(config: string | undefined): string {
+  const base = tomlValue(config, 'base_url');
+  return (base === undefined || base === '' ? DEFAULT_BASE : base).replace(/\/+$/, '');
+}
+
+function expiryMs(value: unknown): number | undefined {
+  if (value === 0) return Number.POSITIVE_INFINITY;
+  if (!isCount(value)) return undefined;
+  return value < 1e12 ? value * 1000 : value;
+}
+
+function tokenOf(parsed: unknown, now: string): string {
+  const token = fieldOf(parsed, 'access_token');
+  if (!isFilled(token)) throw new ProbeUnavailable(NO_AUTH);
+  const expiry = expiryMs(fieldOf(parsed, 'expires_at'));
+  if (expiry !== undefined && expiry <= Date.parse(now)) throw new ProbeUnavailable(EXPIRED);
+  return token;
+}
+
+async function loadAuth(io: KimiIo, env: Env, now: string): Promise<Auth | undefined> {
+  const home = kimiHome(io.reader, env);
+  const config = await io.reader.read(`${home}/config.toml`);
+  const text = await io.reader.read(`${home}/credentials/${credentialName(config)}.json`);
+  if (text === undefined) return undefined;
+  try {
+    return { base: apiBase(config), token: tokenOf(parseJson(text), now) };
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    throw new ProbeUnavailable(NO_AUTH);
+  }
+}
+
+async function readLocal(io: KimiIo, env: Env): Promise<UsageWindow[]> {
   const port = parsePort(env['DANDELION_KIMI_PORT']);
   const child = await io.launcher.launch('kimi', ['web', '--no-open', '--port', String(port)]);
   if (child === undefined) throw new ProbeUnavailable('kimi CLI not found in PATH');
   try {
-    return parseUsage(await requestUsage(io.fetcher, port, await waitForToken(child, 0)));
+    const token = await waitForToken(child, 0);
+    return parseUsage(await requestUsage(io.fetcher, `http://127.0.0.1:${port}/api/v1/oauth/usage`, { Authorization: `Bearer ${token}` }));
   } finally {
     await child.stop();
   }
 }
 
-export async function probeKimi(io: KimiIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
+async function readApi(io: KimiIo, auth: Auth): Promise<UsageWindow[]> {
+  const headers = { Authorization: `Bearer ${auth.token}`, Accept: 'application/json', 'User-Agent': USER_AGENT };
+  return parseUsage(await requestUsage(io.fetcher, `${auth.base}/usages`, headers));
+}
+
+async function readKimi(io: KimiIo, env: Env, now: string): Promise<UsageWindow[]> {
+  const auth = await loadAuth(io, env, now);
+  return auth === undefined ? readLocal(io, env) : readApi(io, auth);
+}
+
+export async function probeKimi(io: KimiIo, env: Env, now: string): Promise<ProviderUsage> {
   const usage = { id: 'kimi', displayName: 'kimi', planLabel: 'kimi code', fetchedAt: now };
   try {
-    return { ...usage, windows: await readKimi(io, env), status: 'ok' };
+    return { ...usage, windows: await readKimi(io, env, now), status: 'ok' };
   } catch (error) {
     return { ...usage, windows: [], status: 'unavailable', reason: unavailableReason(error) };
   }

@@ -315,8 +315,7 @@ function assertOkRows(kimi, weeklyPct, rollingPct) {
   const weekly = kimi[1];
   const rolling = kimi[2];
   assert.match(weekly, new RegExp(`^weekly {30}${gauge(weeklyPct)} ${percent(weeklyPct)} ↻ (5d0h|4d23h)$`), `weekly: ${JSON.stringify(weekly)}`);
-  assert.match(rolling, new RegExp(`^5h {34}${gauge(rollingPct)} ${percent(rollingPct)}$`), `5h: ${JSON.stringify(rolling)}`);
-  assert.ok(!rolling.includes('↻'), `5h row shows a countdown: ${JSON.stringify(rolling)}`);
+  assert.match(rolling, new RegExp(`^5h {34}${gauge(rollingPct)} ${percent(rollingPct)} ↻ (5d0h|4d23h)$`), `5h: ${JSON.stringify(rolling)}`);
   assert.equal(kimi[3], CAPTION);
 }
 
@@ -429,8 +428,7 @@ async function panelLive(ctx) {
   assert.equal(result.child, 'GONE', describe('live child', result));
   const kimi = panelLines(result.stdout, 'kimi');
   assert.match(kimi[1], /^weekly {30}-{20} {3}0% ↻ \S+$/, `live weekly: ${JSON.stringify(kimi[1])}`);
-  assert.match(kimi[2], /^5h {34}-{20} {3}0%$/, `live 5h: ${JSON.stringify(kimi[2])}`);
-  assert.ok(!kimi[2].includes('↻'), `live 5h shows a countdown: ${JSON.stringify(kimi[2])}`);
+  assert.match(kimi[2], /^5h {34}-{20} {3}0% ↻ 0h0m$/, `live 5h: ${JSON.stringify(kimi[2])}`);
   assert.equal(kimi[3], CAPTION);
   assert.ok(!result.stdout.includes(PARSE), describe('live parse failure', result));
   assertNoToken(result);

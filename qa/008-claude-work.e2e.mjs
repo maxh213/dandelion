@@ -79,6 +79,7 @@ function runOnce(pathDir, bin, grokHome, workConfigDir) {
     PATH: `${pathDir}:${bin}`,
     NO_COLOR: '1',
     CODEX_FIXTURE_MODE: 'apikey',
+    DANDELION_KIMI_HOME: grokHome,
     DANDELION_GROK_HOME: grokHome,
     DANDELION_JUNIE_HOME: grokHome,
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),

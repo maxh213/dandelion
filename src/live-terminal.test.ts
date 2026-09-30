@@ -79,6 +79,7 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
     SHELL: '/bin/sh',
     NO_COLOR: '1',
     DANDELION_REFRESH_SECONDS: '1',
+    DANDELION_KIMI_HOME: grokHome,
     DANDELION_GROK_HOME: grokHome,
     DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome,
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),

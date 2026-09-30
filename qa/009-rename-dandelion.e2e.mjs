@@ -99,7 +99,7 @@ function assertKimiOnDefaultPort(kimi, defaultPortFree) {
     return;
   }
   assert.match(kimi[1], /^weekly +#+-+ +59%/);
-  assert.match(kimi[2], /^5h +#+-+ +42%$/);
+  assert.match(kimi[2], /^5h +#+-+ +42% ↻ (5d0h|4d23h)$/);
 }
 
 function cleanEnv() {
@@ -156,6 +156,7 @@ async function everyEntryRunsTheDashboard(bin) {
     ...cleanEnv(),
     PATH: `${binDir}:${dir}:${bin}`,
     NO_COLOR: '1',
+    DANDELION_KIMI_HOME: dir,
     DANDELION_KIMI_PORT: String(await freePort()),
     DANDELION_GROK_HOME: await tempDir(),
     DANDELION_JUNIE_HOME: await tempDir(),
@@ -184,6 +185,7 @@ async function newNamesWork(bin) {
     ...cleanEnv(),
     PATH: `${dir}:${bin}`,
     NO_COLOR: '1',
+    DANDELION_KIMI_HOME: dir,
     DANDELION_KILO_REFERENCE: '10',
     DANDELION_KIMI_PORT: 'abc',
     DANDELION_GROK_HOME: await tempDir(),
@@ -272,6 +274,7 @@ async function liveIgnoresOldRefreshName(bin) {
     PATH: `${dir}:${bin}`,
     SHELL: '/bin/sh',
     NO_COLOR: '1',
+    DANDELION_KIMI_HOME: dir,
     ALLOWANCE_REFRESH_SECONDS: '1',
     DANDELION_KIMI_PORT: String(await freePort()),
     DANDELION_GROK_HOME: await tempDir(),

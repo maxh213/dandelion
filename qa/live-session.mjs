@@ -64,6 +64,7 @@ export async function appEnv(pathDir) {
     SHELL: '/bin/sh',
     NO_COLOR: '1',
     DANDELION_REFRESH_SECONDS: '1',
+    DANDELION_KIMI_HOME: grokHome,
     DANDELION_GROK_HOME: grokHome,
     DANDELION_JUNIE_HOME: grokHome,
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),

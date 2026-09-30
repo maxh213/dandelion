@@ -71,13 +71,13 @@ kr() { echo "$1" > "$K2/mode"; rm -f "$K2/kimi.pid"; time timeout "$2" env -i HO
    - **Expected:** exits 0. Every `*.e2e.mjs` prints PASS, including 003 (weekly 59% and 5h 42% from 2.0 `usedRatio` 0.59 / 0.42) and 010–017. `pgrep` prints nothing: the kimi child is gone.
 
 2. Run `kr ok 30`.
-   - **Expected:** `exit=0` and `GONE`. Panels appear in the order claude, claude-work, agy, kimi, grok, codex, cursor, junie, hermes, kilo. The kimi panel reads `weekly                              ############--------  59% ↻ 5d0h` (or `↻ 4d23h`), then `5h                                  ########------------  42%` with no `↻`, then `kimi code · kimi`. No line is over 72 columns. `test-token` is not in the output.
+   - **Expected:** `exit=0` and `GONE`. Panels appear in the order claude, claude-work, agy, kimi, grok, codex, cursor, junie, hermes, kilo. The kimi panel reads `weekly                              ############--------  59% ↻ 5d0h` (or `↻ 4d23h`), then `5h                                  ########------------  42% ↻ 5d0h` (or `↻ 4d23h`), then `kimi code · kimi`. No line is over 72 columns. `test-token` is not in the output.
 
 3. Run `echo ok > "$K2/mode"; kic node src/main.ts --once` without `NO_COLOR`.
    - **Expected:** the kimi `weekly` gauge and `59%` are warm (yellow) and the `5h` ones are calm (green). The caption is dim.
 
 4. Run `kr live 30`.
-   - **Expected:** `exit=0` and `GONE`. Both rows are `0%`, not the parse-failure card. Weekly has a `↻` countdown (reset `2026-09-25T12:58:50Z`). 5h is `5h                                  --------------------   0%` with no `↻` (the payload's `limit5h.resetAt` is not shown, so there is no `↻ 0h0m`).
+   - **Expected:** `exit=0` and `GONE`. Both rows are `0%`, not the parse-failure card. Weekly has a `↻` countdown (reset `2026-09-25T12:58:50Z`). 5h is `5h                                  --------------------   0% ↻ 0h0m` because `limit5h.resetAt` is already past.
 
 5. Run `kr round 30`.
    - **Expected:** `exit=0` and `GONE`. Weekly is `60%` (`0.595` rounds half-up), 5h is `42%`.
