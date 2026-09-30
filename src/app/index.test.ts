@@ -9,6 +9,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { isEntryFile, routesWarning, runApp, runJson, runLive, runRoute, realIo, realNotifier } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
+const execFileSpy = vi.hoisted(() => vi.fn());
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  execFileSpy.mockImplementation(actual.execFile);
+  return { ...actual, execFile: execFileSpy };
+});
+
 const NOW = '2026-09-13T10:00:00.000Z';
 const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
 const KIMI_BODY = JSON.stringify({
@@ -2565,14 +2573,21 @@ describe('hermes panel', () => {
 
 
 describe('real notifier', () => {
-  it('ignores a missing notify-send', async () => {
-    const path = process.env['PATH'];
-    process.env['PATH'] = '';
-    try {
-      expect(() => realNotifier.notify('claude weekly at 80%')).not.toThrow();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    } finally {
-      process.env['PATH'] = path;
-    }
+  beforeEach(() => {
+    execFileSpy.mockClear();
+  });
+
+  it('runs notify-send with the text and ignores a failure', () => {
+    execFileSpy.mockImplementationOnce(((_command: string, _args: string[], callback: (error: Error | null) => void) => callback(new Error('ENOENT'))) as never);
+    expect(() => realNotifier.notify('claude weekly at 80%')).not.toThrow();
+    expect(execFileSpy).toHaveBeenCalledWith('notify-send', ['--app-name=dandelion', 'dandelion', 'claude weekly at 80%'], expect.any(Function));
+  });
+
+  it('never calls notify-send for --once, route or route --high', async () => {
+    const env = { DANDELION_NOTIFY: '1' };
+    await runApp(routedRunner(), env, NOW);
+    await routeWith(routedRunner(), env, { mode: 'headroom', now: NOW, zone: 'UTC' });
+    await routeWith(routedRunner(), env, { mode: 'high', now: NOW, zone: 'UTC' });
+    expect(execFileSpy).not.toHaveBeenCalled();
   });
 });
