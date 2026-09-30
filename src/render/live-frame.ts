@@ -10,6 +10,7 @@ import {
   type ProviderUsage,
   type Routes
 } from '../domain/index.ts';
+import { renderHistoryView, type HistoryView } from './history-chart.ts';
 import {
   WIDTH,
   bannerLine,
@@ -58,6 +59,7 @@ export type LiveView = {
   selected?: number;
   flash?: Flash;
   rows?: number;
+  graph?: Pick<HistoryView, 'id' | 'samples'>;
 };
 
 function settledUsages(slots: LiveSlot[]): ProviderUsage[] {
@@ -274,6 +276,7 @@ function regionHeight(rows: number, chrome: string[], footer: string[]): number 
 
 export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
   const rows = rowBudget(view.rows);
+  if (view.graph) return renderHistoryView({ ...view.graph, zone: view.zone, rows, now }, noColor);
   const chrome = liveChrome(view, settledUsages(view.slots), noColor, now);
   const footer = view.footer ? liveFooter(noColor) : [];
   const shown = shownIndexes(view);

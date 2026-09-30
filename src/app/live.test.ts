@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
-import { openEligibility, openHidden } from '../render/index.ts';
+import { openEligibility, openHidden, openHistory } from '../render/index.ts';
 import { startLive } from './live.ts';
 
 const LINES = {
@@ -49,16 +49,20 @@ type SessionOverrides = {
   rows?: number;
   hiddenText?: string;
   hiddenSaves?: boolean[];
+  historyText?: string;
+  historyWrites?: boolean;
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves } = { env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites } = { historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
   const screen = Object.assign(new EventEmitter(), { rows, write: (text: string) => writes.push(text) });
   const replace = vi.fn<(path: string, text: string) => boolean>(() => true);
   const eligibility = openEligibility({}, '/home/u', { read: () => JSON.stringify(state), replace });
+  const historyReplace = vi.fn<(path: string, text: string) => boolean>(() => historyWrites);
+  const history = openHistory({}, '/home/u', { read: () => historyText, replace: historyReplace });
   const saved = () => replace.mock.calls.map(([, text]) => JSON.parse(text));
   const hiddenReplace = vi.fn<(path: string, text: string) => boolean>(() => hiddenSaves?.shift() ?? true);
   const hidden = openHidden({ DANDELION_STATE_FILE: '/s/eligibility.json' }, '/home/u', {
@@ -69,13 +73,13 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: hiddenReplace
   });
   const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, routes: { lines: LINES }, zone });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes: { lines: LINES }, zone });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -264,6 +268,81 @@ describe('live session', () => {
     await session.settleRound(0);
     await vi.advanceTimersByTimeAsync(1000);
     expect(session.probes[1].calls).toHaveLength(2);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('records one sample per window into the history after each settled round', async () => {
+    const session = startSession();
+    expect(session.historyReplace).not.toHaveBeenCalled();
+    await session.settleRound(0);
+    expect(session.historyReplace).toHaveBeenCalledTimes(1);
+    const samples = JSON.parse(session.historyReplace.mock.calls[0][1]);
+    expect(samples).toHaveLength(IDS.length);
+    expect(samples[0]).toEqual({ id: 'claude', label: 'weekly', usedPct: 10, at: START });
+    session.press('q');
+    await session.finished;
+  });
+
+  it('keeps the dashboard running when the history cannot be written or read', async () => {
+    const session = startSession({ historyWrites: false, historyText: '{corrupt' });
+    await session.settleRound(0);
+    expect(session.lastFrame()).toContain('weekly');
+    session.press('g');
+    expect(session.lastFrame()).toContain('no history yet');
+    session.press('q');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('opens a full-screen usage graph of the selected panel with g and leaves it with esc, g or q', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press('j');
+    session.press('j');
+    session.press('g');
+    const graph = session.lastFrame().split('\n');
+    expect(graph[0]).toBe('agy · usage over time');
+    expect(graph).toContain('weekly  10%');
+    expect(graph.at(-1)).toBe('esc/q/g back to dashboard');
+    expect(session.lastFrame()).not.toContain('DANDELION');
+    session.press('\x1b');
+    expect(session.lastFrame()).toContain('DANDELION');
+    session.press('g');
+    session.press('g');
+    expect(session.lastFrame()).toContain('DANDELION');
+    session.press('g');
+    session.press('q');
+    expect(session.lastFrame()).toContain('DANDELION');
+    expect(session.stopChildren).not.toHaveBeenCalled();
+    session.press('q');
+    await session.finished;
+    expect(session.stopChildren).toHaveBeenCalled();
+  });
+
+  it('opens the graph of the first panel when nothing is selected and ignores other escape sequences', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press('g');
+    expect(session.lastFrame().split('\n')[0]).toBe('claude · usage over time');
+    const count = session.writes.length;
+    session.press('\x1b[C');
+    expect(session.writes).toHaveLength(count);
+    session.press('\x1b');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('charts the recorded history of the provider, reset drop included', async () => {
+    const at = (hour: number) => `2026-09-13T0${hour}:00:00.000Z`;
+    const stored = [80, 95, 3].map((usedPct, index) => ({ id: 'claude', label: 'weekly', usedPct, at: at(index + 6) }));
+    const session = startSession({ historyText: JSON.stringify(stored) });
+    await session.settleRound(0);
+    session.press('g');
+    const graph = session.lastFrame().split('\n');
+    expect(graph.filter((line) => /^ +v +$/.test(line))).toHaveLength(1);
+    expect(graph.at(-2)).toMatch(/^ {5}09-13 06:00 +09-13 10:00$/);
+    session.press('q');
     session.press('q');
     await session.finished;
   });

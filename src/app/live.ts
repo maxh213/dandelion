@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type Hidden, type LiveSlot, type LiveView, type Routes } from '../render/index.ts';
+import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -22,6 +22,7 @@ type LiveOptions = {
   stopChildren(): Promise<void>;
   eligibility: Eligibility;
   hidden: Hidden;
+  history: History;
   routes: Routes;
   zone: string;
   clock?: () => string;
@@ -46,6 +47,7 @@ type Session = LiveOptions & {
   rounds: number;
   quitting: boolean;
   selected: number;
+  graphing: boolean;
   flash?: Flash;
   frameTimer?: Timer;
   refreshTimer?: Timer;
@@ -93,7 +95,8 @@ function viewOf(session: Session): LiveView {
     settled: session.settled,
     selected: session.selected,
     flash: session.flash,
-    rows: session.screen.rows
+    rows: session.screen.rows,
+    graph: session.graphing ? { id: session.probes[session.selected].id, samples: session.history.samples(session.probes[session.selected].id) } : undefined
   };
 }
 
@@ -131,6 +134,7 @@ function endRound(session: Session): void {
   session.running = false;
   session.inFlight.clear();
   session.settled = session.results.filter((usage) => usage !== undefined);
+  session.history.record(session.settled, session.clock());
   if (session.quitting) return;
   session.refreshTimer = setTimeout(() => refresh(session), session.refreshMs);
   draw(session);
@@ -235,6 +239,27 @@ function toggleShowHidden(session: Session): void {
   draw(session);
 }
 
+function openGraph(session: Session): void {
+  session.selected = Math.max(0, session.selected);
+  session.graphing = true;
+  draw(session);
+}
+
+function closeGraph(session: Session): void {
+  session.graphing = false;
+  draw(session);
+}
+
+function toggleGraph(session: Session): void {
+  if (session.graphing) closeGraph(session);
+  else openGraph(session);
+}
+
+function leave(session: Session): void {
+  if (session.graphing) closeGraph(session);
+  else void quit(session);
+}
+
 async function quit(session: Session): Promise<void> {
   if (session.quitting) return;
   session.quitting = true;
@@ -252,7 +277,9 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['r', refresh],
   ['t', toggleResetTimes],
   ['?', toggleFooter],
-  ['q', quit],
+  ['q', leave],
+  ['\x1b', closeGraph],
+  ['g', toggleGraph],
   ['\x03', quit],
   ['j', moveDown],
   ['\x1b[B', moveDown],
@@ -269,6 +296,7 @@ function press(session: Session, chunk: string): void {
     whole(session);
     return;
   }
+  if (chunk.startsWith('\x1b')) return;
   for (const key of chunk) KEYS.get(key)?.(session);
 }
 
@@ -288,6 +316,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       absoluteResets: false,
       rounds: 0,
       selected: -1,
+      graphing: false,
       quitting: false,
       done
     };

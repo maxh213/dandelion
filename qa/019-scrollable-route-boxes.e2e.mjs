@@ -12,7 +12,7 @@ import { rootDir, launch, startLive, waitWithin, assertClosed, ENTER, CLEAR, RES
 const PREFIX = 'dandelion-qa-019-';
 const HOUR_MS = 3600000;
 const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
-const HELP = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
+const HELP = 'keys: ↑↓/jk move · space on/off · g graph · r refresh · q quit · ? help';
 const BOX_TOP = '+- route -------------------------+  +- route --high ------------------+';
 const BOX_BOTTOM = '+---------------------------------+  +---------------------------------+';
 const SETTLED_BLOCK = [

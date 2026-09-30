@@ -23,6 +23,7 @@ import {
 import {
   openEligibility,
   openHidden,
+  openHistory,
   openRoutes,
   renderDashboard,
   renderRoute,
@@ -30,6 +31,7 @@ import {
   renderSnapshot,
   type Eligibility,
   type Hidden,
+  type History,
   type RouteOutput,
   type RouteRequest,
   type SnapshotRequest,
@@ -249,6 +251,10 @@ function hiddenOf(io: ProbeIo, env: Record<string, string | undefined>): Hidden 
   return openHidden(env, io.reader.homeDir(), realStateFile);
 }
 
+function historyOf(io: ProbeIo, env: Record<string, string | undefined>): History {
+  return openHistory(env, io.reader.homeDir(), realStateFile);
+}
+
 const SHIPPED_ROUTES = fileURLToPath(new URL('../../routes.json', import.meta.url));
 const realRoutesFile: RoutesFile = { read: readText };
 
@@ -300,6 +306,7 @@ export function runLive(
     stopChildren,
     eligibility: eligibilityOf(io, env),
     hidden: hiddenOf(io, env),
+    history: historyOf(io, env),
     routes: routesOf(env),
     zone: processZone(),
     clock

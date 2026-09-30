@@ -17,7 +17,7 @@ type State = Record<string, unknown>;
 
 const STATE_FILE = 'dandelion/eligibility.json';
 
-function statePath(env: Record<string, string | undefined>, homeDir: string): string {
+export function statePath(env: Record<string, string | undefined>, homeDir: string): string {
   const stateHome = env['XDG_STATE_HOME'] || `${homeDir}/.local/state`;
   return env['DANDELION_STATE_FILE'] || `${stateHome}/${STATE_FILE}`;
 }

@@ -1,6 +1,6 @@
 # QA Procedure: 011 - Route eligibility toggle
 
-Earlier procedures are unchanged by 011, except that the live help footer now reads `keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help`.
+Earlier procedures are unchanged by 011, except that the live help footer now reads `keys: ↑↓/jk move · space on/off · g graph · r refresh · q quit · ? help`.
 
 Set up once in the repo root, in a real terminal. First run the set-up block of `qa/010-route-command.md`, so `$RX`, `$RH`, `$TZQ`, the `q` fixture and `rt` exist. `$ST` is the state file. `lv VAR=value…` runs the live dashboard with `rt`'s env and the state file. `once VAR=value…` runs `--once`.
 
@@ -35,7 +35,7 @@ once() { rt A=--once NO_COLOR=1 DANDELION_STATE_FILE="$ST" "$@"; }
    - **Expected:** the rule, then `claude`, spaces, and `routing off` ending at column 72, then claude's two rows. No `▸` appears. Then `exit=0`, then `untouched`. `diff` shows only the claude header line and, at most, the banner clock.
 
 9. Run `rm -rf "$RX/state"; lv Q_CLAUDE=0,86,2 Q_AGY=0,0,72`. Once every panel settles, press `?`, then `j`.
-   - **Expected:** before `j`, the banner and panels look as in 010's dashboard, with no `▸` and no `routing off`. The footer is `keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help`. After `j`, claude's header reads `▸ claude`, no other panel has `▸`, and nothing else changes.
+   - **Expected:** before `j`, the banner and panels look as in 010's dashboard, with no `▸` and no `routing off`. The footer is `keys: ↑↓/jk move · space on/off · g graph · r refresh · q quit · ? help`. After `j`, claude's header reads `▸ claude`, no other panel has `▸`, and nothing else changes.
 
 10. Press space. In a second terminal, run `cat "$RX/state/eligibility.json"; ls -A "$RX/state"` (first `export RX=<the value from terminal 1>`). Back in the dashboard, press space again, then run the same commands.
     - **Expected:** the claude header gets `routing off` at the right edge at once, and the claude rows and summary stay the same. The file reads `{ "claude": false }` over three lines, and `ls` shows only `eligibility.json`. After the second space, the tag is gone and the file holds `"claude": true`.

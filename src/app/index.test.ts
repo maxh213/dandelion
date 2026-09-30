@@ -121,7 +121,8 @@ async function routeWith(io: ProbeIo, env: Record<string, string | undefined>, r
 function startDashboard(io: ProbeIo, env: Record<string, string>, clock?: () => string) {
   const writes: string[] = [];
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
-  const routed = 'DANDELION_ROUTES_FILE' in env ? env : { DANDELION_ROUTES_FILE: ROUTES_FILE, ...env };
+  const withRoutes = 'DANDELION_ROUTES_FILE' in env ? env : { DANDELION_ROUTES_FILE: ROUTES_FILE, ...env };
+  const routed = new Proxy(withRoutes, { get: (target, key) => (key === 'DANDELION_HISTORY_FILE' && !Reflect.has(target, key) ? '/dev/null/history.json' : Reflect.get(target, key)) });
   const finished = runLive(io, routed, keyboard, { rows: 60, write: (text: string) => writes.push(text) }, clock);
   const frames = () => writes.filter((text) => text.startsWith(LIVE_CLEAR)).map((text) => text.slice(LIVE_CLEAR.length));
   const press = (key: string) => keyboard.emit('data', key);
@@ -1836,6 +1837,21 @@ describe('route eligibility state file', () => {
   function headerOf(frame: string, id: string): string | undefined {
     return frame.split('\n').find((line) => line.replace(/^▸ /, '').split(' ')[0] === id);
   }
+
+  it('writes the usage history only from the live dashboard, never from --once or route', async () => {
+    const historyFile = join(scratch, 'history', 'history.json');
+    const env = { DANDELION_STATE_FILE: statePath, DANDELION_HISTORY_FILE: historyFile, NO_COLOR: '1' };
+    await runApp(routedRunner(), env, NOW);
+    await routeWith(routedRunner(), env, { mode: 'headroom', now: NOW, zone: 'UTC' });
+    await routeWith(routedRunner(), env, { mode: 'high', now: NOW, zone: 'UTC' });
+    expect(readdirSync(scratch)).toEqual([]);
+    const dashboard = await settledDashboard(routedRunner(), env);
+    const samples = JSON.parse(readFileSync(historyFile, 'utf8'));
+    expect(samples.length).toBeGreaterThan(0);
+    expect(samples.every((sample: { at: string }) => sample.at === NOW)).toBe(true);
+    dashboard.press('q');
+    await dashboard.finished;
+  });
 
   it('routes as the 010 rules say with no state file and never creates one', async () => {
     expect(await routeWith(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'model-a max claude', routed: true });
