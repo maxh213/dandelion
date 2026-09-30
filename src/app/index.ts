@@ -22,12 +22,14 @@ import {
 } from '../probes/index.ts';
 import {
   openEligibility,
+  openHidden,
   openRoutes,
   renderDashboard,
   renderRoute,
   renderRoutesFault,
   renderSnapshot,
   type Eligibility,
+  type Hidden,
   type RouteOutput,
   type RouteRequest,
   type SnapshotRequest,
@@ -243,6 +245,10 @@ function eligibilityOf(io: ProbeIo, env: Record<string, string | undefined>): El
   return openEligibility(env, io.reader.homeDir(), realStateFile);
 }
 
+function hiddenOf(io: ProbeIo, env: Record<string, string | undefined>): Hidden {
+  return openHidden(env, io.reader.homeDir(), realStateFile);
+}
+
 const SHIPPED_ROUTES = fileURLToPath(new URL('../../routes.json', import.meta.url));
 const realRoutesFile: RoutesFile = { read: readText };
 
@@ -293,6 +299,7 @@ export function runLive(
     screen,
     stopChildren,
     eligibility: eligibilityOf(io, env),
+    hidden: hiddenOf(io, env),
     routes: routesOf(env),
     zone: processZone(),
     clock

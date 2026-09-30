@@ -5,6 +5,7 @@ import {
   highRouteLine,
   nextLocalMidnight,
   openEligibility,
+  openHidden,
   openRoutes,
   routeLine,
   summariseFleet,
@@ -592,5 +593,62 @@ describe('openRoutes', () => {
     ['tab', edited((value) => { (value.route.hermes as Record<string, string>).standard = 'vendor/model-h\txhigh'; }), 'route.hermes.standard is not "<model>" or "<model> <effort>"']
   ])('names what is wrong with a bad file: %s', (_case, text, problem) => {
     expect(problemOf(text)).toBe(problem);
+  });
+});
+
+describe('hidden state', () => {
+  function fileWith(text: string | undefined, saves: boolean[] = []) {
+    const reads: string[] = [];
+    const writes: [string, string][] = [];
+    const file: StateFile = {
+      read: (path) => {
+        reads.push(path);
+        if (text === undefined) throw new Error(`ENOENT: ${path}`);
+        return text;
+      },
+      replace: (path, bytes) => {
+        writes.push([path, bytes]);
+        return saves.shift() ?? true;
+      }
+    };
+    return { file, reads, writes };
+  }
+
+  it.each<[string, Record<string, string | undefined>, string]>([
+    ['the directory of DANDELION_STATE_FILE', { DANDELION_STATE_FILE: '/s/e.json', XDG_STATE_HOME: '/xdg' }, '/s/hidden.json'],
+    ['a bare state file name', { DANDELION_STATE_FILE: 'e.json' }, './hidden.json'],
+    ['XDG_STATE_HOME', { XDG_STATE_HOME: '/xdg' }, '/xdg/dandelion/hidden.json'],
+    ['home', {}, '/home/u/.local/state/dandelion/hidden.json']
+  ])('keeps hidden.json in %s', (_case, env, path) => {
+    const state = fileWith(undefined);
+    openHidden(env, '/home/u', state.file).toggle('claude');
+    expect(state.reads).toEqual([path]);
+    expect(state.writes.map(([written]) => written)).toEqual([path]);
+  });
+
+  it.each<[string, string | undefined, string[]]>([
+    ['a missing file', undefined, []],
+    ['bytes that are not JSON', '[oops', []],
+    ['a JSON object', '{"claude": true}', []],
+    ['JSON null', 'null', []],
+    ['a JSON string', '"claude"', []],
+    ['an array', '["claude", "kilo"]', ['claude', 'kilo']],
+    ['an array with non-strings', '[1, null, "agy"]', ['agy']]
+  ])('reads %s as hidden %j', (_case, text, ids) => {
+    expect(openHidden({}, '/home/u', fileWith(text).file).ids()).toEqual(ids);
+  });
+
+  it('adds an absent id, removes a present one and writes a JSON array', () => {
+    const state = fileWith('["agy"]');
+    const hidden = openHidden({}, '/home/u', state.file);
+    expect([hidden.toggle('claude'), hidden.toggle('agy')]).toEqual([true, true]);
+    expect(state.writes.map(([, bytes]) => bytes)).toEqual(['["agy","claude"]\n', '["claude"]\n']);
+    expect(hidden.ids()).toEqual(['claude']);
+  });
+
+  it('keeps the ids when a write fails', () => {
+    const hidden = openHidden({}, '/home/u', fileWith('["agy"]', [false]).file);
+    expect(hidden.toggle('claude')).toBe(false);
+    expect(hidden.ids()).toEqual(['agy']);
   });
 });

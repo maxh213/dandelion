@@ -26,6 +26,7 @@ import {
 
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
+const HIDE_HELP = 'h hide · H show hidden';
 const HELP_FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
 const BOX_WIDTH = 35;
 const BOX_TEXT_CELLS = 31;
@@ -47,6 +48,8 @@ export type LiveView = {
   refreshing: boolean;
   footer: boolean;
   ineligible: string[];
+  hidden?: string[];
+  showHidden?: boolean;
   zone: string;
   routes: Routes;
   settled?: ProviderUsage[];
@@ -94,9 +97,13 @@ function pendingPanel(id: string, spinner: number, noColor: boolean, marks: Pane
   return renderDimPanel(id, [probingLine(spinner)], noColor, marks);
 }
 
+function isHidden(view: LiveView, slot: LiveSlot): boolean {
+  return view.hidden?.includes(slot.id) === true;
+}
+
 function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   const caption = view.flash?.index === index ? view.flash.message : undefined;
-  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), caption };
+  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption };
 }
 
 function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
@@ -221,11 +228,24 @@ function liveChrome(view: LiveView, usages: ProviderUsage[], noColor: boolean, n
 }
 
 function liveFooter(noColor: boolean): string[] {
-  return [dim(HELP_FOOTER, noColor)];
+  return [dim(HIDE_HELP, noColor), dim(HELP_FOOTER, noColor)];
 }
 
-function livePanels(view: LiveView, noColor: boolean, now: string): string[] {
-  return view.slots.map((slot, index) => livePanel(slot, view.spinner, noColor, now, slotMarks(view, slot, index)));
+function shownIndexes(view: LiveView): number[] {
+  const indexes = view.slots.map((_, index) => index);
+  return view.showHidden === true ? indexes : indexes.filter((index) => !isHidden(view, view.slots[index]));
+}
+
+function hiddenNote(view: LiveView, shown: number[], noColor: boolean): string[] {
+  const count = view.slots.length - shown.length;
+  return count === 0 ? [] : [dim(`${count} hidden · H to show`, noColor)];
+}
+
+function livePanels(view: LiveView, shown: number[], noColor: boolean, now: string): string[] {
+  return [
+    ...shown.map((index) => livePanel(view.slots[index], view.spinner, noColor, now, slotMarks(view, view.slots[index], index))),
+    ...hiddenNote(view, shown, noColor)
+  ];
 }
 
 function regionHeight(rows: number, chrome: string[], footer: string[]): number {
@@ -236,6 +256,7 @@ export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): 
   const rows = rowBudget(view.rows);
   const chrome = liveChrome(view, settledUsages(view.slots), noColor, now);
   const footer = view.footer ? liveFooter(noColor) : [];
-  const region = regionLines(livePanels(view, noColor, now), view.selected, regionHeight(rows, chrome, footer));
+  const shown = shownIndexes(view);
+  const region = regionLines(livePanels(view, shown, noColor, now), shown.indexOf(view.selected ?? -1), regionHeight(rows, chrome, footer));
   return [...chrome, ...region, ...footer].slice(0, rows).join('\n');
 }

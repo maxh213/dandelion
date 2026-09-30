@@ -1309,7 +1309,7 @@ describe('cursor panel', () => {
       expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
       expect(lines.at(-1)).toBe('\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
-      expect(lines.slice(6, -1).join('\n')).toBe(once.split('\n').slice(1).join('\n'));
+      expect(lines.slice(6, -2).join('\n')).toBe(once.split('\n').slice(1).join('\n'));
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -1888,6 +1888,26 @@ describe('route eligibility state file', () => {
       writeState(bytes);
       expect(await runApp(routedRunner(), env, NOW)).toBe(plainOutput);
     }
+  });
+
+  it('keeps hidden.json next to the state file, hides a panel in the live dashboard only and leaves --once and route alone', async () => {
+    const env = { NO_COLOR: '1', DANDELION_STATE_FILE: statePath };
+    const plainOutput = await runApp(routedRunner(), env, NOW);
+    const routeOutput = await routeWith(routedRunner(), env, { mode: 'headroom', now: NOW, zone: 'UTC' });
+    const dashboard = await settledDashboard(routedRunner(), {}, () => NOW);
+    dashboard.press('j');
+    dashboard.press('h');
+    await settleProbes();
+    expect(JSON.parse(readFileSync(join(scratch, 'state', 'hidden.json'), 'utf8'))).toEqual(['claude']);
+    expect(dashboard.lastFrame()).toContain('1 hidden · H to show');
+    await quit(dashboard);
+    const restarted = await settledDashboard(routedRunner(), {}, () => NOW);
+    expect(restarted.lastFrame()).toContain('1 hidden · H to show');
+    await quit(restarted);
+    expect(await runApp(routedRunner(), env, NOW)).toBe(plainOutput);
+    expect(await routeWith(routedRunner(), env, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual(routeOutput);
+    expect(await routeWith(routedRunner(), env, { mode: 'high', now: NOW, zone: 'UTC' })).toEqual(await routeWith(routedRunner(), { DANDELION_STATE_FILE: join(scratch, 'elsewhere', 'e.json') }, { mode: 'high', now: NOW, zone: 'UTC' }));
+    expect(readdirSync(join(scratch, 'state'))).toEqual(['hidden.json']);
   });
 
   it('keeps every panel with a bad routes file and shows routes file error over the unknown key in both boxes', async () => {

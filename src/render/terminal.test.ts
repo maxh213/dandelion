@@ -105,7 +105,7 @@ describe('terminal renderer', () => {
       status: 'ok',
       balance: { amount, currency: '$', reference }
     });
-    const strip = (text: string): string => text.replace(/\x1b\[\d+m/g, '');
+    const strip = (text: string): string => text.replace(new RegExp(`${String.fromCharCode(27)}\\[\\d+m`, 'g'), '');
     const balanceRow = (usage: ProviderUsage, noColor: boolean): string => renderPanelOk(usage as Extract<ProviderUsage, { status: 'ok' }>, noColor, NOW, PLAIN).split('\n')[2];
     const weeklyRow = (noColor: boolean): string => renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct: 10, resetsAt: '2026-09-13T22:00:00Z' }, noColor, NOW);
 
@@ -242,6 +242,20 @@ describe('terminal renderer', () => {
       `\x1b[90m${'━'.repeat(72)}${RESET}\n\x1b[90mgrok${RESET}\n\x1b[90m${'credits'.padEnd(35)} ${'█'.repeat(19)}░  96%${RESET}\n\x1b[90mstale snapshot 2d16h old${RESET}\n\x1b[90mgrok · grok${RESET}`
     );
     expect(renderPanelOk({ ...usage, windows: [] }, true, NOW, PLAIN).split('\n')[2]).toBe(' '.repeat(72));
+  });
+
+  it('draws the balance row of a stale panel dim', () => {
+    const usage: ProviderUsage = {
+      id: 'kilo',
+      displayName: 'kilo',
+      planLabel: 'api balance',
+      windows: [],
+      fetchedAt: 'now',
+      status: 'ok',
+      snapshotAt: '2026-09-10T17:14:22.812Z',
+      balance: { amount: 14.15, currency: '$', reference: 20 }
+    };
+    expect(renderPanelOk(usage, false, NOW, PLAIN).split('\n')[2]).toBe(`\x1b[90m${'balance $14.15'.padEnd(35)} ${'█'.repeat(14)}${'░'.repeat(6)}  71%${' '.repeat(11)}${RESET}`);
   });
 
   it('renders unavailable panel', () => {
@@ -458,7 +472,7 @@ describe('live frame', () => {
     expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(24)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05Z${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
     expect(lines.at(-1)).toBe(`\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help${RESET}`);
-    expect(lines.slice(6, -1).join('\n')).toBe(renderDashboard(background(), false, frameNow, []).split('\n').slice(1).join('\n'));
+    expect(lines.slice(6, -2).join('\n')).toBe(renderDashboard(background(), false, frameNow, []).split('\n').slice(1).join('\n'));
   });
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
@@ -579,7 +593,7 @@ describe('live frame', () => {
     });
 
     it('keeps the help footer as the last line of the frame', () => {
-      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2), FOOTER]);
+      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -1), 'h hide · H show hidden', FOOTER]);
     });
 
     it.each<[number, string[]]>([

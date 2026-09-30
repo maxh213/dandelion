@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type LiveSlot, type LiveView, type Routes } from '../render/index.ts';
+import { isRoutable, renderLiveFrame, type Eligibility, type Flash, type Hidden, type LiveSlot, type LiveView, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -21,6 +21,7 @@ type LiveOptions = {
   keyboard: Keyboard;
   stopChildren(): Promise<void>;
   eligibility: Eligibility;
+  hidden: Hidden;
   routes: Routes;
   zone: string;
   clock?: () => string;
@@ -38,6 +39,7 @@ type Session = LiveOptions & {
   refreshMs: number;
   spinner: number;
   footer: boolean;
+  showHidden: boolean;
   running?: boolean;
   rounds: number;
   quitting: boolean;
@@ -63,6 +65,7 @@ const DEFAULT_REFRESH_SECONDS = 300;
 const DIGITS_ONLY = /^\d+$/;
 const NOT_ROUTABLE = 'not routable (no usage windows)';
 const NOT_SAVED = 'routing state not saved';
+const HIDDEN_NOT_SAVED = 'hidden state not saved';
 
 function refreshSecondsOf(raw: string): number {
   const seconds = DIGITS_ONLY.test(raw) ? Number(raw) : 0;
@@ -80,6 +83,8 @@ function viewOf(session: Session): LiveView {
     refreshing: session.running === true && session.rounds > 1,
     footer: session.footer,
     ineligible: session.eligibility.ineligible(),
+    hidden: session.hidden.ids(),
+    showHidden: session.showHidden,
     zone: session.zone,
     routes: session.routes,
     settled: session.settled,
@@ -146,13 +151,22 @@ function toggleFooter(session: Session): void {
   draw(session);
 }
 
+function isShown(session: Session, index: number): boolean {
+  return session.showHidden || !session.hidden.ids().includes(session.probes[index].id);
+}
+
+function shownIndexes(session: Session): number[] {
+  return session.probes.map((_, index) => index).filter((index) => isShown(session, index));
+}
+
 function moveDown(session: Session): void {
-  session.selected = Math.min(session.probes.length - 1, session.selected + 1);
+  session.selected = shownIndexes(session).find((index) => index > session.selected) ?? session.selected;
   draw(session);
 }
 
 function moveUp(session: Session): void {
-  session.selected = session.selected < 0 ? session.probes.length - 1 : Math.max(0, session.selected - 1);
+  const before = shownIndexes(session).filter((index) => index < session.selected);
+  session.selected = session.selected < 0 ? (shownIndexes(session).at(-1) ?? -1) : (before.at(-1) ?? session.selected);
   draw(session);
 }
 
@@ -183,6 +197,33 @@ function toggleSelected(session: Session): void {
   if (usage !== undefined) toggleSettled(session, session.selected, usage);
 }
 
+function neighbour(shown: number[], from: number): number {
+  return shown.find((index) => index > from) ?? shown.at(-1) ?? -1;
+}
+
+function reselect(session: Session): void {
+  const shown = shownIndexes(session);
+  if (session.selected < 0 || shown.includes(session.selected)) return;
+  session.selected = neighbour(shown, session.selected);
+}
+
+function toggleHidden(session: Session): void {
+  if (session.selected < 0) return;
+  const index = session.selected;
+  if (!session.hidden.toggle(session.probes[index].id)) {
+    showFlash(session, index, HIDDEN_NOT_SAVED);
+    return;
+  }
+  reselect(session);
+  draw(session);
+}
+
+function toggleShowHidden(session: Session): void {
+  session.showHidden = !session.showHidden;
+  reselect(session);
+  draw(session);
+}
+
 async function quit(session: Session): Promise<void> {
   if (session.quitting) return;
   session.quitting = true;
@@ -205,7 +246,9 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['\x1b[B', moveDown],
   ['k', moveUp],
   ['\x1b[A', moveUp],
-  [' ', toggleSelected]
+  [' ', toggleSelected],
+  ['h', toggleHidden],
+  ['H', toggleShowHidden]
 ]);
 
 function press(session: Session, chunk: string): void {
@@ -228,6 +271,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       refreshMs: refreshMsOf(options.env),
       spinner: 0,
       footer: false,
+      showHidden: false,
       rounds: 0,
       selected: -1,
       quitting: false,

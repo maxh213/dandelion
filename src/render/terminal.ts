@@ -10,9 +10,10 @@ const RESET = '\x1b[0m';
 const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
 const TITLE = 'DANDELION';
 const ROUTING_OFF = 'routing off';
+const HIDDEN = 'hidden';
 const MARKER = '▸ ';
 
-export type PanelMarks = { selected: boolean; ineligible: boolean; caption?: string };
+export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string };
 
 function styled(text: string, code: string, noColor: boolean): string {
   if (noColor) return text;
@@ -72,10 +73,15 @@ function markedRule(marks: PanelMarks, noColor: boolean): string {
   return marks.selected ? styled(plainRule(noColor), BOLD, noColor) : renderRule(noColor);
 }
 
+function flagsOf(marks: PanelMarks): string {
+  return [...(marks.hidden ? [HIDDEN] : []), ...(marks.ineligible ? [ROUTING_OFF] : [])].join(' · ');
+}
+
 function headerLine(name: string, marks: PanelMarks, tag: (text: string) => string): string {
   const lead = marks.selected ? `${MARKER}${name}` : name;
-  if (!marks.ineligible) return lead;
-  return `${lead}${repeatChar(' ', WIDTH - cellCount(lead) - ROUTING_OFF.length)}${tag(ROUTING_OFF)}`;
+  const flags = flagsOf(marks);
+  if (flags === '') return lead;
+  return `${lead}${repeatChar(' ', WIDTH - cellCount(lead) - cellCount(flags))}${tag(flags)}`;
 }
 
 function dimPanel(lines: string[], marks: PanelMarks, noColor: boolean): string {

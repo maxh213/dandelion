@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
-import { openEligibility } from '../render/index.ts';
+import { openEligibility, openHidden } from '../render/index.ts';
 import { startLive } from './live.ts';
 
 const LINES = {
@@ -46,10 +46,12 @@ type SessionOverrides = {
   state?: Record<string, unknown>;
   zone?: string;
   rows?: number;
+  hiddenText?: string;
+  hiddenSaves?: boolean[];
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows } = { env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves } = { env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
@@ -57,13 +59,22 @@ function startSession(overrides: SessionOverrides = {}) {
   const replace = vi.fn<(path: string, text: string) => boolean>(() => true);
   const eligibility = openEligibility({}, '/home/u', { read: () => JSON.stringify(state), replace });
   const saved = () => replace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, routes: { lines: LINES }, zone });
+  const hiddenReplace = vi.fn<(path: string, text: string) => boolean>(() => hiddenSaves?.shift() ?? true);
+  const hidden = openHidden({ DANDELION_STATE_FILE: '/s/eligibility.json' }, '/home/u', {
+    read: () => {
+      if (hiddenText === undefined) throw new Error('ENOENT');
+      return hiddenText;
+    },
+    replace: hiddenReplace
+  });
+  const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, routes: { lines: LINES }, zone });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -273,7 +284,7 @@ describe('live session', () => {
     expect(claude[6]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 11), 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 10), 'h hide · H show hidden', 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help']);
     session.press('q');
     await session.finished;
   });
@@ -594,5 +605,180 @@ describe('route boxes', () => {
     expect(boxRowsOf(session.lastFrame())[1]).toBe(`| ${'model-a high'.padEnd(31)} |  | ${'model-h1 max'.padEnd(31)} |`);
     session.press('q');
     await session.finished;
+  });
+
+  describe('hiding panels', () => {
+    const NOTE = (count: number) => `${count} hidden · H to show`;
+    const HIDDEN_TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 6)}hidden`;
+    const headers = (frame: string) => frame.split('\n').filter((line) => IDS.includes(line.replace(/^▸ /, '').split(' ')[0]) && !line.startsWith('='));
+
+    async function settled(overrides: SessionOverrides = {}) {
+      const session = startSession(overrides);
+      await session.settleRound(0);
+      return session;
+    }
+
+    async function end(session: { press(key: string): void; finished: Promise<void> }) {
+      session.press('q');
+      await session.finished;
+    }
+
+    it('h hides the selected panel, saves its id next to the state file and selects the next visible panel', async () => {
+      const session = await settled();
+      session.press('j');
+      session.press('j');
+      session.press('h');
+      expect(session.hiddenReplace.mock.calls[0][0]).toBe('/s/hidden.json');
+      expect(session.hiddenSaved()).toEqual([['agy']]);
+      expect(headers(session.lastFrame())).toEqual(['▸ kimi', 'grok', 'codex', 'cursor', 'kilo']);
+      expect(session.lastFrame().split('\n').at(-1)).toBe(NOTE(1));
+      session.press('k');
+      expect(headers(session.lastFrame())).toEqual(['▸ claude', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
+      await end(session);
+    });
+
+    it('selects the previous visible panel when the last one is hidden', async () => {
+      const session = await settled();
+      session.press('k');
+      session.press('h');
+      expect(headers(session.lastFrame()).at(-1)).toBe('▸ cursor');
+      await end(session);
+    });
+
+    it('does nothing with h when no panel is selected', async () => {
+      const session = await settled();
+      session.press('h');
+      expect(session.hiddenReplace).not.toHaveBeenCalled();
+      await end(session);
+    });
+
+    it('selects nothing once the only panel left is hidden', async () => {
+      const session = await settled({ hiddenText: JSON.stringify(IDS.slice(1)) });
+      session.press('j');
+      session.press('h');
+      expect(headers(session.lastFrame())).toEqual([]);
+      expect(session.lastFrame().split('\n').at(-1)).toBe(NOTE(7));
+      session.press('j');
+      session.press('k');
+      expect(headers(session.lastFrame())).toEqual([]);
+      await end(session);
+    });
+
+    it('keeps a panel hidden after a restart that reads the saved hidden.json', async () => {
+      const first = await settled();
+      first.press('j');
+      first.press('h');
+      const saved = JSON.stringify(first.hiddenSaved().at(-1));
+      await end(first);
+      const second = await settled({ hiddenText: saved });
+      expect(headers(second.lastFrame())).toEqual(['agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
+      expect(second.lastFrame().split('\n').at(-1)).toBe(NOTE(1));
+      await end(second);
+    });
+
+    it.each([
+      ['a missing file', undefined],
+      ['corrupt bytes', '[not json'],
+      ['a JSON object', '{"claude": true}'],
+      ['a JSON string', '"claude"'],
+      ['an empty array', '[]']
+    ])('hides nothing for %s and still starts', async (_case, hiddenText) => {
+      const session = await settled({ hiddenText });
+      expect(headers(session.lastFrame())).toEqual(IDS);
+      expect(session.lastFrame()).not.toContain('hidden');
+      await end(session);
+    });
+
+    it('ignores non-string entries in hidden.json', async () => {
+      const session = await settled({ hiddenText: '[1, null, "kilo"]' });
+      expect(headers(session.lastFrame())).toEqual(IDS.slice(0, 6));
+      await end(session);
+    });
+
+    it('H shows hidden panels tagged hidden, h unhides one, and H hides them again', async () => {
+      const session = await settled({ hiddenText: '["agy","kilo"]' });
+      expect(session.lastFrame().split('\n').at(-1)).toBe(NOTE(2));
+      session.press('H');
+      expect(session.lastFrame().split('\n')).toContain(HIDDEN_TAG('agy'));
+      expect(session.lastFrame().split('\n')).toContain(HIDDEN_TAG('kilo'));
+      expect(session.lastFrame()).not.toContain('H to show');
+      session.press('j');
+      session.press('j');
+      expect(headers(session.lastFrame())[0]).toBe(HIDDEN_TAG('▸ agy'));
+      session.press('h');
+      expect(session.hiddenSaved().at(-1)).toEqual(['kilo']);
+      expect(headers(session.lastFrame())[0]).toBe('▸ agy');
+      session.press('H');
+      expect(headers(session.lastFrame())).toEqual(['▸ agy', 'kimi', 'grok', 'codex', 'cursor']);
+      expect(session.lastFrame().split('\n').at(-1)).toBe(NOTE(1));
+      await end(session);
+    });
+
+    it('combines the hidden and routing off tags in one header', async () => {
+      const session = await settled({ hiddenText: '["claude"]', state: { claude: false } });
+      session.press('H');
+      expect(session.lastFrame().split('\n')).toContain(`claude${' '.repeat(72 - 6 - 20)}hidden · routing off`);
+      await end(session);
+    });
+
+    it('moves the selection off a hidden panel when H hides them again', async () => {
+      const session = await settled({ hiddenText: '["kimi"]' });
+      session.press('H');
+      session.press('j');
+      session.press('j');
+      session.press('j');
+      expect(headers(session.lastFrame())[0]).toBe(HIDDEN_TAG('▸ kimi'));
+      session.press('H');
+      expect(headers(session.lastFrame())).toEqual(['▸ grok', 'codex', 'cursor', 'kilo']);
+      await end(session);
+    });
+
+    it('j, k and the arrows step over hidden panels', async () => {
+      const session = await settled({ hiddenText: '["agy","kimi"]' });
+      session.press('j');
+      session.press('\x1b[B');
+      expect(headers(session.lastFrame())[0]).toBe('▸ grok');
+      session.press('\x1b[A');
+      expect(headers(session.lastFrame())).toEqual(['▸ claude', 'grok', 'codex', 'cursor', 'kilo']);
+      session.press('k');
+      expect(headers(session.lastFrame())[0]).toBe('▸ claude');
+      session.press('j');
+      session.press('j');
+      session.press('j');
+      session.press('j');
+      session.press('j');
+      expect(headers(session.lastFrame())).toEqual(['▸ kilo']);
+      await end(session);
+    });
+
+    it('k from no selection lands on the last visible panel', async () => {
+      const session = await settled({ hiddenText: '["kilo"]' });
+      session.press('k');
+      expect(headers(session.lastFrame()).at(-1)).toBe('▸ cursor');
+      await end(session);
+    });
+
+    it('flashes hidden state not saved and leaves the panel visible when the write fails', async () => {
+      const session = await settled({ hiddenSaves: [false] });
+      session.press('j');
+      session.press('h');
+      expect(session.lastFrame().split('\n')).toContain('hidden state not saved');
+      expect(headers(session.lastFrame())).toEqual(['▸ claude', ...IDS.slice(1)]);
+      expect(session.lastFrame()).not.toContain('H to show');
+      session.press('h');
+      expect(session.hiddenSaved()).toEqual([['claude'], ['claude']]);
+      expect(headers(session.lastFrame())).toEqual(['▸ agy', ...IDS.slice(2)]);
+      await end(session);
+    });
+
+    it('still probes hidden providers and routes exactly as with nothing hidden', async () => {
+      const visible = await settled();
+      const hidden = await settled({ hiddenText: JSON.stringify(IDS) });
+      expect(hidden.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
+      expect(boxRowsOf(hidden.lastFrame())).toEqual(boxRowsOf(visible.lastFrame()));
+      expect(hidden.lastFrame().split('\n').at(-1)).toBe(NOTE(7));
+      await end(visible);
+      await end(hidden);
+    });
   });
 });
