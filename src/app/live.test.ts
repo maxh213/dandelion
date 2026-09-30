@@ -228,7 +228,7 @@ describe('live session', () => {
     const session = startSession();
     await session.settleRound(0);
     session.press('?');
-    expect(session.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help');
+    expect(session.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t reset times · q quit · ? help');
     session.press('?');
     expect(session.lastFrame()).not.toContain('keys:');
     const count = session.writes.length;
@@ -243,12 +243,19 @@ describe('live session', () => {
 
   it('toggles absolute reset times with t and back to countdowns', async () => {
     const session = startSession();
-    await session.settleRound(0);
+    const resetting: Usage = { ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 10, resetsAt: new Date(Date.parse(START) + 2 * 86400000 + 3600000).toISOString() }] };
+    await session.settleRound(0, { claude: resetting });
     const relative = session.lastFrame();
+    const resetLines = (frame: string) => frame.split('\n').filter((line) => line.includes('↻'));
     const count = session.writes.length;
+    expect(resetLines(relative).length).toBeGreaterThan(0);
+    expect(resetLines(relative).every((line) => /↻ \d+[dh]\d+[hm]$/.test(line))).toBe(true);
     session.press('t');
     expect(session.writes.length).toBeGreaterThan(count);
-    expect(session.lastFrame()).not.toBe(relative);
+    const absolute = session.lastFrame();
+    expect(resetLines(absolute)).toHaveLength(resetLines(relative).length);
+    expect(resetLines(absolute).every((line) => /↻ (\w{3} \d{2}:\d{2}|\w{3} \d{1,2} \d{2}:\d{2})$/.test(line))).toBe(true);
+    expect(absolute.split('\n').some((line) => /next reset: .* at \w{3} \d{2}:\d{2}$/.test(line))).toBe(true);
     session.press('t');
     expect(session.lastFrame()).toBe(relative);
     session.press('q');
@@ -266,7 +273,7 @@ describe('live session', () => {
     expect(settled).not.toContain('kilo');
     session.press('?');
     expect(session.lastFrame().split('\n')).toHaveLength(12);
-    expect(session.lastFrame().split('\n').at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help');
+    expect(session.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t reset times · q quit · ? help');
     session.press('?');
     expect(session.lastFrame()).not.toContain('keys:');
     expect(session.lastFrame().split('\n')).toHaveLength(12);
@@ -298,7 +305,7 @@ describe('live session', () => {
     expect(claude[6]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 10), 'h hide · H show hidden', 'keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 10), 'h hide · H show hidden', '↑↓/jk select · space route · r refresh · t reset times · q quit · ? help']);
     session.press('q');
     await session.finished;
   });

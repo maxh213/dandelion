@@ -502,15 +502,15 @@ describe('live frame', () => {
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), false, frameNow).split('\n');
     expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
-    expect(lines.at(-1)).toBe(`\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help${RESET}`);
+    expect(lines.at(-1)).toBe(`\x1b[90m↑↓/jk select · space route · r refresh · t reset times · q quit · ? help${RESET}`);
     expect(lines.slice(6, -2).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n'));
   });
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), true, '2026-09-13T10:01:05.000Z').split('\n');
     expect(lines[0]).toBe('DANDELION'.padEnd(34) + 'refreshing… · data 0h1m old · 10:01:05');
-    expect(lines.at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help');
-    expect(lines.slice(0, -1).every((line) => [...line].length <= 72)).toBe(true);
+    expect(lines.at(-1)).toBe('↑↓/jk select · space route · r refresh · t reset times · q quit · ? help');
+    expect(lines.every((line) => [...line].length <= 72)).toBe(true);
   });
 
   describe('absolute reset times', () => {
@@ -572,7 +572,7 @@ describe('live frame', () => {
     const RULE = '='.repeat(72);
     const BANNER = `${'DANDELION'.padEnd(48)}data 0h0m old · 10:00:00`;
     const SUMMARY = '8/14 windows above 80% · next reset: claude session in 3d0h';
-    const FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help';
+    const FOOTER = '↑↓/jk select · space route · r refresh · t reset times · q quit · ? help';
     const BOX_BLOCK = [
       '+- route -------------------------+  +- route --high ------------------+',
       '| model-a high                    |  | model-h1 max                    |',

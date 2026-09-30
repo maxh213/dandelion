@@ -28,7 +28,7 @@ import {
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
 const HIDE_HELP = 'h hide · H show hidden';
-const HELP_FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · t reset times · q quit · ? help';
+const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t reset times · q quit · ? help';
 const BOX_WIDTH = 35;
 const BOX_TEXT_CELLS = 31;
 const BOX_GAP = '  ';
