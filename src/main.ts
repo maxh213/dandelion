@@ -26,7 +26,7 @@ function routeModeOf(argv: string[]): RouteMode {
 }
 
 async function route(io: ProbeIo, proc: Proc): Promise<void> {
-  const { out, err, code } = await runRoute(io, proc.env, { mode: routeModeOf(proc.argv), now: new Date().toISOString(), zone: processZone() });
+  const { out, err, code } = await runRoute(io, proc.env, { mode: routeModeOf(proc.argv), now: new Date().toISOString(), zone: processZone(), why: proc.argv.slice(3).includes('--why') });
   proc.stdout.write(out);
   proc.stderr.write(err);
   if (code !== 0) proc.exit(code);

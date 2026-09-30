@@ -58,8 +58,12 @@ function candidatesOf(usages: RoutableUsage[]): Candidate[] {
   });
 }
 
-function isUntripped({ windows }: Candidate): boolean {
-  return !windows.some((window) => window.kind === 'rolling' && trips(window.usedPct));
+function trippingWindow({ windows }: Candidate): RoutableWindow | undefined {
+  return windows.filter((window) => window.kind === 'rolling' && trips(window.usedPct)).sort((a, b) => b.usedPct - a.usedPct)[0];
+}
+
+function isUntripped(candidate: Candidate): boolean {
+  return trippingWindow(candidate) === undefined;
 }
 
 function leftOf(window: RoutableWindow): number {
@@ -75,10 +79,6 @@ export function evaporates(window: RoutableWindow, tonight: Tonight): boolean {
   return window.kind === 'weekly' && leftOf(window) < UNTOUCHED_LEFT && resetsTonight(window, tonight);
 }
 
-function evaporationScore(windows: RoutableWindow[], tonight: Tonight): number {
-  return Math.max(-Infinity, ...windows.filter((window) => evaporates(window, tonight)).map(leftOf));
-}
-
 function bindingLeft(windows: RoutableWindow[]): number {
   return Math.min(FULL_LEFT, ...windows.filter((window) => window.kind !== 'other').map(leftOf));
 }
@@ -90,13 +90,69 @@ function highest(candidates: Candidate[], score: (windows: RoutableWindow[]) => 
   }, { id: undefined, score: -Infinity });
 }
 
-export function routeLine(lines: RouteLines, usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
-  const candidates = candidatesOf(eligibleUsages(usages, ineligible)).filter(isUntripped);
+type Tripped = { id: string; label: string; usedPct: number };
+
+export type Skipped = { tripped: Tripped[]; ineligible: string[]; unavailable: string[] };
+
+type Chosen = { rule: 'evaporation' | 'headroom'; id: string; left: number; label?: string; resetsAt?: string };
+
+type Rival = { id: string; left: number };
+
+export type RouteDecision = { chosen: Chosen | undefined; rivals: Rival[]; skipped: Skipped };
+
+function trippedOf(candidates: Candidate[]): Tripped[] {
+  return candidates.flatMap((candidate) => {
+    const window = trippingWindow(candidate);
+    return window === undefined ? [] : [{ id: candidate.id, label: window.label, usedPct: window.usedPct }];
+  });
+}
+
+function skippedOf(all: Candidate[], ineligible: string[]): Skipped {
+  return {
+    tripped: trippedOf(all),
+    ineligible: ROUTED_IDS.filter((id) => ineligible.indexOf(id) !== -1),
+    unavailable: ROUTED_IDS.filter((id) => !ineligible.includes(id) && !all.some((candidate) => candidate.id === id))
+  };
+}
+
+function evaporatingOf({ id, windows }: Candidate, tonight: Tonight): Chosen[] {
+  return windows
+    .filter((window) => evaporates(window, tonight))
+    .map((window) => ({ rule: 'evaporation', id, left: leftOf(window), label: window.label, resetsAt: String(window.resetsAt) }));
+}
+
+function evaporationChoice(candidates: Candidate[], tonight: Tonight): Chosen | undefined {
+  return candidates
+    .flatMap((candidate) => evaporatingOf(candidate, tonight))
+    .reduce<Chosen | undefined>((best, each) => (best === undefined || each.left > best.left ? each : best), undefined);
+}
+
+function headroomChoice(candidates: Candidate[]): Chosen | undefined {
+  const { id, score } = highest(candidates, bindingLeft);
+  return id === undefined ? undefined : { rule: 'headroom', id, left: score };
+}
+
+function rivalsOf(candidates: Candidate[], chosen: Chosen | undefined): Rival[] {
+  if (chosen?.rule !== 'headroom') return [];
+  return candidates.filter(({ id }) => id !== chosen.id).map(({ id, windows }) => ({ id, left: bindingLeft(windows) }));
+}
+
+export function routeDecision(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): RouteDecision {
+  const all = candidatesOf(eligibleUsages(usages, ineligible));
+  const candidates = all.filter(isUntripped);
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
-  const evaporating = highest(candidates, (windows) => evaporationScore(windows, tonight)).id;
-  if (evaporating !== undefined) return onAccount(lines.route[evaporating].max, evaporating);
-  const roomiest = highest(candidates, bindingLeft).id;
-  return roomiest === undefined ? NO_ROUTE : onAccount(lines.route[roomiest].standard, roomiest);
+  const chosen = evaporationChoice(candidates, tonight) ?? headroomChoice(candidates);
+  return { chosen, rivals: rivalsOf(candidates, chosen), skipped: skippedOf(all, ineligible) };
+}
+
+export function routeDecisionLine(lines: RouteLines, { chosen }: RouteDecision): string {
+  if (chosen === undefined) return NO_ROUTE;
+  const rule = lines.route[chosen.id];
+  return onAccount(chosen.rule === 'evaporation' ? rule.max : rule.standard, chosen.id);
+}
+
+export function routeLine(lines: RouteLines, usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
+  return routeDecisionLine(lines, routeDecision(usages, now, midnight, ineligible));
 }
 
 type ChainEntry = { rank: number; name: string; providers: readonly string[]; matcher?: string };
@@ -143,14 +199,45 @@ function openAccounts(entry: ChainEntry, usages: RoutableUsage[]): Account[] {
     .filter((account) => !trips(account.used));
 }
 
-function entryLine(lines: RouteLines, entry: ChainEntry, usages: RoutableUsage[]): string | undefined {
-  const [leastUsed] = openAccounts(entry, usages).sort((a, b) => a.used - b.used);
-  return leastUsed === undefined ? undefined : onAccount(lines.high[entry.name], leastUsed.id);
+export type ChainSkip = { rank: number; name: string; usedPct: number | undefined };
+
+export type ChainWin = { rank: number; name: string; id: string; usedPct: number };
+
+export type HighDecision = { winner: ChainWin | undefined; skipped: ChainSkip[] };
+
+function leastUsedOpen(entry: ChainEntry, usages: RoutableUsage[]): Account | undefined {
+  return openAccounts(entry, usages).sort((a, b) => a.used - b.used)[0];
+}
+
+function lowestUsed(entry: ChainEntry, usages: RoutableUsage[]): number | undefined {
+  const used = entry.providers
+    .map((id) => usages.find((each) => each.id === id))
+    .filter(isRoutable)
+    .map((usage) => highestUsed(gatingWindows(entry, usage)));
+  return used.length === 0 ? undefined : Math.min(...used);
+}
+
+function skipOf(entry: ChainEntry, usages: RoutableUsage[]): ChainSkip {
+  return { rank: entry.rank, name: entry.name, usedPct: lowestUsed(entry, usages) };
+}
+
+export function highDecision(usages: RoutableUsage[], ineligible: string[]): HighDecision {
+  const eligible = eligibleUsages(usages, ineligible);
+  const skipped: ChainSkip[] = [];
+  for (const entry of HIGH_CHAIN) {
+    const open = leastUsedOpen(entry, eligible);
+    if (open !== undefined) return { winner: { rank: entry.rank, name: entry.name, id: open.id, usedPct: open.used }, skipped };
+    skipped.push(skipOf(entry, eligible));
+  }
+  return { winner: undefined, skipped };
+}
+
+export function highDecisionLine(lines: RouteLines, { winner }: HighDecision): string {
+  return winner === undefined ? NO_ROUTE : onAccount(lines.high[winner.name], winner.id);
 }
 
 export function highRouteLine(lines: RouteLines, usages: RoutableUsage[], ineligible: string[]): string {
-  const eligible = eligibleUsages(usages, ineligible);
-  return HIGH_CHAIN.map((entry) => entryLine(lines, entry, eligible)).find((line) => line !== undefined) ?? NO_ROUTE;
+  return highDecisionLine(lines, highDecision(usages, ineligible));
 }
 
 type Shape = 'line' | { readonly [key: string]: Shape };

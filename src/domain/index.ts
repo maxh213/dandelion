@@ -22,14 +22,22 @@ export {
 export {
   HIGH_CHAIN,
   NO_ROUTE,
+  highDecision,
+  highDecisionLine,
   highRouteLine,
   isRoutable,
   openRoutes,
+  routeDecision,
+  routeDecisionLine,
   routeLine,
+  type ChainSkip,
+  type ChainWin,
+  type RouteDecision,
   type RouteLines,
   type Routes,
   type RoutesFault,
   type RoutesFile,
+  type Skipped,
   type WindowKind
 } from './route.ts';
 

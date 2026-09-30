@@ -280,6 +280,25 @@ describe('main', () => {
   });
 
   it.each<[string[], string, string]>([
+    [['route', '--why'], 'headroom', 'model-a high claude\n'],
+    [['route', '--high', '--why'], 'high', 'model-h1 max claude\n'],
+    [['route', '--why', '--high'], 'high', 'model-h1 max claude\n']
+  ])('runIfMain %j asks for the explanation and keeps the route line first', async (args, mode, line) => {
+    vi.mocked(runRoute).mockClear();
+    const { proc, output } = procOf(['node', MAIN, ...args], false, false);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    const [first, ...explanation] = output().trimEnd().split('\n');
+    expect([first, explanation.length > 0, explanation.length <= 2]).toEqual([line.trimEnd(), true, true]);
+    expect(vi.mocked(runRoute).mock.calls[0][2]).toMatchObject({ mode, why: true });
+  });
+
+  it('runIfMain route never asks for the explanation without --why', async () => {
+    vi.mocked(runRoute).mockClear();
+    await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, 'route', '--Why'], false, false).proc);
+    expect(vi.mocked(runRoute).mock.calls[0][2].why).toBe(false);
+  });
+
+  it.each<[string[], string, string]>([
     [['--high', MAIN, 'route'], 'headroom', 'model-a high claude\n'],
     [['node', '--high', 'route'], 'headroom', 'model-a high claude\n']
   ])('runIfMain %j ignores a --high that comes before route', async (argv, mode, line) => {
@@ -365,7 +384,7 @@ describe('main', () => {
     }
   });
 
-  it.each([[['route']], [['route', '--high']]])('runIfMain %j prints nothing on stdout, the fault on stderr and exits 2 with a bad routes file', async (args) => {
+  it.each([[['route']], [['route', '--high']], [['route', '--why']], [['route', '--high', '--why']]])('runIfMain %j prints nothing on stdout, the fault on stderr and exits 2 with a bad routes file', async (args) => {
     const path = join(tmpdir(), 'dandelion-no-such-dir', 'nope.json');
     const { proc, output, errors } = procOf(['node', MAIN, ...args], false, false, { DANDELION_ROUTES_FILE: path });
     await runIfMain(MAIN_URL, MAIN, routeIo, proc);

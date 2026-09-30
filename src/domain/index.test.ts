@@ -9,6 +9,7 @@ import {
   openHidden,
   openHistory,
   openRoutes,
+  routeDecision,
   routeLine,
   summariseFleet,
   validInstant,
@@ -121,6 +122,21 @@ describe('routeLine', () => {
   function routeOf(candidates: string, ineligible: string[] = [], lines = LINES): string {
     return routeLine(lines, candidates.split('; ').map(usageOf), NOW, MIDNIGHT, ineligible);
   }
+
+  it('decides the same pick routeLine prints, with the skipped accounts', () => {
+    const usages = 'claude: rolling 95 @-; agy: weekly 40 @-; grok: weekly 10 @-; junie: unavailable'.split('; ').map(usageOf);
+    expect(routeDecision(usages, NOW, MIDNIGHT, ['grok'])).toEqual({
+      chosen: { rule: 'headroom', id: 'agy', left: 60 },
+      rivals: [],
+      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'kimi', 'cursor', 'junie', 'hermes'] }
+    });
+    expect(routeLine(LINES, usages, NOW, MIDNIGHT, ['grok'])).toBe('model-c high agy');
+  });
+
+  it('reports the most used rolling window of a tripped account', () => {
+    const usages = [usageOf('claude: rolling 91 @-, rolling 97 @-')];
+    expect(routeDecision(usages, NOW, MIDNIGHT, []).skipped.tripped).toEqual([{ id: 'claude', label: 'rolling', usedPct: 97 }]);
+  });
 
   it('excludes ok usages with zero windows before any other rule', () => {
     expect(routeOf('claude: no windows')).toBe('none');

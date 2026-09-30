@@ -48,6 +48,71 @@ describe('renderRoute', () => {
   it('prints a routes file fault on stderr only, with exit code 2', () => {
     expect(renderRoutesFault({ path: '/tmp/r/nope.json', problem: 'cannot be read' })).toEqual({ out: '', err: 'dandelion: routes file /tmp/r/nope.json: cannot be read\n', code: 2 });
   });
+
+  describe('with why', () => {
+    const SOON = '2026-09-15T03:00:00.000Z';
+    const LATER = '2026-09-20T00:00:00.000Z';
+
+    function usage(id: string, ...windows: [string, 'rolling' | 'weekly', number, string?][]): ProviderUsage {
+      return { id, displayName: id, fetchedAt: NOW, status: 'ok', windows: windows.map(([label, kind, usedPct, resetsAt]) => ({ label, kind, usedPct, ...(resetsAt === undefined ? {} : { resetsAt }) })) };
+    }
+
+    const DOWN: ProviderUsage = { id: 'junie', displayName: 'junie', fetchedAt: NOW, windows: [], status: 'unavailable', reason: 'down' };
+    const why = (usages: ProviderUsage[], ineligible: string[], mode: 'headroom' | 'high') => renderRoute(LINES, usages, ineligible, { mode, now: NOW, zone: 'Etc/GMT+7', why: true });
+
+    it('names the evaporating window and its local reset time', () => {
+      const usages = [usage('kimi', ['weekly', 'weekly', 59, SOON]), usage('claude', ['weekly', 'weekly', 10, LATER])];
+      expect(why(usages, [], 'headroom')).toEqual({ out: 'model-d max kimi\nevaporation: kimi weekly 41% left resets 20:00 before midnight\nunavailable: claude-work, agy, grok, cursor, junie, hermes\n', err: '', code: 0 });
+    });
+
+    it('names the binding headroom, the other accounts and every skipped account', () => {
+      const usages = [usage('claude', ['weekly', 'weekly', 37, LATER]), usage('claude-work', ['session', 'rolling', 92], ['weekly', 'weekly', 10, LATER]), usage('agy', ['weekly', 'weekly', 78, LATER]), usage('grok', ['weekly', 'weekly', 1, LATER]), DOWN];
+      expect(why(usages, ['grok'], 'headroom').out).toBe(
+        'model-a high claude\nheadroom: claude binding 63% left (agy 22%)\ntripped: claude-work (session 92%); ineligible: grok; unavailable: kimi, cursor, junie, hermes\n'
+      );
+    });
+
+    it('omits the others when the chosen account stands alone and the skipped line when nothing was skipped', () => {
+      const all = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'cursor', 'junie', 'hermes'].map((id) => usage(id, ['weekly', 'weekly', 50, LATER]));
+      expect(why([all[0]], [], 'headroom').out).toContain('headroom: claude binding 50% left\n');
+      expect(why(all, [], 'headroom').out).toBe('model-a high claude\nheadroom: claude binding 50% left (claude-work 50%, agy 50%, kimi 50%, grok 50%, cursor 50%, junie 50%, hermes 50%)\n');
+    });
+
+    it('lists the skipped accounts when nothing can be routed', () => {
+      const usages = [usage('claude', ['session', 'rolling', 90])];
+      expect(why(usages, [], 'headroom')).toEqual({
+        out: 'none\nnone: no account can take the work\ntripped: claude (session 90%); unavailable: claude-work, agy, kimi, grok, cursor, junie, hermes\n',
+        err: '',
+        code: 1
+      });
+    });
+
+    it('names the winning rank and why each higher rank was skipped', () => {
+      const usages = [usage('claude', ['session', 'rolling', 95], ['weekly fable', 'weekly', 10]), usage('grok', ['credits', 'weekly', 30])];
+      expect(why(usages, [], 'high')).toEqual({
+        out: 'model-e xhigh grok\nrank 4 grok on grok: gating 30% used\nskipped: rank 1 fable tripped at 95%; rank 2 cursor no open account; rank 3 opus tripped at 95%\n',
+        err: '',
+        code: 0
+      });
+    });
+
+    it('says nothing was skipped by leaving the line out when rank 1 wins', () => {
+      expect(why([usage('claude', ['session', 'rolling', 5])], [], 'high').out).toBe('model-h1 max claude\nrank 1 fable on claude: gating 5% used\n');
+    });
+
+    it('lists every rank when the chain is empty', () => {
+      expect(why([], [], 'high')).toEqual({
+        out: 'none\nnone: no chain entry is open\nskipped: rank 1 fable no open account; rank 2 cursor no open account; rank 3 opus no open account; rank 4 grok no open account; rank 5 agy no open account\n',
+        err: '',
+        code: 1
+      });
+    });
+
+    it('rejects a route mode it does not know', () => {
+      const request = { mode: 'bogus', now: NOW, zone: 'UTC', why: true } as unknown as RouteRequest;
+      expect(() => renderRoute(LINES, [], [], request)).toThrow('Unexpected route mode');
+    });
+  });
 });
 
 
