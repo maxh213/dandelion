@@ -445,7 +445,7 @@ describe('highRouteLine', () => {
     ['junie leaves the 014 live case on Fable', 'claude: session rolling 2, weekly weekly 13, weekly Fable weekly 2; claude-work: session rolling 100, weekly weekly 72, weekly Fable weekly 52; grok: credits weekly 9; junie: credits weekly 0', [], 'model-h1 max claude'],
     ['hermes is never in the chain', 'hermes: credits weekly 0', [], 'none'],
     ['hermes leaves the 014 live case on Fable', 'claude: session rolling 2, weekly weekly 13, weekly Fable weekly 2; claude-work: session rolling 100, weekly weekly 72, weekly Fable weekly 52; grok: credits weekly 9; hermes: credits weekly 0', [], 'model-h1 max claude'],
-    ['agy is the last entry', 'grok: credits weekly 90; agy: Five Hour Limit rolling 10, Weekly Limit weekly 20', [], 'model-c high agy']
+    ['agy is the last entry', 'grok: credits weekly 90; agy: Claude+GPT · 5h rolling 10, Gemini · weekly weekly 20', [], 'model-c high agy']
   ])('%s', (_case, candidates, ineligible, line) => {
     expect(highOf(candidates, ineligible)).toBe(line);
   });

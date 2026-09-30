@@ -236,22 +236,22 @@ describe('claude and agy windows', () => {
   it('renders agy remaining percent as used percent', async () => {
     const output = await runApp(routedRunner(), {}, NOW);
     expect(panelOf(output, 'agy').slice(1, 5)).toEqual([
-      `${'Gemini Models · Weekly Limit'.padEnd(35)} ${'░'.repeat(20)}   0% ↻ 7d7h`,
-      `${'Gemini Models · Five Hour Limit'.padEnd(35)} ${'░'.repeat(20)}   0% ↻ 12h13m`,
-      `Claude and GPT models · Weekly Lim… ${'░'.repeat(20)}   0% ↻ 7d7h`,
-      `Claude and GPT models · Five Hour…  ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 12h13m`
+      `${'Gemini · weekly'.padEnd(35)} ${'░'.repeat(20)}   0% ↻ 7d7h`,
+      `${'Gemini · 5h'.padEnd(35)} ${'░'.repeat(20)}   0% ↻ 12h13m`,
+      `${'Claude+GPT · weekly'.padEnd(35)} ${'░'.repeat(20)}   0% ↻ 7d7h`,
+      `${'Claude+GPT · 5h'.padEnd(35)} ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ 12h13m`
     ]);
     const noColor = (await runApp(routedRunner(), { NO_COLOR: '1' }, NOW)).split('\n');
-    expect(noColor).toContain('Claude and GPT models · Weekly Lim… --------------------   0% ↻ 7d7h');
-    expect(noColor).toContain('Claude and GPT models · Five Hour…  ###############-----  75% ↻ 12h13m');
+    expect(noColor).toContain(`${'Claude+GPT · weekly'.padEnd(35)} --------------------   0% ↻ 7d7h`);
+    expect(noColor).toContain(`${'Claude+GPT · 5h'.padEnd(35)} ###############-----  75% ↻ 12h13m`);
   });
 
   it('keeps window rows ASCII under NO_COLOR except the separator glyphs', async () => {
     const output = await runApp(routedRunner(), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
     expect(output).not.toContain('\x1b');
     expect(output).not.toMatch(/[█░━]/);
-    expect(output.split('\n')).toContain('Gemini Models · Weekly Limit        --------------------   0% ↻ 7d7h');
-    expect(new Set(output.replaceAll(/[\x20-\x7e\n]/g, ''))).toEqual(new Set(['↻', '·', '…', '—']));
+    expect(output.split('\n')).toContain(`${'Gemini · weekly'.padEnd(35)} --------------------   0% ↻ 7d7h`);
+    expect(new Set(output.replaceAll(/[\x20-\x7e\n]/g, ''))).toEqual(new Set(['↻', '·', '—']));
   });
 
   it('colours only the gauge and percent of each row by its style token', async () => {
@@ -302,14 +302,14 @@ describe('claude and agy windows', () => {
   it.each([
     ['Gemini Models\tFive Hour Limit Remaining\t100%', []],
     ['Gemini Models\tFive Hour Limit Remaining\tlots\t2026-09-13T22:13:45Z', []],
-    ['Gemini Models\tFive Hour Limit Remaining\t100%\tnot-a-date', [`${'Gemini Models · Five Hour Limit'.padEnd(35)} ${'-'.repeat(20)}   0%`]]
+    ['Gemini Models\tFive Hour Limit Remaining\t100%\tnot-a-date', [`${'Gemini · 5h'.padEnd(35)} ${'-'.repeat(20)}   0%`]]
   ])('skips malformed agy row %j and keeps valid ones', async (bad, extraRows) => {
     const stdout = `Gemini Models\tWeekly Limit Remaining\t40%\t2026-09-20T17:13:45Z\n${bad}\n`;
     const output = await runApp(routedRunner({ agy: { stdout, stderr: '' } }), { NO_COLOR: '1' }, NOW);
     const agyLines = output.split('\n');
     const start = agyLines.indexOf('agy');
     expect(agyLines.slice(start + 1, agyLines.indexOf('agy · agy'))).toEqual([
-      `${'Gemini Models · Weekly Limit'.padEnd(35)} ${'#'.repeat(12)}${'-'.repeat(8)}  60% ↻ 7d7h`,
+      `${'Gemini · weekly'.padEnd(35)} ${'#'.repeat(12)}${'-'.repeat(8)}  60% ↻ 7d7h`,
       ...extraRows
     ]);
   });

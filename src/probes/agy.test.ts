@@ -25,10 +25,10 @@ describe('agyProbe', () => {
       ''
     ].join('\n');
     expect(await windowsOf(stdout)).toEqual([
-      { label: 'Gemini Models · Weekly Limit', kind: 'weekly', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' },
-      { label: 'Gemini Models · Five Hour Limit', kind: 'rolling', usedPct: 0, resetsAt: '2026-09-13T22:13:45Z' },
-      { label: 'Claude and GPT models · Weekly Limit', kind: 'weekly', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' },
-      { label: 'Claude and GPT models · Five Hour Limit', kind: 'rolling', usedPct: 75, resetsAt: '2026-09-13T22:13:45Z' }
+      { label: 'Gemini · weekly', kind: 'weekly', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' },
+      { label: 'Gemini · 5h', kind: 'rolling', usedPct: 0, resetsAt: '2026-09-13T22:13:45Z' },
+      { label: 'Claude+GPT · weekly', kind: 'weekly', usedPct: 0, resetsAt: '2026-09-20T17:13:45Z' },
+      { label: 'Claude+GPT · 5h', kind: 'rolling', usedPct: 75, resetsAt: '2026-09-13T22:13:45Z' }
     ]);
   });
 
@@ -39,7 +39,7 @@ describe('agyProbe', () => {
     ['a suffixed percent', 'Gemini Models\tFive Hour Limit Remaining\t40%x\t2026-09-13T22:13:45Z']
   ])('skips a row with %s and keeps the valid one', async (_case, bad) => {
     expect(await windowsOf(`${VALID}\n${bad}`)).toEqual([
-      { label: 'Gemini Models · Weekly Limit', kind: 'weekly', usedPct: 60, resetsAt: '2026-09-20T17:13:45Z' }
+      { label: 'Gemini · weekly', kind: 'weekly', usedPct: 60, resetsAt: '2026-09-20T17:13:45Z' }
     ]);
   });
 
@@ -62,25 +62,28 @@ describe('agyProbe', () => {
     '2026-09-20T18:13:4501:00'
   ])('keeps a row with reset "%s" but no resetsAt', async (reset) => {
     const [, second] = await windowsOf(`${VALID}\nGemini Models\tFive Hour Limit Remaining\t100%\t${reset}`);
-    expect(second).toStrictEqual({ label: 'Gemini Models · Five Hour Limit', kind: 'rolling', usedPct: 0 });
+    expect(second).toStrictEqual({ label: 'Gemini · 5h', kind: 'rolling', usedPct: 0 });
   });
 
   it('reads CRLF output with a clean reset instant', async () => {
     expect(await windowsOf(`${VALID}\r\n`)).toEqual([
-      { label: 'Gemini Models · Weekly Limit', kind: 'weekly', usedPct: 60, resetsAt: '2026-09-20T17:13:45Z' }
+      { label: 'Gemini · weekly', kind: 'weekly', usedPct: 60, resetsAt: '2026-09-20T17:13:45Z' }
     ]);
   });
 
   it.each([
-    ['Gemini Models', 'Five Hour Limit', 'rolling'],
-    ['Claude and GPT models', 'Five Hour Limit', 'rolling'],
-    ['Gemini Models', 'Flash Five Hour Limit', 'rolling'],
-    ['Gemini Models', 'Weekly Limit', 'weekly'],
-    ['Claude and GPT models', 'Weekly Limit', 'weekly'],
-    ['Gemini Models', 'Daily Limit', 'other']
-  ])('sets the kind of %s · %s to %s', async (group, name, kind) => {
+    ['Gemini Models', 'Five Hour Limit', 'Gemini · 5h', 'rolling'],
+    ['Claude and GPT models', 'Five Hour Limit', 'Claude+GPT · 5h', 'rolling'],
+    ['Gemini Models', 'Flash Five Hour Limit', 'Gemini · Flash Five Hour Limit', 'rolling'],
+    ['Gemini Models', 'Weekly Limit', 'Gemini · weekly', 'weekly'],
+    ['Claude and GPT models', 'Weekly Limit', 'Claude+GPT · weekly', 'weekly'],
+    ['Gemini Models', 'Daily Limit', 'Gemini · Daily Limit', 'other'],
+    ['Other Models', 'Five Hour Limit', 'Other Models · 5h', 'rolling'],
+    ['Other Models', 'Monthly Week Cap', 'Other Models · Monthly Week Cap', 'weekly'],
+    ['constructor', 'toString', 'constructor · toString', 'other']
+  ])('labels and sets the kind of %s · %s as %s (%s)', async (group, name, label, kind) => {
     expect(await windowsOf(`${group}\t${name} Remaining\t40%\t2026-09-20T17:13:45Z`)).toStrictEqual([
-      { label: `${group} · ${name}`, kind, usedPct: 60, resetsAt: '2026-09-20T17:13:45Z' }
+      { label, kind, usedPct: 60, resetsAt: '2026-09-20T17:13:45Z' }
     ]);
   });
 

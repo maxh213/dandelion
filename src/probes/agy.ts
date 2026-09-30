@@ -2,6 +2,8 @@ import { validInstant, type WindowKind } from '../domain/index.ts';
 import type { CliProbe, ReadWindow, Reading } from './cli.ts';
 
 const REMAINING_PERCENT = /^(\d+)%$/;
+const GROUP_SHORT: Record<string, string> = { 'Claude and GPT models': 'Claude+GPT', 'Gemini Models': 'Gemini' };
+const WINDOW_SHORT: Record<string, string> = { 'Five Hour Limit': '5h', 'Weekly Limit': 'weekly' };
 
 function remainingPercent(columns: string[]): number | undefined {
   if (columns.length !== 4) return undefined;
@@ -16,13 +18,17 @@ function withoutWord(text: string, word: string): string {
     .join(' ');
 }
 
+function shortened(names: Record<string, string>, name: string): string {
+  return Object.hasOwn(names, name) ? names[name] : name;
+}
+
 function parseRow(line: string): ReadWindow | [] {
   const columns = line.trim().split('\t');
   const remaining = remainingPercent(columns);
   if (remaining === undefined) return [];
   const [group, label, , reset] = columns;
   const windowName = withoutWord(label, 'Remaining');
-  return { label: `${group} · ${windowName}`, kind: kindOf(windowName), usedPct: 100 - remaining, resetsAt: validInstant(reset) };
+  return { label: `${shortened(GROUP_SHORT, group)} · ${shortened(WINDOW_SHORT, windowName)}`, kind: kindOf(windowName), usedPct: 100 - remaining, resetsAt: validInstant(reset) };
 }
 
 function kindOf(windowName: string): WindowKind {

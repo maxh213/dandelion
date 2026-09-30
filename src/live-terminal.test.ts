@@ -27,7 +27,7 @@ setInterval(() => {}, 1000);
 const OTHER_PANELS = [
   /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude · personal · claude · \d+h\d+m ago\n/,
   /\nclaude-work\nweekly +#+-* +86%( ↻ \S+)?\nclaude · work · claude-work · \d+h\d+m ago\n/,
-  /\nagy\nGemini Models · Weekly Limit +-+ +0%( ↻ \S+)?\nagy · agy · \d+h\d+m ago\n/,
+  /\nagy\nGemini · weekly +-+ +0%( ↻ \S+)?\nagy · agy · \d+h\d+m ago\n/,
   /\nkimi\nkimi web exited without printing a token\nkimi code · kimi · \d+h\d+m ago\n/,
   /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok · \d+h\d+m ago\n/,
   /\ncodex\napi-key billing · no usage windows\ncodex · codex · \d+h\d+m ago\n/,

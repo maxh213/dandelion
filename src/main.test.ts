@@ -187,7 +187,7 @@ describe('main', () => {
     expect(lines.indexOf('grok')).toBeLessThan(lines.indexOf('codex'));
     expect(lines.indexOf('codex')).toBeLessThan(lines.indexOf('kilo'));
     expect(lines).toContain('weekly                              #################---  86%');
-    expect(lines).toContain('Claude and GPT models · Five Hour…  ###############-----  75%');
+    expect(lines).toContain(`${'Claude+GPT · 5h'.padEnd(35)} ###############-----  75%`);
     expect(lines).toContain('claude · personal · claude');
     expect(lines).toContain('agy · agy');
     expect(result.stdout).toContain('\nkimi\nkimi web exited without printing a token\nkimi code · kimi\n');
@@ -780,7 +780,7 @@ describe('main', () => {
     const route = readme.split('## Route')[1].split('## ')[0];
     const [trip] = route.split('\n\n').filter((paragraph) => paragraph.startsWith('The trip:'));
     expect(trip).toMatch(/before both rules, route skips every tripped account/);
-    expect(trip).toMatch(/rolling windows \(claude and claude-work session, kimi 5h, agy Five Hour Limit\) is 90% used or more; 90% itself trips/);
+    expect(trip).toMatch(/rolling windows \(claude and claude-work session, kimi 5h, agy 5h \(Claude\+GPT · 5h, Gemini · 5h\)\) is 90% used or more; 90% itself trips/);
     expect(trip).toMatch(/weekly and other windows never trip/);
     expect(trip).toMatch(/ignored by rule 1 and its binding is ignored by rule 2/);
     expect(trip).toMatch(/same 90% trip `route --high` uses/);
