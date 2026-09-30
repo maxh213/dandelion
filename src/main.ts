@@ -60,13 +60,14 @@ async function live(io: ProbeIo, proc: Proc): Promise<void> {
 
 const SUBCOMMANDS = new Map([['route', route], ['run', run]]);
 
+function modeOf(proc: Proc): (io: ProbeIo, proc: Proc) => Promise<void> {
+  if (proc.argv.includes('--json')) return json;
+  return isLive(proc) ? live : (io, p) => main(io, p.env, p, new Date().toISOString());
+}
+
 export function runIfMain(metaUrl: string, argv1: string, io: ProbeIo, proc: Proc): Promise<void> {
   if (!isEntryFile(metaUrl, argv1)) return Promise.resolve();
-  const subcommand = SUBCOMMANDS.get(proc.argv[2]);
-  if (subcommand) return subcommand(io, proc);
-  if (proc.argv.includes('--json')) return json(io, proc);
-  if (isLive(proc)) return live(io, proc);
-  return main(io, proc.env, proc, new Date().toISOString());
+  return (SUBCOMMANDS.get(proc.argv[2]) ?? modeOf(proc))(io, proc);
 }
 
 await runIfMain(import.meta.url, process.argv[1], realIo, process);
