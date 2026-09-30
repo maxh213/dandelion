@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
-import { openEligibility, openHidden, openHistory } from '../render/index.ts';
+import { openEligibility, openHidden, openHistory, type Routes } from '../render/index.ts';
 import { startLive } from './live.ts';
 
 const LINES = {
@@ -53,10 +53,11 @@ type SessionOverrides = {
   historyWrites?: boolean;
   notifier?: { notify(text: string): unknown };
   copy?: (text: string) => Promise<boolean>;
+  routes?: Routes;
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier, copy } = { notifier: { notify: vi.fn() }, copy: async () => true, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier, copy, routes } = { notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
@@ -76,7 +77,7 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: hiddenReplace
   });
   const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes: { lines: LINES }, zone, notifier, clipboard });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes, zone, notifier, clipboard });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
@@ -383,7 +384,7 @@ describe('live session', () => {
     session.press('?');
     expect(session.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?');
     session.press('?');
-    expect(session.lastFrame()).not.toContain('keys:');
+    expect(session.lastFrame()).not.toContain('c/C copy');
     const count = session.writes.length;
     session.press('x');
     session.press('R');
@@ -428,7 +429,7 @@ describe('live session', () => {
     expect(session.lastFrame().split('\n')).toHaveLength(12);
     expect(session.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?');
     session.press('?');
-    expect(session.lastFrame()).not.toContain('keys:');
+    expect(session.lastFrame()).not.toContain('c/C copy');
     expect(session.lastFrame().split('\n')).toHaveLength(12);
     session.screen.rows = 30;
     session.screen.emit('resize');
@@ -983,6 +984,17 @@ describe('route boxes', () => {
 
     it('copies nothing and flashes nothing to copy while the first round is unsettled', async () => {
       const session = startSession();
+      session.press('c');
+      session.press('C');
+      expect(session.clipboard.copy).not.toHaveBeenCalled();
+      expect(summary(session)).toBe('nothing to copy');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('copies nothing and flashes nothing to copy when routes.json is bad', async () => {
+      const session = startSession({ routes: { fault: { path: '/x/routes.json', problem: 'bad routes.json' } } });
+      await session.settleRound(0);
       session.press('c');
       session.press('C');
       expect(session.clipboard.copy).not.toHaveBeenCalled();

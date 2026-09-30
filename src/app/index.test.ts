@@ -1373,7 +1373,7 @@ describe('cursor panel', () => {
       dashboard.press('?');
       expect(dashboard.lastFrame().split('\n').at(-1)).toBe('↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?');
       dashboard.press('?');
-      expect(dashboard.lastFrame()).not.toContain('keys:');
+      expect(dashboard.lastFrame()).not.toContain('c/C copy');
       dashboard.press('r');
       expect(dashboard.lastFrame().split('\n')[0]).toContain('refreshing…');
       await settleProbes();
