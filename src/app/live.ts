@@ -374,17 +374,10 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['H', toggleShowHidden]
 ]);
 
-function keysOf(chunk: string): string[] {
-  return chunk.startsWith('\x1b') ? [] : [...chunk];
-}
+const TOKEN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]|[\\s\\S]`, 'gu');
 
 function press(session: Session, chunk: string): void {
-  const whole = KEYS.get(chunk);
-  if (whole) {
-    whole(session);
-    return;
-  }
-  for (const key of keysOf(chunk)) KEYS.get(key)?.(session);
+  for (const [key] of chunk.matchAll(TOKEN)) KEYS.get(key)?.(session);
 }
 
 export function startLive(options: LiveOptions): Promise<void> {

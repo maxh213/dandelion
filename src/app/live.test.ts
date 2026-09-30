@@ -629,6 +629,20 @@ describe('live session', () => {
     await session.finished;
   });
 
+  it.each<[string, string, string]>([
+    ['two Downs in one chunk', '\x1b[B\x1b[B', 'agy'],
+    ['three Ups in one chunk after four Downs', 'jjjj\x1b[A\x1b[A\x1b[A', 'claude'],
+    ['a mixed chunk', 'j\x1b[Bk', 'claude'],
+    ['an unknown escape sequence before a key', '\x1b[Cj', 'claude']
+  ])('dispatches every key of a batched chunk: %s', async (_case, chunk, id) => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press(chunk);
+    expect(markedHeaders(session.lastFrame())).toEqual([`▸ ${id}`]);
+    session.press('q');
+    await session.finished;
+  });
+
   it('flips the selected routable provider on space, saves the whole state and tags its header at once', async () => {
     const session = startSession({ state: { nope: 1, agy: false } });
     await session.settleRound(0);
