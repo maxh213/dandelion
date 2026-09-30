@@ -1737,10 +1737,11 @@ describe('runRun', () => {
 
   it('passes only the model to other CLIs', async () => {
     const { spawn, spawner } = fakeSpawner();
-    const unavailable = routedRunner({ claude: { stdout: '', stderr: '', failure: 'missing' } });
+    const gone: CommandRunnerResult = { stdout: '', stderr: '', failure: 'missing' };
+    const unavailable = routedRunner({ claude: gone, 'claude-work': gone });
     await runRun(unavailable, env, { ...headroom, mode: 'high' }, [], spawner);
-    const [{ args }] = spawn.mock.calls[0];
-    expect(args.slice(0, 2)).toEqual(['--model', expect.any(String)]);
+    expect(spawn).toHaveBeenCalledWith({ command: 'agy', args: ['--model', 'model-c'], env: {} });
+    expect(spawn).toHaveBeenCalledTimes(1);
   });
 
   it('prints none on stderr, exits 1 and spawns nothing when nothing routes', async () => {
