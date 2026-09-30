@@ -3,8 +3,8 @@ import { openClipboard } from './clipboard.ts';
 
 function setup(available: string[], writeFails = false) {
   const tried: string[][] = [];
-  const write = vi.fn((_text: string) => {
-    if (writeFails) throw new Error('closed');
+  const write = vi.fn((text: string) => {
+    if (writeFails) throw new Error(text);
   });
   const tryCommand = async (command: string, args: string[], input: string) => {
     tried.push([command, ...args, input]);

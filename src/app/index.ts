@@ -300,9 +300,10 @@ const CLIPBOARD_TIMEOUT_MS = 3000;
 const realCommandTry: CommandTry = (command, args, input) =>
   new Promise((resolve) => {
     const child = spawn(command, args, { stdio: ['pipe', 'ignore', 'ignore'], timeout: CLIPBOARD_TIMEOUT_MS });
-    child.on('error', () => resolve(false));
+    const fail = () => resolve(false);
+    child.on('error', fail);
     child.on('close', (code) => resolve(code === 0));
-    child.stdin.on('error', () => resolve(false));
+    child.stdin.on('error', fail);
     child.stdin.end(input);
   });
 
@@ -326,7 +327,7 @@ export function runLive(
     routes: routesOf(env),
     zone: processZone(),
     notifier: realNotifier,
-    clipboard: openClipboard({ tryCommand: realCommandTry, write: (text) => screen.write(text) }),
+    clipboard: openClipboard({ tryCommand: realCommandTry, write: screen.write.bind(screen) }),
     clock
   });
 }

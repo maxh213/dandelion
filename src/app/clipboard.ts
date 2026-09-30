@@ -1,6 +1,4 @@
-export interface Clipboard {
-  copy(text: string): Promise<boolean>;
-}
+import type { Clipboard } from './live.ts';
 
 export type CommandTry = (command: string, args: string[], input: string) => Promise<boolean>;
 

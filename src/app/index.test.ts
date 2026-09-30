@@ -2591,3 +2591,59 @@ describe('real notifier', () => {
     expect(execFileSpy).not.toHaveBeenCalled();
   });
 });
+describe('live clipboard', () => {
+  let bin = '';
+
+  beforeEach(() => {
+    bin = mkdtempSync(join(tmpdir(), 'dandelion-clip-'));
+    vi.stubEnv('PATH', bin);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(bin, { recursive: true, force: true });
+  });
+
+  function install(name: string, script: string): void {
+    const path = join(bin, name);
+    writeFileSync(path, `#!/bin/sh\n${script}\n`);
+    chmodSync(path, 0o755);
+  }
+
+  async function copyOnce() {
+    const dashboard = startDashboard(routedRunner(), { NO_COLOR: '1' });
+    await vi.waitFor(() => expect(dashboard.lastFrame()).toContain('api balance'));
+    await vi.waitFor(() => expect(dashboard.lastFrame()).not.toContain('probing'));
+    dashboard.press('c');
+    return dashboard;
+  }
+
+  it('pipes the route line to wl-copy when it is installed', async () => {
+    const target = join(bin, 'copied.txt');
+    install('wl-copy', `/bin/cat > ${target}`);
+    const dashboard = await copyOnce();
+    await vi.waitFor(() => expect(dashboard.lastFrame()).toMatch(/copied: /));
+    expect(readFileSync(target, 'utf8')).toBe('model-a high claude-work');
+    dashboard.press('q');
+    await dashboard.finished;
+  });
+
+  it('falls back to xclip when wl-copy exits non-zero', async () => {
+    const target = join(bin, 'copied.txt');
+    install('wl-copy', '/bin/cat > /dev/null; exit 1');
+    install('xclip', `/bin/cat > ${target}`);
+    const dashboard = await copyOnce();
+    await vi.waitFor(() => expect(dashboard.lastFrame()).toMatch(/copied: /));
+    expect(readFileSync(target, 'utf8')).toBe('model-a high claude-work');
+    dashboard.press('q');
+    await dashboard.finished;
+  });
+
+  it('writes an OSC 52 sequence to the screen when no clipboard command exists', async () => {
+    const dashboard = await copyOnce();
+    await vi.waitFor(() => expect(dashboard.writes.some((text) => text.startsWith('\x1b]52;c;'))).toBe(true));
+    dashboard.press('q');
+    await dashboard.finished;
+  });
+});
+

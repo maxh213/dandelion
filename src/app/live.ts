@@ -1,5 +1,4 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import type { Clipboard } from './clipboard.ts';
 import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, isRoutable, nextLocalMidnight, notificationEvents, renderLiveFrame, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
 
 export interface Screen {
@@ -10,6 +9,10 @@ export interface Screen {
 
 export interface Notifier {
   notify(text: string): unknown;
+}
+
+export interface Clipboard {
+  copy(text: string): Promise<boolean>;
 }
 
 export interface Keyboard {
