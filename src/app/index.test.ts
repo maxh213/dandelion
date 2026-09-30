@@ -198,7 +198,7 @@ describe('claude and agy windows', () => {
   it('renders claude, agy, kimi, grok, codex, cursor, junie and kilo panels in fixed order with captions', async () => {
     const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const lines = plain(output).split('\n');
-    expect(lines[0]).toMatch(/^DANDELION +10:00:00Z$/);
+    expect(lines[0]).toMatch(/^DANDELION +10:00:00$/);
     expect(lines.filter((line) => line === RULE)).toHaveLength(10);
     expect(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 21, 26, 31, 36, 40, 44, 48]);
     expect(lines[1]).toBe(RULE);
@@ -1208,7 +1208,7 @@ describe('cursor panel', () => {
       await settleProbes();
       const frame = dashboard.lastFrame();
       expect(frame).not.toContain('probing…');
-      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(47) + 'data 0h0m old · 10:00:00Z', '2/16 windows above 80% · next reset: claude session in 8h40m']);
+      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(48) + 'data 0h0m old · 10:00:00', '2/16 windows above 80% · next reset: claude session in 8h40m']);
       expect(frame.split('\n').every((line) => [...line].length <= 72)).toBe(true);
       dashboard.press('q');
       await dashboard.finished;
@@ -1275,7 +1275,7 @@ describe('cursor panel', () => {
       const count = dashboard.frames().length;
       await vi.advanceTimersByTimeAsync(65100);
       const frame = dashboard.lastFrame();
-      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(47) + 'data 0h1m old · 10:01:05Z', '2/16 windows above 80% · next reset: claude session in 8h38m']);
+      expect(frame.split('\n').slice(0, 2)).toEqual(['DANDELION'.padEnd(48) + 'data 0h1m old · 10:01:05', '2/16 windows above 80% · next reset: claude session in 8h38m']);
       expect(sessionRow(frame)).toMatch(/ ↻ 8h38m$/);
       expect(dashboard.frames().length - count).toBe(66);
       dashboard.press('q');
@@ -1305,7 +1305,7 @@ describe('cursor panel', () => {
       await vi.advanceTimersByTimeAsync(65000);
       dashboard.press('r');
       const lines = dashboard.lastFrame().split('\n');
-      expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(24)}\x1b[0m\x1b[90mrefreshing…\x1b[0m\x1b[1m · data 0h1m old · 10:01:05Z\x1b[0m`);
+      expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}\x1b[0m\x1b[90mrefreshing…\x1b[0m\x1b[1m · data 0h1m old · 10:01:05\x1b[0m`);
       expect(lines[1]).toBe('\x1b[90m2/16 windows above 80% · next reset: claude session in 8h38m\x1b[0m');
       expect(lines.at(-1)).toBe('\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
@@ -1438,7 +1438,7 @@ describe('wiring', () => {
   it('displays kilo balance with default reference', async () => {
     const output = await runApp(profileRunner(PROFILE), {}, NOW);
     expect(output).toContain('DANDELION');
-    expect(output).toContain('10:00:00Z');
+    expect(output).toContain('10:00:00');
     expect(output).toContain('━'.repeat(72));
     expect(output).toContain(`${'balance $14.15'.padEnd(35)} \x1b[32m██████████████░░░░░░\x1b[0m \x1b[32m 71%\x1b[0m`);
     expect(output).toContain('\x1b[90mapi balance · kilo\x1b[0m');
@@ -2349,7 +2349,7 @@ describe('hermes panel', () => {
     const output = await runApp(io, { ...HERMES_ENV, DANDELION_JUNIE_HOME: '/junie', NO_COLOR: '1' }, HERMES_NOW);
     const lines = output.split('\n');
     const names = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
-    expect(lines[0]).toMatch(/^DANDELION +19:00:00Z$/);
+    expect(lines[0]).toMatch(/^DANDELION +19:00:00$/);
     expect(lines.filter((line) => names.includes(line))).toEqual(names);
     expect(panelOf(output, 'junie').slice(1)).toEqual(['credits                             ######--------------  30%', 'snapshot 6h6m old', '701513 credits · junie']);
     expect(panelOf(output, 'hermes').slice(1)).toEqual([ROW_75, 'Plus · $5.50 of $22 · hermes']);

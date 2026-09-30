@@ -35,8 +35,18 @@ export function repeatChar(char: string, count: number): string {
   return char.repeat(Math.max(0, count));
 }
 
-export function clockTime(instant: string): string {
-  return `${instant.slice(11, 19)}Z`;
+const clockFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function clockFormatter(timeZone: string): Intl.DateTimeFormat {
+  const known = clockFormatters.get(timeZone);
+  if (known !== undefined) return known;
+  const made = new Intl.DateTimeFormat('en-GB', { timeZone, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  clockFormatters.set(timeZone, made);
+  return made;
+}
+
+export function clockTime(instant: string, zone: string): string {
+  return clockFormatter(zone).format(new Date(instant));
 }
 
 export function cellCount(text: string): number {
@@ -57,8 +67,8 @@ export function splitBanner(emphasis: string, right: string, noColor: boolean): 
   return styled(lead, BOLD, noColor) + dim(emphasis, noColor) + styled(rest, BOLD, noColor);
 }
 
-export function renderBanner(instant: string, noColor: boolean): string {
-  return bannerLine(clockTime(instant), noColor);
+export function renderBanner(instant: string, zone: string, noColor: boolean): string {
+  return bannerLine(clockTime(instant, zone), noColor);
 }
 
 function plainRule(noColor: boolean): string {
@@ -248,7 +258,7 @@ export function renderPanel(usage: ProviderUsage, noColor: boolean, now: string,
   }
 }
 
-export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string, ineligible: string[]): string {
+export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string, ineligible: string[], zone: string): string {
   const panels = usages.map((usage) => renderPanel(usage, noColor, now, { selected: false, ineligible: ineligible.includes(usage.id) }));
-  return [renderBanner(now, noColor), ...panels].join('\n');
+  return [renderBanner(now, zone, noColor), ...panels].join('\n');
 }

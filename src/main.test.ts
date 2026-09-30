@@ -163,7 +163,7 @@ describe('main', () => {
     const result = runWithFixtureKilo({});
     expect(result.status).toBe(0);
     expect(result.stdout.startsWith('\x1b[1mDANDELION ')).toBe(true);
-    expect(result.stdout).toMatch(/^\S+DANDELION +\d{2}:\d{2}:\d{2}Z\S+\n/);
+    expect(result.stdout).toMatch(/^\S+DANDELION +\d{2}:\d{2}:\d{2}\S+\n/);
     expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\x1b[0m\nkilo\n' + 'balance $14.15'.padEnd(35) + ' \x1b[32m' + '█'.repeat(14) + '░'.repeat(6) + '\x1b[0m \x1b[32m 71%\x1b[0m' + ' '.repeat(11) + '\n\x1b[90mapi balance · kilo\x1b[0m');
     expect(result.stdout).not.toContain('not found');
   });
@@ -201,7 +201,7 @@ describe('main', () => {
     await main(profileIo, { NO_COLOR: '1', DANDELION_ROUTES_FILE: ROUTES_FILE }, { stdout: { write: (out: string) => { output += out; } }, stderr }, '2026-09-13T10:00:00.000Z');
     expect(stderr.write).toHaveBeenCalledWith('');
     expect(output).toContain('DANDELION');
-    expect(output).toContain('10:00:00Z');
+    expect(output).toContain('10:00:00');
     expect(output).toContain('$14.15');
     expect(output.endsWith('\n')).toBe(true);
   });
@@ -222,7 +222,7 @@ describe('main', () => {
   ])('runIfMain runs once with %s', async (_case, argv, stdinTTY, stdoutTTY) => {
     const { proc, output, keyboard } = procOf(argv, stdinTTY, stdoutTTY);
     await runIfMain(MAIN_URL, MAIN, profileIo, proc);
-    expect(output()).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z\n/);
+    expect(output()).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}\n/);
     expect(output()).not.toContain('probing…');
     expect(output()).not.toContain(ENTER_ALTERNATE);
     expect(keyboard.setRawMode).not.toHaveBeenCalled();
@@ -234,7 +234,7 @@ describe('main', () => {
       symlinkSync(MAIN, join(dir, 'dandelion'));
       const { proc, output } = procOf(['node', join(dir, 'dandelion'), '--once'], true, true);
       await runIfMain(MAIN_URL, join(dir, 'dandelion'), profileIo, proc);
-      expect(output()).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z\n/);
+      expect(output()).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}\n/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -342,7 +342,7 @@ describe('main', () => {
     vi.mocked(runRoute).mockClear();
     const { proc, output } = procOf(['node', MAIN, ...args], true, false);
     await runIfMain(MAIN_URL, MAIN, profileIo, proc);
-    expect(output()).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z\n/);
+    expect(output()).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}\n/);
     expect(runRoute).not.toHaveBeenCalled();
     expect(proc.exit).not.toHaveBeenCalled();
   });
@@ -547,7 +547,7 @@ describe('main', () => {
       for (const run of runs) {
         expect(run.status).toBe(0);
         const lines = run.stdout.split('\n');
-        expect(lines[0]).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+        expect(lines[0]).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}$/);
         expect(lines.filter((line) => panelOrder.includes(line))).toEqual(panelOrder);
         expect(lines.every((line) => [...line].length <= 72)).toBe(true);
         expect(run.stdout).not.toMatch(/allowance/i);

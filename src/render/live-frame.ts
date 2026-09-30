@@ -69,7 +69,7 @@ function dataAge(usages: ProviderUsage[], now: string): string {
 }
 
 function liveBanner(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string {
-  const tail = `${dataAge(usages, now)}${clockTime(now)}`;
+  const tail = `${dataAge(usages, now)}${clockTime(now, view.zone)}`;
   return view.refreshing ? splitBanner(REFRESHING, tail, noColor) : bannerLine(tail, noColor);
 }
 

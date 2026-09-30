@@ -188,7 +188,7 @@ describe('live mode on a real terminal', () => {
     run.child.stdin?.destroy();
     expect(status).toEqual([0, null]);
     const lines = run.output.split('\n');
-    expect(lines[0]).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+    expect(lines[0]).toMatch(/^DANDELION +\d{2}:\d{2}:\d{2}$/);
     expect(lines.filter((line) => IDS.includes(line))).toEqual(IDS);
     expect(run.output.split('DANDELION')).toHaveLength(2);
     expect(run.output).not.toContain('probing…');

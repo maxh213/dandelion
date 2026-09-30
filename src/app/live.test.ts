@@ -106,7 +106,7 @@ describe('live session', () => {
     expect(session.keyboard.setEncoding).toHaveBeenCalledWith('utf8');
     expect(session.probes.map(({ calls }) => calls.map((call) => [call.now, call.framesBefore]))).toEqual(IDS.map(() => [[START, 2]]));
     const lines = session.lastFrame().split('\n');
-    expect(lines.slice(0, 2)).toEqual(['DANDELION'.padEnd(63) + '10:00:00Z', 'all windows below 80% · next reset: none']);
+    expect(lines.slice(0, 2)).toEqual(['DANDELION'.padEnd(64) + '10:00:00', 'all windows below 80% · next reset: none']);
     expect(lines.slice(6)).toEqual(IDS.flatMap((id) => ['='.repeat(72), id, '⠋ probing…']));
     session.press('q');
     await session.finished;
@@ -145,7 +145,7 @@ describe('live session', () => {
     const lines = session.lastFrame().split('\n');
     expect(lines.slice(10, 14)).toEqual(['agy', `${'weekly'.padEnd(35)} ##------------------  10%`, 'plan · agy', '='.repeat(72)]);
     expect(lines.filter((line) => line === '⠋ probing…')).toHaveLength(6);
-    expect(lines[0]).toBe('DANDELION'.padEnd(47) + 'data 0h0m old · 10:00:00Z');
+    expect(lines[0]).toBe('DANDELION'.padEnd(48) + 'data 0h0m old · 10:00:00');
     session.press('q');
     await session.finished;
   });
@@ -159,7 +159,7 @@ describe('live session', () => {
     expect(session.frames()).toHaveLength(count);
     await vi.advanceTimersByTimeAsync(1);
     expect(session.frames()).toHaveLength(count + 1);
-    expect(session.lastFrame().split('\n')[0]).toBe('DANDELION'.padEnd(47) + 'data 0h0m old · 10:00:01Z');
+    expect(session.lastFrame().split('\n')[0]).toBe('DANDELION'.padEnd(48) + 'data 0h0m old · 10:00:01');
     expect(session.lastFrame()).not.toContain('probing…');
     session.press('q');
     await session.finished;
@@ -174,10 +174,10 @@ describe('live session', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
     expect(session.probes[0].calls[1].now).toBe('2026-09-13T10:00:01.000Z');
-    expect(session.lastFrame().split('\n')[0]).toBe('DANDELION'.padEnd(33) + 'refreshing… · data 0h0m old · 10:00:01Z');
+    expect(session.lastFrame().split('\n')[0]).toBe('DANDELION'.padEnd(34) + 'refreshing… · data 0h0m old · 10:00:01');
     expect(session.lastFrame()).not.toContain('probing…');
     await session.settleRound(1);
-    expect(session.lastFrame().split('\n')[0]).toBe('DANDELION'.padEnd(47) + 'data 0h0m old · 10:00:01Z');
+    expect(session.lastFrame().split('\n')[0]).toBe('DANDELION'.padEnd(48) + 'data 0h0m old · 10:00:01');
     await vi.advanceTimersByTimeAsync(1000);
     expect(session.probes[0].calls).toHaveLength(3);
     session.press('q');
@@ -190,7 +190,7 @@ describe('live session', () => {
     await vi.advanceTimersByTimeAsync(60000);
     session.probes.slice(1).forEach(({ probe, calls }) => calls[1].resolve(usageOf(probe.id, calls[1].now)));
     await vi.advanceTimersByTimeAsync(0);
-    expect(session.lastFrame().split('\n')[0]).toBe('DANDELION'.padEnd(33) + 'refreshing… · data 0h1m old · 10:01:00Z');
+    expect(session.lastFrame().split('\n')[0]).toBe('DANDELION'.padEnd(34) + 'refreshing… · data 0h1m old · 10:01:00');
     session.press('q');
     await session.finished;
   });
@@ -313,7 +313,7 @@ describe('live session', () => {
     await vi.advanceTimersByTimeAsync(5000);
     session.press('r');
     expect(session.probes[0].calls).toHaveLength(2);
-    expect(session.lastFrame().split('\n')[0]).toContain('refreshing… · data 0h0m old · 10:00:05Z');
+    expect(session.lastFrame().split('\n')[0]).toContain('refreshing… · data 0h0m old · 10:00:05');
     session.press('r');
     expect(session.probes[0].calls).toHaveLength(2);
     await session.settleRound(1);

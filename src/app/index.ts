@@ -264,7 +264,7 @@ export function routesWarning(env: Record<string, string | undefined>): string {
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
   const usages = await probeOnce(io, env, now);
   const noColor = env['NO_COLOR'] !== undefined;
-  return renderDashboard(usages, noColor, now, eligibilityOf(io, env).ineligible());
+  return renderDashboard(usages, noColor, now, eligibilityOf(io, env).ineligible(), processZone());
 }
 
 export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, request: RouteRequest): Promise<RouteOutput> {

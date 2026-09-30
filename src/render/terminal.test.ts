@@ -10,6 +10,8 @@ import {
   renderWindowRow,
   styleToken,
   STYLE_TOKENS,
+  cellCount,
+  clockTime,
   type PanelMarks
 } from './terminal.ts';
 import { renderLiveFrame, type LiveView } from './live-frame.ts';
@@ -40,14 +42,33 @@ const PLAIN: PanelMarks = { selected: false, ineligible: false };
 
 describe('terminal renderer', () => {
   it('renders banner', () => {
-    const banner = renderBanner('2026-09-13T10:00:00.000Z', true);
+    const banner = renderBanner('2026-09-13T10:00:00.000Z', 'UTC', true);
     expect(banner).toContain('DANDELION');
-    expect(banner).toContain('10:00:00Z');
+    expect(banner).toContain('10:00:00');
     expect(banner).toHaveLength(72);
   });
 
+  it('renders the banner clock in the given zone without a Z suffix', () => {
+    const instant = '2026-09-30T18:43:05Z';
+    const london = renderBanner(instant, 'Europe/London', true);
+    expect(london.endsWith('19:43:05')).toBe(true);
+    expect(london).not.toContain('Z');
+    expect(renderBanner(instant, 'UTC', true).endsWith('18:43:05')).toBe(true);
+  });
+
+  it.each([true, false])('keeps the banner 72 cells wide in any zone with noColor %s', (noColor) => {
+    const plain = (text: string): string => text.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g'), '');
+    expect(cellCount(plain(renderBanner('2026-09-30T18:43:05Z', 'Asia/Kolkata', noColor)))).toBe(72);
+    expect(plain(renderBanner('2026-09-30T23:59:59Z', 'Pacific/Auckland', noColor)).endsWith('12:59:59')).toBe(true);
+  });
+
+  it('renders midnight as 00 with a fixed locale and h23 cycle', () => {
+    expect(clockTime('2026-09-30T04:00:00Z', 'America/New_York')).toBe('00:00:00');
+    expect(clockTime('2026-09-30T03:59:59Z', 'America/New_York')).toBe('23:59:59');
+  });
+
   it('renders banner with color', () => {
-    const banner = renderBanner('2026-09-13T10:00:00.000Z', false);
+    const banner = renderBanner('2026-09-13T10:00:00.000Z', 'UTC', false);
     expect(banner).toContain('\x1b[1m');
   });
 
@@ -294,18 +315,18 @@ describe('terminal renderer', () => {
         reason: 'Probe crashed'
       }
     ];
-    const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z', []);
+    const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z', [], 'UTC');
     expect(dash).toContain('DANDELION');
     expect(dash).toContain('##############------');
     expect(dash).toContain('other\nProbe crashed');
 
-    const dashColor = renderDashboard(usages, false, '2026-09-13T10:00:00.000Z', []);
+    const dashColor = renderDashboard(usages, false, '2026-09-13T10:00:00.000Z', [], 'UTC');
     expect(dashColor).toContain('\x1b[90m');
   });
 
   it('rejects a provider status it does not know', () => {
     const usage = { id: 'x', displayName: 'x', windows: [], fetchedAt: 'now', status: 'bogus' } as unknown as ProviderUsage;
-    expect(() => renderDashboard([usage], true, '2026-09-13T10:00:00.000Z', [])).toThrow('Unexpected provider status');
+    expect(() => renderDashboard([usage], true, '2026-09-13T10:00:00.000Z', [], 'UTC')).toThrow('Unexpected provider status');
   });
 });
 
@@ -447,15 +468,25 @@ describe('live frame', () => {
     expect(summaryOf([failed])).toBe('all windows below 80% · next reset: none');
   });
 
+  it('renders the live banner variants in the view zone', () => {
+    const now = '2026-09-30T18:43:05.000Z';
+    const fetched = okUsage('claude', [], { fetchedAt: now });
+    const london = (extra: Partial<LiveView> = {}): string => renderLiveFrame(viewOf([fetched], { zone: 'Europe/London', ...extra }), true, now).split('\n')[0] ?? '';
+    expect(london().endsWith('data 0h0m old · 19:43:05')).toBe(true);
+    expect(london({ refreshing: true }).endsWith('refreshing… · data 0h0m old · 19:43:05')).toBe(true);
+    expect(cellCount(london())).toBe(72);
+    expect(cellCount(london({ refreshing: true }))).toBe(72);
+  });
+
   it('shows only the clock in the banner while nothing has settled', () => {
     const frame = renderLiveFrame(viewOf([undefined]), true, NOW).split('\n');
-    expect(frame[0]).toBe(renderBanner(NOW, true));
+    expect(frame[0]).toBe(renderBanner(NOW, 'UTC', true));
   });
 
   it('shows the age of the oldest on-screen result in the banner', () => {
     const usages = [okUsage('claude', [], { fetchedAt: NOW }), okUsage('agy', [], { fetchedAt: '2026-09-13T09:58:00.000Z' }), okUsage('kilo', [], { fetchedAt: '2026-09-13T09:59:00.000Z' })];
     const frame = renderLiveFrame(viewOf([...usages, undefined]), true, '2026-09-13T10:00:30.000Z').split('\n');
-    expect(frame[0]).toBe('DANDELION'.padEnd(47) + 'data 0h2m old · 10:00:30Z');
+    expect(frame[0]).toBe('DANDELION'.padEnd(48) + 'data 0h2m old · 10:00:30');
   });
 
   it('renders a pending panel as the rule, the id and the spinner frame for the tick', () => {
@@ -469,15 +500,15 @@ describe('live frame', () => {
   it('colours the refreshing banner in spans, the summary and the footer dim, and panels as in once mode', () => {
     const frameNow = '2026-09-13T10:01:05.000Z';
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), false, frameNow).split('\n');
-    expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(24)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05Z${RESET}`);
+    expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
     expect(lines.at(-1)).toBe(`\x1b[90mkeys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help${RESET}`);
-    expect(lines.slice(6, -2).join('\n')).toBe(renderDashboard(background(), false, frameNow, []).split('\n').slice(1).join('\n'));
+    expect(lines.slice(6, -2).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n'));
   });
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
     const lines = renderLiveFrame(viewOf(background(), { refreshing: true, footer: true }), true, '2026-09-13T10:01:05.000Z').split('\n');
-    expect(lines[0]).toBe('DANDELION'.padEnd(33) + 'refreshing… · data 0h1m old · 10:01:05Z');
+    expect(lines[0]).toBe('DANDELION'.padEnd(34) + 'refreshing… · data 0h1m old · 10:01:05');
     expect(lines.at(-1)).toBe('keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
   });
@@ -485,7 +516,7 @@ describe('live frame', () => {
   describe('frame height and scrolling', () => {
     const LATER = '2026-09-16T10:00:00.000Z';
     const RULE = '='.repeat(72);
-    const BANNER = `${'DANDELION'.padEnd(47)}data 0h0m old · 10:00:00Z`;
+    const BANNER = `${'DANDELION'.padEnd(48)}data 0h0m old · 10:00:00`;
     const SUMMARY = '8/14 windows above 80% · next reset: claude session in 3d0h';
     const FOOTER = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
     const BOX_BLOCK = [
@@ -546,7 +577,7 @@ describe('live frame', () => {
     it('opens the all-pending frame on the probing boxes and the first two pending panels', () => {
       const slots = tenPanels().map(({ id }) => ({ id, usage: undefined }));
       expect(renderLiveFrame(tenPanelView({ slots, settled: undefined }), true, NOW).split('\n')).toEqual([
-        `${'DANDELION'.padEnd(63)}10:00:00Z`,
+        `${'DANDELION'.padEnd(64)}10:00:00`,
         'all windows below 80% · next reset: none',
         BOX_BLOCK[0],
         `| ${'⠋ probing…'.padEnd(31)} |  | ${'⠋ probing…'.padEnd(31)} |`,
@@ -614,7 +645,7 @@ describe('live frame', () => {
     });
 
     it('never clips the once dashboard and draws no boxes there', () => {
-      const once = renderDashboard(tenPanels(), true, NOW, []);
+      const once = renderDashboard(tenPanels(), true, NOW, [], 'UTC');
       expect(once.split('\n')).toHaveLength(50);
       expect(once).not.toContain('+- route');
       const ids = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
@@ -681,9 +712,9 @@ describe('panel marks', () => {
 
   it('tags the ineligible panels of the once dashboard and nothing else', () => {
     const kilo: ProviderUsage = { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok' };
-    const lines = renderDashboard([freshClaude, unavailableClaude, kilo], true, NOW, ['kilo']).split('\n');
+    const lines = renderDashboard([freshClaude, unavailableClaude, kilo], true, NOW, ['kilo'], 'UTC').split('\n');
     expect(lines.filter((line) => line.includes('routing off'))).toEqual([`kilo${' '.repeat(57)}routing off`]);
-    expect(renderDashboard([freshClaude, kilo], true, NOW, [])).not.toContain('▸');
+    expect(renderDashboard([freshClaude, kilo], true, NOW, [], 'UTC')).not.toContain('▸');
   });
 });
 
@@ -927,8 +958,8 @@ describe('route boxes', () => {
   });
 
   it('never draws the boxes in the once dashboard', () => {
-    expect(renderDashboard(ROUTED, true, NOW, [])).not.toContain('+- route');
-    expect(renderDashboard(ROUTED, false, NOW, [])).not.toContain('┌─ route');
+    expect(renderDashboard(ROUTED, true, NOW, [], 'UTC')).not.toContain('+- route');
+    expect(renderDashboard(ROUTED, false, NOW, [], 'UTC')).not.toContain('┌─ route');
   });
 });
 
@@ -967,7 +998,7 @@ describe('style balance', () => {
   });
 
   it('closes every styled line of the once dashboard', () => {
-    const lines = renderDashboard(mixed, false, NOW, ['kilo']).split('\n');
+    const lines = renderDashboard(mixed, false, NOW, ['kilo'], 'UTC').split('\n');
     expect(lines.filter((line) => line.includes('\x1b['))).not.toHaveLength(0);
     expect(lines.every(closed)).toBe(true);
     expect(lines.filter((line) => line.includes('token expired') || line.includes('stale'))).toSatisfy((dimmed: string[]) =>
@@ -990,7 +1021,7 @@ describe('style balance', () => {
   });
 
   it('leaves NO_COLOR output free of escapes', () => {
-    expect(renderDashboard(mixed, true, NOW, [])).not.toContain('\x1b');
+    expect(renderDashboard(mixed, true, NOW, [], 'UTC')).not.toContain('\x1b');
     expect(renderLiveFrame(liveViewOf(mixed, 12), true, NOW)).not.toContain('\x1b');
   });
 });
