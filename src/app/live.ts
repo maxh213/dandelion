@@ -46,6 +46,7 @@ type Session = LiveOptions & {
   clock: () => string;
   results: LiveSlot['usage'][];
   inFlight: Set<number>;
+  generations: number[];
   settled: SettledRound | undefined;
   noColor: boolean;
   refreshMs: number;
@@ -184,6 +185,7 @@ function startRound(session: Session): void {
   session.rounds += 1;
   const now = session.clock();
   session.probes.forEach((_, index) => session.inFlight.add(index));
+  session.generations = session.generations.map((generation) => generation + 1);
   const settling = session.probes.map(({ probe }, index) => probe(now).then((usage) => settle(session, index, usage)));
   void Promise.allSettled(settling).then(() => endRound(session));
 }
@@ -192,6 +194,27 @@ function refresh(session: Session): void {
   if (session.running || session.quitting) return;
   clearTimeout(session.refreshTimer);
   startRound(session);
+  draw(session);
+}
+
+function settlePanel(session: Session, index: number, generation: number, usage: LiveSlot['usage']): void {
+  if (session.generations[index] !== generation) return;
+  settle(session, index, usage);
+  session.settled = session.results.filter((result) => result !== undefined);
+  draw(session);
+}
+
+function panelBusy(session: Session, index: number): boolean {
+  return session.running === true || session.quitting || session.inFlight.has(index);
+}
+
+function refreshPanel(session: Session): void {
+  const index = session.selected;
+  if (index < 0 || panelBusy(session, index)) return;
+  session.generations[index] += 1;
+  const generation = session.generations[index];
+  session.inFlight.add(index);
+  void session.probes[index].probe(session.clock()).then((usage) => settlePanel(session, index, generation, usage));
   draw(session);
 }
 
@@ -332,6 +355,8 @@ async function quit(session: Session): Promise<void> {
 
 const KEYS = new Map<string, (session: Session) => unknown>([
   ['r', refresh],
+  ['R', refreshPanel],
+  ['\r', refreshPanel],
   ['t', toggleResetTimes],
   ['c', copyRoute],
   ['C', copyHigh],
@@ -369,6 +394,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       clock: options.clock ?? wallClock,
       results: options.probes.map(() => undefined),
       inFlight: new Set(),
+      generations: options.probes.map(() => 0),
       settled: undefined,
       noColor: options.env['NO_COLOR'] !== undefined,
       refreshMs: refreshMsOf(options.env),

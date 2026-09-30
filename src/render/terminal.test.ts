@@ -696,7 +696,7 @@ describe('live frame', () => {
     });
 
     it('keeps the help footer as the last line of the frame', () => {
-      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -2), 'h hide · H show hidden', 'g usage graph of the selected panel · esc/q/g back', FOOTER]);
+      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -2), 'h hide · H show hidden · R refresh panel', 'g usage graph of the selected panel · esc/q/g back', FOOTER]);
     });
 
     it.each<[number, string[]]>([

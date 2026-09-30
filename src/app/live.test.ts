@@ -459,7 +459,7 @@ describe('live session', () => {
     expect(claude[6]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 9), 'h hide · H show hidden', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 9), 'h hide · H show hidden · R refresh panel', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
     session.press('q');
     await session.finished;
   });
@@ -496,6 +496,77 @@ describe('live session', () => {
     expect(session.probes[0].calls).toHaveLength(2);
     await vi.advanceTimersByTimeAsync(1);
     expect(session.probes[0].calls).toHaveLength(3);
+    session.press('q');
+    await session.finished;
+  });
+
+  it.each([['R'], ['\r']])('re-probes only the selected panel on %j with a fresh instant and recomputes the routes', async (key) => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '10' } });
+    await session.settleRound(0);
+    await vi.advanceTimersByTimeAsync(3000);
+    session.press('j');
+    session.press('j');
+    session.press('j');
+    const before = session.lastFrame();
+    session.press(key);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual([1, 1, 2, 1, 1, 1, 1]);
+    expect(session.probes[2].calls[1].now).toBe('2026-09-13T10:00:03.000Z');
+    expect(session.lastFrame()).toMatch(/▸ kimi [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
+    expect(session.lastFrame().split('\n').slice(0, 6)).toEqual(before.split('\n').slice(0, 6));
+    session.probes[2].calls[1].resolve({ ...usageOf('kimi', '2026-09-13T10:00:03.000Z'), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 77 }] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.lastFrame()).toContain('77%');
+    expect(session.lastFrame()).not.toContain('probing');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('does not reset the refresh timer when a single panel settles', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '10' } });
+    await session.settleRound(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    session.press('j');
+    session.press('R');
+    session.probes[0].calls[1].resolve(usageOf('claude', START));
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(session.probes[1].calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.probes[1].calls).toHaveLength(2);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('ignores R without a selection, while a round runs and while that panel is probing', async () => {
+    const session = startSession();
+    session.press('R');
+    session.press('j');
+    session.press('R');
+    session.press('\r');
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
+    await session.settleRound(0);
+    session.press('R');
+    session.press('R');
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual([2, ...IDS.slice(1).map(() => 1)]);
+    session.press('q');
+    session.press('R');
+    await session.finished;
+    expect(session.probes[0].calls).toHaveLength(2);
+  });
+
+  it('starts a full round while a single panel probe runs and drops the stale single result', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '10' } });
+    await session.settleRound(0);
+    session.press('j');
+    session.press('R');
+    session.press('r');
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual([3, ...IDS.slice(1).map(() => 2)]);
+    session.probes.slice(1).forEach(({ probe, calls }) => calls[1].resolve(usageOf(probe.id, calls[1].now)));
+    session.probes[0].calls[2].resolve({ ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 33 }] });
+    await vi.advanceTimersByTimeAsync(0);
+    session.probes[0].calls[1].resolve({ ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 99 }] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.lastFrame()).toContain('33%');
+    expect(session.lastFrame()).not.toContain('99%');
     session.press('q');
     await session.finished;
   });
