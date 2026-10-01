@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { isEntryFile, routesWarning, runApp, runJson, runLine, runLive, runRoute, runRun, runWaybar, realIo, realNotifier, realRunSpawner } from './index.ts';
+import { isEntryFile, routesWarning, runApp, runJson, runLine, runLive, runRoute, runRun, runWaybar, realIo, realNotifier, realRunLauncher, realRunSpawner } from './index.ts';
 import type { RunSpawner } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
@@ -1892,6 +1892,49 @@ describe('runRun', () => {
     await runRun(routedRunner(), env, headroom, [], fakeSpawner().spawner);
     expect(await runRoute(routedRunner(), env, headroom)).toEqual(before);
     expect(before).toEqual({ out: 'model-a max claude\n', err: '', code: 0 });
+  });
+
+  describe('realRunLauncher', () => {
+    const fakeChild = () => Object.assign(new EventEmitter(), { exitCode: null, signalCode: null, kill: vi.fn() });
+    const counts = () => ['SIGINT', 'SIGTERM', 'SIGHUP'].map((name) => process.listenerCount(name));
+
+    it('ignores SIGINT while the child runs and still resolves with the child status', async () => {
+      const child = fakeChild();
+      spawnSpy.mockImplementationOnce(() => child);
+      const before = counts();
+      const running = realRunLauncher.spawn({ command: 'claude', args: [], env: {} });
+      const settled = vi.fn();
+      void running.then(settled);
+      process.emit('SIGINT');
+      await Promise.resolve();
+      expect(settled).not.toHaveBeenCalled();
+      expect(child.kill).not.toHaveBeenCalled();
+      child.emit('close', null, 'SIGINT');
+      expect(await running).toBe(130);
+      expect(counts()).toEqual(before);
+    });
+
+    it.each<[NodeJS.Signals, number]>([['SIGTERM', 143], ['SIGHUP', 129]])('forwards %s to the child and resolves only after it exits with %i', async (signal, status) => {
+      const child = fakeChild();
+      spawnSpy.mockImplementationOnce(() => child);
+      const before = counts();
+      const running = realRunLauncher.spawn({ command: 'claude', args: [], env: {} });
+      const settled = vi.fn();
+      void running.then(settled);
+      process.emit(signal);
+      await Promise.resolve();
+      expect(child.kill).toHaveBeenCalledExactlyOnceWith(signal);
+      expect(settled).not.toHaveBeenCalled();
+      child.emit('close', null, signal);
+      expect(await running).toBe(status);
+      expect(counts()).toEqual(before);
+    });
+
+    it('removes its handlers when the command is missing', async () => {
+      const before = counts();
+      expect(await realRunLauncher.spawn({ command: 'dandelion-no-such-cli', args: [], env: {} })).toBe('missing');
+      expect(counts()).toEqual(before);
+    });
   });
 
   describe('realRunSpawner', () => {

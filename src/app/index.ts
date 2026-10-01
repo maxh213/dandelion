@@ -386,7 +386,33 @@ export const realRunSpawner: RunSpawner & FixRunner = {
   }
 };
 
-export type RunOutput = { err: string; code: number };
+const FORWARDED: NodeJS.Signals[] = ['SIGTERM', 'SIGHUP'];
+
+function ignoreInterrupt(): void {
+  return undefined;
+}
+
+function forwarderOf(signal: NodeJS.Signals): () => void {
+  return () => {
+    foreground.child?.kill(signal);
+  };
+}
+
+export const realRunLauncher: RunSpawner = {
+  async spawn(launch) {
+    process.on('SIGINT', ignoreInterrupt);
+    const forwarders = FORWARDED.map((signal) => [signal, forwarderOf(signal)] as const);
+    forwarders.forEach(([signal, forward]) => process.on(signal, forward));
+    try {
+      return await realRunSpawner.spawn(launch);
+    } finally {
+      process.off('SIGINT', ignoreInterrupt);
+      forwarders.forEach(([signal, forward]) => process.off(signal, forward));
+    }
+  }
+};
+
+export type RunOutput ={ err: string; code: number };
 
 function missingCommand(command: string): RunOutput {
   return { err: `dandelion: ${command}: command not found\n`, code: 127 };

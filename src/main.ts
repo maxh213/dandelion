@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { disableWarning, isEntryFile, processZone, routesWarning, runApp, runJson, runLine, runWaybar, isMaxAge, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
+import { disableWarning, isEntryFile, processZone, routesWarning, runApp, runJson, runLine, runWaybar, isMaxAge, runLive, runRoute, runRun, realIo, realRunLauncher, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -58,7 +58,7 @@ async function waybar(io: ProbeIo, proc: Proc): Promise<void> {
 async function run(io: ProbeIo, proc: Proc): Promise<void> {
   const args = proc.argv.slice(3);
   const own = runOwnArgs(args);
-  const { err, code } = await runRun(io, proc.env, { mode: runModeOf(own), now: new Date().toISOString(), zone: processZone(), maxAge: maxAgeOf(own) }, args, realRunSpawner);
+  const { err, code } = await runRun(io, proc.env, { mode: runModeOf(own), now: new Date().toISOString(), zone: processZone(), maxAge: maxAgeOf(own) }, args, realRunLauncher);
   proc.stderr.write(err);
   proc.exit(code);
 }

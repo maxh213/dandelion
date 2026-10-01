@@ -246,7 +246,7 @@ describe('main', () => {
     }
   });
 
-  it.each<[string[]]>([[['--once']], [['route']], [['route', '--high']], [['--json']], [['--line']], [['--waybar']], [['run']]])('runIfMain %j installs no SIGTERM or SIGHUP handler', async (args) => {
+  it.each<[string[]]>([[['--once']], [['route']], [['route', '--high']], [['--json']], [['--line']], [['--waybar']]])('runIfMain %j installs no SIGTERM or SIGHUP handler', async (args) => {
     const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(0);
     const on = vi.spyOn(process, 'on');
     const before = [process.listenerCount('SIGTERM'), process.listenerCount('SIGHUP')];
