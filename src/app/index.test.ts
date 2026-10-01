@@ -3427,17 +3427,16 @@ describe('claude status line wiring', () => {
       expect(urls.filter((url) => url === CURSOR_URL)).toHaveLength(1);
     });
 
-    it('colours major for cursor with the hot token and minor for codex with the warm one', async () => {
+    it('draws the codex minor line in the warm colour and the cursor major line in the hot colour', async () => {
       const answers = { [OPENAI_URL]: { status: 200, body: bodyOf('minor', 'Slow') }, [CURSOR_URL]: { status: 200, body: bodyOf('major', 'Outage') } };
       const dashboard = startDashboard(byUrl(answers), {});
       await settle();
       const lines = dashboard.lastFrame().split('\n');
       dashboard.press('q');
       await dashboard.finished;
-      const coloured = lines.filter((line) => line.includes('status: '));
-      expect(coloured).toHaveLength(2);
-      expect(coloured[0]).not.toBe(coloured[1].replace('Outage', 'Slow'));
-      expect(plain(coloured[1])).toBe('status: Outage');
+      const under = (id: string) => lines[lines.findIndex((line) => plain(line) === id || plain(line).startsWith(`${id} `)) + 1];
+      expect(under('codex')).toContain('\x1b[33mstatus: Slow');
+      expect(under('cursor')).toContain('\x1b[31mstatus: Outage');
     });
 
     it('honours the env urls, falls back on empty values and skips disabled providers', async () => {
@@ -3461,13 +3460,16 @@ describe('claude status line wiring', () => {
       expect(lines.filter((line) => line.startsWith('status:'))).toEqual([]);
     });
 
-    it('records every request of --once, --json, route, route --high and run and sees neither url', async () => {
+    it('records every request of --once, --json, --line, --waybar, route, route --high and run and sees neither url', async () => {
       const urls: string[] = [];
       const io = byUrl({}, urls);
       const request = { now: NOW, zone: 'UTC' };
       const env = { DANDELION_ROUTES_FILE: ROUTES_FILE };
       await runApp(io, { NO_COLOR: '1' }, NOW);
       await runJson(io, env, request);
+      const lineEnv = { ...env, DANDELION_STATE_FILE: join(mkdtempSync(join(tmpdir(), 'dandelion-status-')), 'state.json') };
+      await runLine(io, lineEnv, request);
+      await runWaybar(io, lineEnv, request);
       await routeWith(io, {}, { mode: 'headroom', ...request });
       await routeWith(io, {}, { mode: 'high', ...request });
       await runRun(io, env, { mode: 'headroom', ...request }, [], { spawn: vi.fn<RunSpawner['spawn']>(async () => 0) });
