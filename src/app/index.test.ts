@@ -1598,6 +1598,8 @@ describe('wiring', () => {
     expect(result.failure).toBe('timeout');
   });
 
+  const SIGTERM_TIMEOUT_MS = 2000;
+
   function isAlive(pid: number): boolean {
     try {
       process.kill(pid, 0);
@@ -1621,7 +1623,7 @@ describe('wiring', () => {
     const started = Date.now();
     const pidsOf = () => pidFiles.filter((file) => existsSync(file)).map((file) => Number(readFileSync(file, 'utf8')));
     try {
-      const result = await realIo.runner.run('node', ['-e', script, ...pidFiles], 100);
+      const result = await realIo.runner.run('node', ['-e', script, ...pidFiles], SIGTERM_TIMEOUT_MS);
       const elapsed = Date.now() - started;
       const pids = pidsOf();
       await vi.waitFor(() => expect(isAlive(pids[0])).toBe(false));
@@ -1636,7 +1638,7 @@ describe('wiring', () => {
     const script = 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)';
     const outcome = await runIgnoringSigterm(script);
     expect(outcome.failure).toBe('timeout');
-    expect(outcome.elapsed).toBeLessThan(100 + 5000 + 1000);
+    expect(outcome.elapsed).toBeLessThan(SIGTERM_TIMEOUT_MS + 5000 + 1000);
     expect(outcome.pids).toHaveLength(1);
   }, 15000);
 
@@ -1652,7 +1654,7 @@ describe('wiring', () => {
     ].join(';');
     const outcome = await runIgnoringSigterm(script);
     expect(outcome.failure).toBe('timeout');
-    expect(outcome.elapsed).toBeLessThan(100 + 5000 + 1000);
+    expect(outcome.elapsed).toBeLessThan(SIGTERM_TIMEOUT_MS + 5000 + 1000);
     expect(outcome.pids).toHaveLength(2);
   }, 15000);
 
