@@ -557,7 +557,9 @@ describe('live session', () => {
       await session.settleRound(0, { claude: withWindow('claude', 90), agy: withWindow('agy', 20) });
       expect(headers(session).indexOf('agy')).toBeLessThan(headers(session).indexOf('claude'));
       expect(session.lastFrame().split('\n')[1]).toMatch(/ · sort: headroom$/);
-      expect(session.lastFrame().split('\n').filter((line) => line.includes('↻')).every((line) => /↻ \w{3} \d{2}:\d{2}$|↻ \w{3} \d{1,2} \d{2}:\d{2}$/.test(line))).toBe(true);
+      const resets = session.lastFrame().split('\n').filter((line) => line.includes('↻'));
+      expect(resets.length).toBeGreaterThan(0);
+      expect(resets.every((line) => /↻ \w{3} \d{2}:\d{2}$|↻ \w{3} \d{1,2} \d{2}:\d{2}$/.test(line))).toBe(true);
       expect(session.viewReplace).not.toHaveBeenCalled();
       session.press('q');
       await session.finished;
@@ -574,7 +576,9 @@ describe('live session', () => {
       await session.settleRound(0, { claude: withWindow('claude', 90), agy: withWindow('agy', 20) });
       expect(headers(session).slice(0, 2)).toEqual(['claude', 'agy']);
       expect(session.lastFrame().split('\n')[1]).not.toContain('sort:');
-      expect(session.lastFrame().split('\n').filter((line) => line.includes('↻')).every((line) => /↻ \d+[dh]\d+[hm]$/.test(line))).toBe(true);
+      const resets = session.lastFrame().split('\n').filter((line) => line.includes('↻'));
+      expect(resets.length).toBeGreaterThan(0);
+      expect(resets.every((line) => /↻ \d+[dh]\d+[hm]$/.test(line))).toBe(true);
       session.press('q');
       await session.finished;
     });
@@ -599,14 +603,17 @@ describe('live session', () => {
     });
 
     it('flashes view state not saved and still applies the mode when the write fails', async () => {
-      const session = startSession({ viewSaves: [false, false] });
-      await session.settleRound(0);
+      const session = startSession({ columns: 120, viewSaves: [false, false] });
+      await session.settleRound(0, { claude: withWindow('claude', 90), agy: withWindow('agy', 20) });
       session.press('s');
       expect(session.lastFrame().split('\n')[1]).toBe('view state not saved');
       session.press('t');
       expect(session.lastFrame().split('\n')[1]).toBe('view state not saved');
       await vi.advanceTimersByTimeAsync(2000);
       expect(session.lastFrame().split('\n')[1]).toMatch(/ · sort: headroom$/);
+      const resets = session.lastFrame().split('\n').filter((line) => line.includes('↻'));
+      expect(resets.length).toBeGreaterThan(0);
+      expect(resets.every((line) => /↻ \w{3} \d{2}:\d{2}$|↻ \w{3} \d{1,2} \d{2}:\d{2}$/.test(line))).toBe(true);
       session.press('q');
       await session.finished;
     });
