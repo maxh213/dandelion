@@ -240,6 +240,28 @@ describe('main', () => {
     }
   });
 
+  it.each<[string[]]>([[['--once']], [['route']], [['route', '--high']], [['--json']], [['run']]])('runIfMain %j installs no SIGTERM or SIGHUP handler', async (args) => {
+    const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(0);
+    const on = vi.spyOn(process, 'on');
+    const before = [process.listenerCount('SIGTERM'), process.listenerCount('SIGHUP')];
+    await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, ...args], true, true).proc);
+    expect(on.mock.calls.filter(([name]) => name === 'SIGTERM' || name === 'SIGHUP')).toEqual([]);
+    expect([process.listenerCount('SIGTERM'), process.listenerCount('SIGHUP')]).toEqual(before);
+    on.mockRestore();
+    spawn.mockRestore();
+  });
+
+  it.each<[NodeJS.Signals, number]>([['SIGTERM', 143], ['SIGHUP', 129]])('runIfMain live dashboard exits %s with %i', async (signal, code) => {
+    const { proc, output, keyboard } = procOf(['node', MAIN], true, true);
+    const running = runIfMain(MAIN_URL, MAIN, profileIo, proc);
+    await vi.waitFor(() => expect(output()).toContain('$14.15'));
+    process.emit(signal);
+    await running;
+    expect(output().endsWith('\x1b[?25h\x1b[?1049l')).toBe(true);
+    expect(keyboard.setRawMode).toHaveBeenLastCalledWith(false);
+    expect(proc.exit).toHaveBeenCalledWith(code);
+  });
+
   it('runIfMain runs the live dashboard on two terminals and exits 0 after q', async () => {
     const { proc, output, keyboard } = procOf(['node', MAIN], true, true);
     const running = runIfMain(MAIN_URL, MAIN, profileIo, proc);
