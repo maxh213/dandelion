@@ -49,7 +49,7 @@ import {
 } from '../render/index.ts';
 import { openClipboard, type CommandTry } from './clipboard.ts';
 import { extraArgs, launchOf, type RunSpawner } from './launch.ts';
-import { startLive, type Keyboard, type Notifier, type Screen } from './live.ts';
+import { startLive, type FixRunner, type Keyboard, type Notifier, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
 export type { RouteMode, RouteOutput } from '../render/index.ts';
@@ -125,15 +125,15 @@ function exitOf(child: ChildProcess): Promise<unknown> {
   return once(child, 'exit').catch(() => undefined);
 }
 
-async function signalUntil(child: ChildProcess, exited: Promise<unknown>): Promise<void> {
+async function signalUntil(child: ChildProcess, exited: Promise<unknown>, signal: NodeJS.Signals = 'SIGTERM'): Promise<void> {
   const escalation = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
-  child.kill('SIGTERM');
+  child.kill(signal);
   await exited;
   clearTimeout(escalation);
 }
 
-function terminate(child: ChildProcess): Promise<void> {
-  return hasExited(child) ? Promise.resolve() : signalUntil(child, exitOf(child));
+function terminate(child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): Promise<void> {
+  return hasExited(child) ? Promise.resolve() : signalUntil(child, exitOf(child), signal);
 }
 
 function logFileIn(logDir: string): string {
@@ -361,13 +361,23 @@ function statusOf(code: number | null, signal: NodeJS.Signals | null): number {
   return code ?? 128 + osConstants.signals[signal as NodeJS.Signals];
 }
 
-export const realRunSpawner: RunSpawner = {
+const foreground: { child?: ChildProcess } = {};
+
+export const realRunSpawner: RunSpawner & FixRunner = {
   spawn({ command, args, env }) {
     return new Promise((resolve) => {
       const child = spawn(command, args, { stdio: 'inherit', env: { ...process.env, ...env } });
+      foreground.child = child;
       child.once('error', () => resolve('missing'));
-      child.once('close', (code, signal) => resolve(statusOf(code, signal)));
+      child.once('close', (code, signal) => {
+        foreground.child = undefined;
+        resolve(statusOf(code, signal));
+      });
     });
+  },
+  terminate(signal) {
+    const { child } = foreground;
+    return child === undefined ? Promise.resolve() : terminate(child, signal);
   }
 };
 

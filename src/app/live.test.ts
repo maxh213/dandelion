@@ -68,7 +68,7 @@ type SessionOverrides = {
 function startSession(overrides: SessionOverrides = {}) {
   const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, notifier, copy, spawn, routes, statusProbe } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
-  const spawner = { spawn: vi.fn(spawn) };
+  const spawner = { spawn: vi.fn(spawn), terminate: vi.fn<(signal: string) => Promise<void>>(async () => undefined) };
   const writes: string[] = [];
   const probes = ids.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), resume: vi.fn() });
@@ -1701,7 +1701,7 @@ describe('fix key', () => {
     const session = startSession({ spawn: () => new Promise((resolve) => (finish = resolve)) });
     await selectGrok(session);
     session.press('x');
-    session.keyboard.emit('data', '\x03');
+    session.deliver('SIGTERM');
     await vi.advanceTimersByTimeAsync(0);
     const writes = session.writes.length;
     finish(0);
@@ -2029,5 +2029,103 @@ describe('re-probe after a reset', () => {
       await session.finished;
       expect(session.lastFrame()).not.toContain('command not found');
     });
+  });
+});
+
+describe('foreground command', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date(START));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const withFix = (id: string): Usage => ({ ...usageOf(id, START), fix: { command: 'grok', args: [], env: {} } });
+
+  function holding() {
+    const exits: ((status: number) => void)[] = [];
+    const session = startSession({ spawn: () => new Promise((resolve) => exits.push(resolve)) });
+    return { session, exits };
+  }
+
+  it.each(['ll', 'lL', 'Ll'])('spawns one command and restores the screen once for the chunk %s', async (chunk) => {
+    const { session, exits } = holding();
+    await session.settleRound(0);
+    const enters = () => session.writes.filter((text) => text === ENTER_ALTERNATE).length;
+    const enteredBefore = enters();
+    session.press(chunk);
+    expect(session.spawner.spawn).toHaveBeenCalledTimes(1);
+    exits[0](0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(enters()).toBe(enteredBefore + 1);
+    expect(session.keyboard.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('spawns one fix and restores the screen once for the chunk xx', async () => {
+    const { session, exits } = holding();
+    await session.settleRound(0, { grok: withFix('grok') });
+    ['j', 'j', 'j', 'j'].forEach((key) => session.press(key));
+    const enters = () => session.writes.filter((text) => text === ENTER_ALTERNATE).length;
+    const enteredBefore = enters();
+    session.press('xx');
+    expect(session.spawner.spawn).toHaveBeenCalledTimes(1);
+    exits[0](0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(enters()).toBe(enteredBefore + 1);
+  });
+
+  it('starts no round for keys that follow the launch in the same chunk, then one round after it exits', async () => {
+    const { session, exits } = holding();
+    await session.settleRound(0);
+    session.press('lrR');
+    expect(session.probes.every(({ calls }) => calls.length === 1)).toBe(true);
+    exits[0](0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.probes.every(({ calls }) => calls.length === 2)).toBe(true);
+  });
+
+  it('ignores every key while the command runs, including quit', async () => {
+    const { session, exits } = holding();
+    await session.settleRound(0);
+    session.press('l');
+    session.press('q');
+    session.press('\x03');
+    session.press('l');
+    expect(session.stopChildren).not.toHaveBeenCalled();
+    expect(session.spawner.spawn).toHaveBeenCalledTimes(1);
+    exits[0](0);
+    await vi.advanceTimersByTimeAsync(0);
+    session.press('q');
+    await session.finished;
+  });
+
+  it.each([['SIGTERM', 143], ['SIGHUP', 129]])('forwards %s to the running command and finishes with %i only once it has exited', async (name, code) => {
+    let exited: () => void = () => undefined;
+    const session = startSession();
+    session.spawner.terminate.mockImplementation(() => new Promise<void>((resolve) => (exited = resolve)));
+    await session.settleRound(0);
+    session.press('l');
+    let result: number | undefined;
+    void session.finished.then((value) => (result = value));
+    session.deliver(name);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(session.spawner.terminate).toHaveBeenCalledTimes(1);
+    expect(session.spawner.terminate).toHaveBeenCalledWith(name);
+    expect(session.stopChildren).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+    exited();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.stopChildren).toHaveBeenCalledTimes(1);
+    expect(result).toBe(code);
+  });
+
+  it('does not terminate a command when none is running', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.deliver('SIGTERM');
+    expect(await session.finished).toBe(143);
+    expect(session.spawner.terminate).not.toHaveBeenCalled();
   });
 });

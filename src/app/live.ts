@@ -14,15 +14,16 @@ export interface Notifier {
 
 type Launch = { command: string; args: string[]; env: Record<string, string> };
 
-interface FixRunner {
+type SignalName = 'SIGINT' | 'SIGTERM' | 'SIGHUP';
+
+export interface FixRunner {
   spawn(launch: Launch): Promise<number | 'missing'>;
+  terminate(signal: SignalName): Promise<void>;
 }
 
 export interface Clipboard {
   copy(text: string): Promise<boolean>;
 }
-
-type SignalName = 'SIGINT' | 'SIGTERM' | 'SIGHUP';
 
 interface Signals {
   on(event: SignalName, listener: () => void): unknown;
@@ -495,7 +496,11 @@ function quitCleanly(session: Session): void {
   void quit(session, 0);
 }
 
-async function quit(session: Session, code: number): Promise<void> {
+async function stopForeground(session: Session, signal: SignalName): Promise<void> {
+  if (session.suspended) await session.spawner.terminate(signal);
+}
+
+async function quit(session: Session, code: number, signal: SignalName = 'SIGTERM'): Promise<void> {
   if (session.quitting) return;
   session.quitting = true;
   clearTimeout(session.frameTimer);
@@ -505,6 +510,7 @@ async function quit(session: Session, code: number): Promise<void> {
   session.keyboard.setRawMode(false);
   session.keyboard.pause();
   for (const [name, listener] of session.terminators) session.signals.off(name, listener);
+  await stopForeground(session, signal);
   await session.stopChildren();
   session.done(code);
 }
@@ -512,7 +518,7 @@ async function quit(session: Session, code: number): Promise<void> {
 const TERMINATION_CODES: [SignalName, number][] = [['SIGTERM', 143], ['SIGHUP', 129]];
 
 function listenForTermination(session: Session): void {
-  session.terminators = TERMINATION_CODES.map(([name, code]) => [name, () => void quit(session, code)]);
+  session.terminators = TERMINATION_CODES.map(([name, code]) => [name, () => void quit(session, code, name)]);
   for (const [name, listener] of session.terminators) session.signals.on(name, listener);
 }
 
@@ -545,7 +551,10 @@ const KEYS = new Map<string, (session: Session) => unknown>([
 const TOKEN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]|[\\s\\S]`, 'gu');
 
 function press(session: Session, chunk: string): void {
-  for (const [key] of chunk.matchAll(TOKEN)) KEYS.get(key)?.(session);
+  for (const [key] of chunk.matchAll(TOKEN)) {
+    if (session.suspended) return;
+    KEYS.get(key)?.(session);
+  }
 }
 
 export function startLive(options: LiveOptions): Promise<number> {

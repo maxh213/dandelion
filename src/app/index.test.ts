@@ -1902,6 +1902,27 @@ describe('runRun', () => {
     it('resolves missing when the command does not exist', async () => {
       expect(await realRunSpawner.spawn({ command: 'dandelion-no-such-cli', args: [], env: {} })).toBe('missing');
     });
+
+    it('terminate forwards the signal to the running command and resolves once it has exited', async () => {
+      const running = realRunSpawner.spawn({ command: process.execPath, args: ['-e', 'process.on("SIGHUP", () => process.exit(7)); setInterval(() => undefined, 1000); console.log("up")'], env: {} });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await realRunSpawner.terminate('SIGHUP');
+      expect(await running).toBe(7);
+    });
+
+    it('terminate SIGKILLs a command that ignores the signal after 5s', async () => {
+      const running = realRunSpawner.spawn({ command: process.execPath, args: ['-e', 'process.on("SIGTERM", () => undefined); setInterval(() => undefined, 1000); console.log("up")'], env: {} });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const started = Date.now();
+      await realRunSpawner.terminate('SIGTERM');
+      expect(Date.now() - started).toBeGreaterThanOrEqual(4500);
+      expect(await running).toBe(137);
+    }, 15000);
+
+    it('terminate resolves at once when nothing was spawned or the command already ended', async () => {
+      await realRunSpawner.spawn({ command: process.execPath, args: ['-e', ''], env: {} });
+      await expect(realRunSpawner.terminate('SIGTERM')).resolves.toBeUndefined();
+    });
   });
 });
 
