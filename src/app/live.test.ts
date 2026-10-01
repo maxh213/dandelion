@@ -320,6 +320,58 @@ describe('live session', () => {
     await session.finished;
   });
 
+  describe('hot refresh', () => {
+    const rolling = (id: string, usedPct: number, kind: 'rolling' | 'weekly' = 'rolling'): Usage => ({ ...usageOf(id, START), windows: [{ label: kind, kind, usedPct }] });
+    const nextRoundAfter = async (env: Record<string, string | undefined>, overrides: Record<string, Usage>, state: Record<string, unknown>, seconds: number) => {
+      const session = startSession({ env: { NO_COLOR: '1', ...env }, state });
+      await session.settleRound(0, overrides);
+      await vi.advanceTimersByTimeAsync(seconds * 1000 - 1);
+      const before = session.probes[4].calls.length;
+      await vi.advanceTimersByTimeAsync(1);
+      const after = session.probes[4].calls.length;
+      session.press('q');
+      await session.finished;
+      return [before, after];
+    };
+    const HOT = { DANDELION_HOT_REFRESH_SECONDS: '60', DANDELION_REFRESH_SECONDS: '300' };
+
+    it('schedules the next round after the hot interval when an eligible rolling window is at 85%', async () => {
+      expect(await nextRoundAfter(HOT, { agy: rolling('agy', 85) }, {}, 60)).toEqual([1, 2]);
+    });
+
+    it('triggers at exactly 80% and not at 79%', async () => {
+      expect(await nextRoundAfter(HOT, { agy: rolling('agy', 80) }, {}, 60)).toEqual([1, 2]);
+      expect(await nextRoundAfter(HOT, { agy: rolling('agy', 79) }, {}, 300)).toEqual([1, 2]);
+    });
+
+    it.each<[string, Record<string, Usage>, Record<string, unknown>]>([
+      ['every rolling window is below 80%', { agy: rolling('agy', 50) }, {}],
+      ['the hot provider is ineligible', { agy: rolling('agy', 85) }, { agy: false }],
+      ['the only hot window is weekly', { agy: rolling('agy', 85, 'weekly') }, {}],
+      ['a rolling window is at 100% alone', { agy: rolling('agy', 100) }, {}],
+      ['the hot provider is not ok', { agy: { ...rolling('agy', 85), status: 'error', reason: 'boom' } as Usage }, {}]
+    ])('keeps the normal interval when %s', async (_name, overrides, state) => {
+      expect(await nextRoundAfter(HOT, overrides, state, 300)).toEqual([1, 2]);
+    });
+
+    it.each<string | undefined>([undefined, '0', 'abc', '1.5', '9999999'])('ignores DANDELION_HOT_REFRESH_SECONDS=%j', async (value) => {
+      expect(await nextRoundAfter({ DANDELION_HOT_REFRESH_SECONDS: value, DANDELION_REFRESH_SECONDS: '300' }, { agy: rolling('agy', 85) }, {}, 300)).toEqual([1, 2]);
+    });
+
+    it('never waits longer than the normal interval', async () => {
+      expect(await nextRoundAfter({ DANDELION_HOT_REFRESH_SECONDS: '600', DANDELION_REFRESH_SECONDS: '300' }, { agy: rolling('agy', 85) }, {}, 300)).toEqual([1, 2]);
+    });
+
+    it('keeps the wake-from-suspend catch-up on the normal interval', async () => {
+      const session = startSession({ env: { NO_COLOR: '1', ...HOT } });
+      await session.settleRound(0, { agy: rolling('agy', 85) });
+      await vi.advanceTimersByTimeAsync(61000);
+      expect(session.probes[0].calls).toHaveLength(2);
+      session.press('q');
+      await session.finished;
+    });
+  });
+
   it('starts a round at the next frame tick when the clock jumped past the refresh interval since the last round ended', async () => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '60' } });
     await session.settleRound(0);

@@ -1311,7 +1311,7 @@ describe('cursor panel', () => {
       expect(dashboard.writes.join('')).not.toContain('refreshing…');
       await vi.advanceTimersByTimeAsync(295000);
       expect(claudeRuns()).toBe(4);
-      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_CLAUDE_STATUS_URL', 'DANDELION_CURSOR_STATUS_URL', 'DANDELION_NOTIFY', 'DANDELION_OPENAI_STATUS_URL', 'DANDELION_REFRESH_SECONDS', 'DANDELION_ROUTES_FILE'].sort());
+      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_CLAUDE_STATUS_URL', 'DANDELION_CURSOR_STATUS_URL', 'DANDELION_HOT_REFRESH_SECONDS', 'DANDELION_NOTIFY', 'DANDELION_OPENAI_STATUS_URL', 'DANDELION_REFRESH_SECONDS', 'DANDELION_ROUTES_FILE'].sort());
       dashboard.press('q');
       await dashboard.finished;
     });

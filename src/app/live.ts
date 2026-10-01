@@ -78,6 +78,7 @@ type Session = LiveOptions & {
   settled: SettledRound | undefined;
   noColor: boolean;
   refreshMs: number;
+  hotMs: number;
   spinner: number;
   footer: boolean;
   showHidden: boolean;
@@ -117,6 +118,7 @@ const SETTLED_TICK_MS = 1000;
 const FLASH_MS = 2000;
 const DEFAULT_REFRESH_SECONDS = 300;
 const MAX_REFRESH_SECONDS = 2147483;
+const HOT_PCT = 80;
 const DIGITS_ONLY = /^\d+$/;
 const NOT_ROUTABLE = 'not routable (no usage windows)';
 const NOT_SAVED = 'routing state not saved';
@@ -127,13 +129,22 @@ const COPY_FAILED = 'copy failed';
 const NOTHING_TO_LAUNCH = 'nothing to launch';
 const NO_FIX = 'no fix for this panel';
 
-function refreshSecondsOf(raw: string): number {
+function validSecondsOf(raw: string): number {
   const seconds = DIGITS_ONLY.test(raw) ? Number(raw) : 0;
-  return seconds > 0 && seconds <= MAX_REFRESH_SECONDS ? seconds : DEFAULT_REFRESH_SECONDS;
+  return seconds > 0 && seconds <= MAX_REFRESH_SECONDS ? seconds : 0;
+}
+
+function refreshSecondsOf(raw: string): number {
+  return validSecondsOf(raw) || DEFAULT_REFRESH_SECONDS;
 }
 
 function refreshMsOf(env: Record<string, string | undefined>): number {
   return refreshSecondsOf(String(env['DANDELION_REFRESH_SECONDS'])) * 1000;
+}
+
+function hotMsOf(env: Record<string, string | undefined>): number {
+  const hot = validSecondsOf(String(env['DANDELION_HOT_REFRESH_SECONDS']));
+  return Math.min(hot || Infinity, refreshSecondsOf(String(env['DANDELION_REFRESH_SECONDS']))) * 1000;
 }
 
 function graphOf(session: Session): NonNullable<LiveView['graph']> {
@@ -254,6 +265,15 @@ function settle(session: Session, index: number, usage: LiveSlot['usage']): void
   draw(session);
 }
 
+function nearTrip(window: NonNullable<LiveSlot['usage']>['windows'][number]): boolean {
+  return window.kind === 'rolling' && window.usedPct >= HOT_PCT && window.usedPct < 100;
+}
+
+function hot(session: Session): boolean {
+  const ineligible = session.eligibility.ineligible();
+  return session.results.some((usage) => usage?.status === 'ok' && !ineligible.includes(usage.id) && usage.windows.some(nearTrip));
+}
+
 function endRound(session: Session): void {
   session.running = false;
   session.endedAt = Date.parse(session.clock());
@@ -262,7 +282,7 @@ function endRound(session: Session): void {
   session.history.record(session.settled, session.clock());
   session.snapshot.record(session.settled);
   if (session.quitting) return;
-  session.refreshTimer = setTimeout(() => refresh(session), session.refreshMs);
+  session.refreshTimer = setTimeout(() => refresh(session), hot(session) ? session.hotMs : session.refreshMs);
   draw(session);
 }
 
@@ -637,6 +657,7 @@ export function startLive(options: LiveOptions): Promise<number> {
       settled: undefined,
       noColor: options.env['NO_COLOR'] !== undefined,
       refreshMs: refreshMsOf(options.env),
+      hotMs: hotMsOf(options.env),
       spinner: 0,
       footer: false,
       showHidden: false,
