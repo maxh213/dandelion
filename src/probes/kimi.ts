@@ -188,19 +188,41 @@ function kimiHome(reader: FileReader, env: Env): string {
   return home === undefined || home === '' ? `${reader.homeDir()}/.kimi-code` : home;
 }
 
-function tomlValue(config: string | undefined, key: string): string | undefined {
+const KIMI_TABLE = '[providers."managed:kimi-code"]';
+const KIMI_OAUTH_TABLE = '[providers."managed:kimi-code".oauth]';
+
+function tablesOf(config: string): string[] {
+  return config.split(/^(?=\[)/m);
+}
+
+function tableBody(config: string, header: string): string | undefined {
+  return tablesOf(config).find((table) => table.split('\n', 1)[0].trim() === header);
+}
+
+function topLevel(config: string): string {
+  const [first] = tablesOf(config);
+  return first.startsWith('[') ? '' : first;
+}
+
+function tomlValue(text: string | undefined, key: string): string | undefined {
+  if (text === undefined) return undefined;
+  return new RegExp(`^${key} = "([^"]*)"`, 'm').exec(text)?.[1];
+}
+
+function kimiValue(config: string | undefined, key: string, tables: string[]): string | undefined {
   if (config === undefined) return undefined;
-  return new RegExp(`^${key} = "([^"]*)"`, 'm').exec(config)?.[1];
+  const scopes = tableBody(config, KIMI_TABLE) === undefined ? [topLevel(config)] : tables.map((header) => tableBody(config, header));
+  return scopes.map((scope) => tomlValue(scope, key)).find((value) => value !== undefined);
 }
 
 function credentialName(config: string | undefined): string {
-  const key = tomlValue(config, 'key') ?? '';
+  const key = kimiValue(config, 'key', [KIMI_OAUTH_TABLE, KIMI_TABLE]) ?? '';
   const name = key.startsWith('oauth/') ? key.slice('oauth/'.length) : key;
   return name === '' ? 'kimi-code' : name;
 }
 
 function apiBase(config: string | undefined): string {
-  const base = tomlValue(config, 'base_url');
+  const base = kimiValue(config, 'base_url', [KIMI_TABLE]);
   return (base === undefined || base === '' ? DEFAULT_BASE : base).replace(/\/+$/, '');
 }
 

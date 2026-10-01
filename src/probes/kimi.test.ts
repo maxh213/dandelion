@@ -424,6 +424,47 @@ describe('probeKimi coding API', () => {
     expect(requests[0][0]).toBe('https://api.kimi.com/coding/v1/usages');
   });
 
+  it('ignores base_url and key in other tables and never calls their host', async () => {
+    const config = [
+      '[providers.openrouter]',
+      'base_url = "https://openrouter.ai/api/v1"',
+      'key = "other"',
+      '',
+      CONFIG
+    ].join('\n');
+    const { io, requests } = ioWith(undefined, bodyOf(LEGACY), filesFor(credential(), 'scoped-key', config));
+    expect((await probeKimi(io, {}, NOW)).status).toBe('ok');
+    expect(requests.map((request) => request[0])).toEqual(['https://api.kimi.ai/coding/v1/usages']);
+  });
+
+  it('reads the credential key from the kimi-code oauth table', async () => {
+    const config = [
+      '[providers.openrouter]',
+      'key = "other"',
+      '[providers."managed:kimi-code"]',
+      'base_url = "https://api.kimi.ai/coding/v1"',
+      '[providers."managed:kimi-code".oauth]',
+      'key = "oauth/env-key"'
+    ].join('\n');
+    const { io, requests } = ioWith(undefined, bodyOf(LEGACY), filesFor(credential(), 'env-key', config));
+    expect((await probeKimi(io, {}, NOW)).status).toBe('ok');
+    expect(requests.map((request) => request[0])).toEqual(['https://api.kimi.ai/coding/v1/usages']);
+  });
+
+  it('uses top-level values before the first table when there is no kimi-code table', async () => {
+    const config = 'base_url = "https://api.kimi.ai/coding/v1"\nkey = "plain-key"\n[providers.openrouter]\nbase_url = "https://openrouter.ai/api/v1"';
+    const { io, requests } = ioWith(undefined, bodyOf(LEGACY), filesFor(credential(), 'plain-key', config));
+    await probeKimi(io, {}, NOW);
+    expect(requests.map((request) => request[0])).toEqual(['https://api.kimi.ai/coding/v1/usages']);
+  });
+
+  it('uses the defaults when only other tables hold base_url and key', async () => {
+    const config = '[providers.openrouter]\nbase_url = "https://openrouter.ai/api/v1"\nkey = "other"';
+    const { io, requests } = ioWith(undefined, bodyOf(LEGACY), filesFor(credential(), 'kimi-code', config));
+    expect((await probeKimi(io, {}, NOW)).status).toBe('ok');
+    expect(requests.map((request) => request[0])).toEqual(['https://api.kimi.com/coding/v1/usages']);
+  });
+
   it.each([
     ['an empty base and key', 'base_url = ""\nkey = ""', 'kimi-code', 'https://api.kimi.com/coding/v1/usages'],
     ['a blank oauth key', 'key = "oauth/"', 'kimi-code', 'https://api.kimi.com/coding/v1/usages']
