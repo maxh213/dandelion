@@ -12,7 +12,7 @@ Pace marker: on those same windows of known length with a reset in the future an
 
 ## Providers
 
-Panels always appear in this order. A provider whose CLI is missing, fails, times out or prints unexpected output renders as a dim panel with the reason; when claude, agy or kilo exits with an error, the reason is `Command exited with an error: ` and the first line the CLI wrote to stderr (stripped of control characters, with long secrets replaced by `…`).
+Panels always appear in this order. A provider whose CLI is missing, fails, times out or prints unexpected output renders as a dim panel with the reason; a probe that crashes unexpectedly renders as a failed panel with the fixed reason `probe crashed` (the error message is never shown) and routes as failed; when claude, agy or kilo exits with an error, the reason is `Command exited with an error: ` and the first line the CLI wrote to stderr (stripped of control characters, with long secrets replaced by `…`).
 
 - `claude` (claude · personal) - runs `claude -p "/usage"` (90s timeout) and shows the session, weekly and per-model weekly windows with a reset countdown. In the live dashboard it also shows `status: <description>` under the header while status.claude.com reports an incident (see `DANDELION_CLAUDE_STATUS_URL`).
 - `claude-work` (claude · work) - runs the same command with `CLAUDE_CONFIG_DIR` set to the work config dir and shows the same windows for the work account, with the same live `status:` line. Without that dir it is unavailable and never runs claude.

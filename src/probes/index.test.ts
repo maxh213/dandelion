@@ -18,6 +18,12 @@ describe('providerProbes', () => {
     expect(providerProbes(IDLE_IO, {}).map(({ id }) => id)).toEqual(['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo']);
   });
 
+  it('turns a probe that throws into an error usage without the message', async () => {
+    const throwing = { ...IDLE_IO, runner: { run: () => { throw new Error('secret-token-123'); } } };
+    const claude = providerProbes(throwing, {}).find(({ id }) => id === 'claude');
+    expect(await claude?.probe('now')).toEqual({ id: 'claude', displayName: 'claude', windows: [], fetchedAt: 'now', status: 'error', reason: 'probe crashed' });
+  });
+
   it('probes junie from the junie home in env', async () => {
     const read = vi.fn(IDLE_IO.reader.read);
     const junie = providerProbes({ ...IDLE_IO, reader: { ...IDLE_IO.reader, read } }, { DANDELION_JUNIE_HOME: '/j' }).find(({ id }) => id === 'junie');

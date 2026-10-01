@@ -26,7 +26,19 @@ function cliProbe(io: ProbeIo, probe: CliProbe): ProviderProbe {
   return { id: probe.id, probe: (now) => probeCli(io, probe, now) };
 }
 
+async function guarded(probe: ProviderProbe, now: string): Promise<ProviderUsage> {
+  try {
+    return await probe.probe(now);
+  } catch {
+    return { id: probe.id, displayName: probe.id, windows: [], fetchedAt: now, status: 'error', reason: 'probe crashed' };
+  }
+}
+
 export function providerProbes(io: ProbeIo, env: Record<string, string | undefined>): ProviderProbe[] {
+  return rawProbes(io, env).map((probe) => ({ id: probe.id, probe: (now) => guarded(probe, now) }));
+}
+
+function rawProbes(io: ProbeIo, env: Record<string, string | undefined>): ProviderProbe[] {
   return [
     cliProbe(io, claudeProbe),
     cliProbe(io, claudeWorkProbe(env, io.reader.homeDir())),

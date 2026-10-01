@@ -2287,7 +2287,9 @@ describe('route eligibility state file', () => {
         write(JSON.stringify(IDS.map(idle)));
         const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: statePath };
         expect(JSON.parse((await runJson(routedRunner(), env, jsonRequest())).out).route).toBe('model-a max claude');
-        await expect(runJson(failing(), env, jsonRequest())).rejects.toThrow('probed');
+        const io = failing();
+        expect(JSON.parse((await runJson(io, env, jsonRequest())).out).route).toBe('none');
+        expect(calls(io)).toBeGreaterThan(0);
       });
 
       it.each([
@@ -3502,5 +3504,103 @@ describe('claude status line wiring', () => {
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(await runApp(failingIo(), { NO_COLOR: '1' }, NOW)).toBe(await runApp(routedRunner(), { NO_COLOR: '1' }, NOW));
     expect((await runJson(failingIo(), env, request)).out).toBe((await runJson(routedRunner(), env, request)).out);
+  });
+});
+
+describe('a probe that crashes', () => {
+  const NOW_CRASH = '2026-09-13T10:00:00.000Z';
+  const CRASH_ENV = { ...GROK_ENV, DANDELION_ROUTES_FILE: ROUTES_FILE };
+  const SECRET = 'secret-token-123';
+  type Run = CommandRunner['run'];
+  type RunEnv = Parameters<Run>[3];
+
+  const isPersonalClaude = (command: string, env: RunEnv) => command === 'claude' && env?.CLAUDE_CONFIG_DIR === undefined;
+  const resultKey = (command: string, env: RunEnv) => (env?.CLAUDE_CONFIG_DIR === undefined ? command : 'claude-work');
+
+  function crashingClaude(crash: () => Promise<never>, results: Record<string, CommandRunnerResult> = HAPPY): ProbeIo {
+    const run: Run = (command, _args, _timeoutMs, env) => (isPersonalClaude(command, env) ? crash() : Promise.resolve(results[resultKey(command, env)]));
+    return ioOf({ run }, HAPPY_KIMI, grokReader(grokLog()));
+  }
+
+  const rejecting = () => crashingClaude(() => Promise.reject(new Error(SECRET)));
+  const throwing = () =>
+    crashingClaude(() => {
+      throw new Error(SECRET);
+    });
+  const failedClaude = () => routedRunner({ claude: { stdout: '', stderr: '', failure: 'missing' } });
+
+  describe.each([
+    ['rejects', rejecting],
+    ['throws synchronously', throwing]
+  ])('that %s', (_name, crashed) => {
+    it('prints the dashboard with the claude panel failed and never leaks the message', async () => {
+      const output = await runApp(crashed(), CRASH_ENV, NOW_CRASH);
+      expect(panelOf(output, 'claude').slice(0, 2)).toEqual(['claude', 'probe crashed']);
+      expect(panelOf(output, 'kilo')[0]).toBe('kilo');
+      expect(output).toContain(`${DIM}claude`);
+      expect(output).not.toContain(SECRET);
+    });
+
+    it('routes exactly as if claude had failed', async () => {
+      for (const mode of ['headroom', 'high'] as const) {
+        const request = { mode, now: NOW_CRASH, zone: 'UTC' };
+        expect(await runRoute(crashed(), CRASH_ENV, request)).toEqual(await runRoute(failedClaude(), CRASH_ENV, request));
+      }
+    });
+
+    it('reports claude as an error in the JSON snapshot', async () => {
+      const { out } = await runJson(crashed(), CRASH_ENV, { now: NOW_CRASH, zone: 'UTC' });
+      expect(out).not.toContain(SECRET);
+      expect(JSON.parse(out).providers.find(({ id }: { id: string }) => id === 'claude')).toMatchObject({ status: 'error', reason: 'probe crashed' });
+    });
+  });
+
+  describe('in the live dashboard', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      vi.setSystemTime(new Date(NOW_CRASH));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function settle(): Promise<void> {
+      for (let turn = 0; turn < 16; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    it('settles a crashing probe in a full round as failed and still ends the round', async () => {
+      const dashboard = startDashboard(rejecting(), { ...CRASH_ENV, NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '300' });
+      await settle();
+      const frame = dashboard.lastFrame();
+      expect(frame).not.toContain('probing…');
+      expect(frame).toContain('\nclaude\nprobe crashed\n');
+      expect(frame).not.toContain(SECRET);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
+
+    it('stops the spinner after R on a crashing panel, keeps the last good rows, and re-probes on a second R', async () => {
+      const claudeCalls = () => run.mock.calls.filter(([command, , , env]) => isPersonalClaude(command, env)).length;
+      const run = vi.fn<Run>(async (command, _args, _timeoutMs, env) => {
+        if (isPersonalClaude(command, env) && claudeCalls() > 1) throw new Error(SECRET);
+        return HAPPY[resultKey(command, env)];
+      });
+      const dashboard = startDashboard(ioOf({ run }, HAPPY_KIMI, grokReader(grokLog())), { ...CRASH_ENV, NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '300' });
+      await settle();
+      expect(dashboard.lastFrame()).not.toContain('probe crashed');
+      dashboard.press('j');
+      expect(claudeCalls()).toBe(1);
+      dashboard.press('R');
+      await settle();
+      expect(claudeCalls()).toBe(2);
+      expect(dashboard.lastFrame()).toContain('last probe failed: probe crashed');
+      expect(dashboard.lastFrame()).not.toContain('probing…');
+      dashboard.press('R');
+      await settle();
+      expect(claudeCalls()).toBe(3);
+      dashboard.press('q');
+      await dashboard.finished;
+    });
   });
 });
