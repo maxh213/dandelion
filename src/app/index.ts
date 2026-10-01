@@ -94,13 +94,22 @@ function toRunnerResult(error: ExecException | null, stdout: string, stderr: str
   return { stdout, stderr, failure: failureOf(error) };
 }
 
+function settleHard(child: ChildProcess, settle: (result: CommandRunnerResult) => void): void {
+  child.kill('SIGKILL');
+  child.stdout?.destroy();
+  child.stderr?.destroy();
+  settle({ stdout: '', stderr: '', failure: 'timeout' });
+}
+
 const realCommandRunner: CommandRunner = {
   run(command, args, timeoutMs, env) {
     return new Promise((resolve) => {
       const child = execFile(command, args, { timeout: timeoutMs, env: { ...process.env, ...env } }, (error, stdout, stderr) => {
+        clearTimeout(deadline);
         liveStops.delete(stop);
         resolve(toRunnerResult(error, stdout, stderr));
       });
+      const deadline = setTimeout(() => settleHard(child, resolve), timeoutMs + KILL_GRACE_MS);
       const exited = exitOf(child);
       const stop = tracked(() => signalUntil(child, exited));
     });

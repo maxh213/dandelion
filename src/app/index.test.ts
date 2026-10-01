@@ -1598,6 +1598,21 @@ describe('wiring', () => {
     expect(result.failure).toBe('timeout');
   });
 
+  it('realCommandRunner settles as a timeout and SIGKILLs a child that ignores SIGTERM', async () => {
+    const started = Date.now();
+    const script = 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)';
+    const result = await realIo.runner.run('node', ['-e', script], 100);
+    expect(result.failure).toBe('timeout');
+    expect(Date.now() - started).toBeLessThan(100 + 5000 + 1000);
+  }, 15000);
+
+  it('realCommandRunner settles within the kill grace when a grandchild keeps stdout open', async () => {
+    const started = Date.now();
+    const grandchild = 'require("child_process").spawn("sleep", ["8"], { stdio: ["ignore", 1, 2], detached: true }).unref()';
+    await realIo.runner.run('node', ['-e', grandchild], 100);
+    expect(Date.now() - started).toBeLessThan(100 + 5000 + 1000);
+  }, 15000);
+
   it('realCommandRunner reports a non-zero exit', async () => {
     const result = await realIo.runner.run('node', ['-e', 'process.exit(2)'], 2000);
     expect(result.failure).toBe('exit');
