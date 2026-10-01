@@ -1310,7 +1310,7 @@ describe('cursor panel', () => {
       expect(dashboard.writes.join('')).not.toContain('refreshing…');
       await vi.advanceTimersByTimeAsync(295000);
       expect(claudeRuns()).toBe(4);
-      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_CLAUDE_STATUS_URL', 'DANDELION_NOTIFY', 'DANDELION_REFRESH_SECONDS', 'DANDELION_ROUTES_FILE'].sort());
+      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_CLAUDE_STATUS_URL', 'DANDELION_CURSOR_STATUS_URL', 'DANDELION_NOTIFY', 'DANDELION_OPENAI_STATUS_URL', 'DANDELION_REFRESH_SECONDS', 'DANDELION_ROUTES_FILE'].sort());
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -3379,11 +3379,11 @@ describe('claude status line wiring', () => {
     vi.useRealTimers();
   });
 
-  it('puts the line under the three claude panels and no other', async () => {
+  it('puts the line under the three claude panels, plus codex and cursor when their urls answer too', async () => {
     const urls: string[] = [];
     const lines = await liveFrame(statusIo({ status: 200, body: MAJOR_BODY }, urls));
-    for (const id of ['claude', 'claude-work', 'claude-deepseek']) expect(lines[lines.indexOf(id) + 1]).toBe('status: Partial System Outage');
-    expect(lines.filter((line) => line.startsWith('status:'))).toHaveLength(3);
+    for (const id of ['claude', 'claude-work', 'claude-deepseek', 'codex', 'cursor']) expect(lines[lines.indexOf(id) + 1]).toBe('status: Partial System Outage');
+    expect(lines.filter((line) => line.startsWith('status:'))).toHaveLength(5);
     expect(urls.filter((url) => url === STATUS_URL)).toHaveLength(1);
   });
 
@@ -3402,6 +3402,78 @@ describe('claude status line wiring', () => {
     ['invalid json', { status: 200, body: '<html>' }]
   ] as [string, Awaited<ReturnType<Fetcher['get']>>][])('shows no line for %s', async (_name, answer) => {
     expect((await liveFrame(statusIo(answer))).filter((line) => line.includes('status:'))).toEqual([]);
+  });
+
+  describe('codex and cursor status lines', () => {
+    const OPENAI_URL = 'https://status.openai.com/api/v2/status.json';
+    const CURSOR_URL = 'https://status.cursor.com/api/v2/status.json';
+    const bodyOf = (indicator: string, description: string) => JSON.stringify({ status: { indicator, description } });
+
+    function byUrl(answers: Record<string, Awaited<ReturnType<Fetcher['get']>>>, urls: string[] = []): ProbeIo {
+      const get = async (url: string, headers: Record<string, string>, timeoutMs: number) => {
+        urls.push(url);
+        return answers[url] ?? KIMI_FETCHER.get(url, headers, timeoutMs);
+      };
+      return { ...routedRunner(), fetcher: { ...KIMI_FETCHER, get } };
+    }
+
+    it('shows the OpenAI line under codex and the Cursor line under cursor, one fetch each', async () => {
+      const urls: string[] = [];
+      const answers = { [OPENAI_URL]: { status: 200, body: bodyOf('minor', 'Partial System Degradation') }, [CURSOR_URL]: { status: 200, body: bodyOf('none', 'All Systems Operational') } };
+      const lines = await liveFrame(byUrl(answers, urls));
+      expect(lines[lines.indexOf('codex') + 1]).toBe('status: Partial System Degradation');
+      expect(lines.filter((line) => line.startsWith('status:'))).toHaveLength(1);
+      expect(urls.filter((url) => url === OPENAI_URL)).toHaveLength(1);
+      expect(urls.filter((url) => url === CURSOR_URL)).toHaveLength(1);
+    });
+
+    it('colours major for cursor with the hot token and minor for codex with the warm one', async () => {
+      const answers = { [OPENAI_URL]: { status: 200, body: bodyOf('minor', 'Slow') }, [CURSOR_URL]: { status: 200, body: bodyOf('major', 'Outage') } };
+      const dashboard = startDashboard(byUrl(answers), {});
+      await settle();
+      const lines = dashboard.lastFrame().split('\n');
+      dashboard.press('q');
+      await dashboard.finished;
+      const coloured = lines.filter((line) => line.includes('status: '));
+      expect(coloured).toHaveLength(2);
+      expect(coloured[0]).not.toBe(coloured[1].replace('Outage', 'Slow'));
+      expect(plain(coloured[1])).toBe('status: Outage');
+    });
+
+    it('honours the env urls, falls back on empty values and skips disabled providers', async () => {
+      const urls: string[] = [];
+      await liveFrame(byUrl({}, urls), { DANDELION_OPENAI_STATUS_URL: 'http://127.0.0.1:1/openai.json', DANDELION_CURSOR_STATUS_URL: '', DANDELION_DISABLE: 'claude-work' });
+      expect(urls).toContain('http://127.0.0.1:1/openai.json');
+      expect(urls).not.toContain(OPENAI_URL);
+      expect(urls).toContain(CURSOR_URL);
+      const skipped: string[] = [];
+      await liveFrame(byUrl({}, skipped), { DANDELION_DISABLE: 'codex,cursor' });
+      expect(skipped).not.toContain(OPENAI_URL);
+      expect(skipped).not.toContain(CURSOR_URL);
+    });
+
+    it.each([
+      ['a timeout', { failure: 'timeout' }],
+      ['a 503', { status: 503, body: bodyOf('major', 'Outage') }],
+      ['invalid json', { status: 200, body: '<html>' }]
+    ] as [string, Awaited<ReturnType<Fetcher['get']>>][])('shows no line for %s', async (_name, answer) => {
+      const lines = await liveFrame(byUrl({ [OPENAI_URL]: answer, [CURSOR_URL]: answer }));
+      expect(lines.filter((line) => line.startsWith('status:'))).toEqual([]);
+    });
+
+    it('records every request of --once, --json, route, route --high and run and sees neither url', async () => {
+      const urls: string[] = [];
+      const io = byUrl({}, urls);
+      const request = { now: NOW, zone: 'UTC' };
+      const env = { DANDELION_ROUTES_FILE: ROUTES_FILE };
+      await runApp(io, { NO_COLOR: '1' }, NOW);
+      await runJson(io, env, request);
+      await routeWith(io, {}, { mode: 'headroom', ...request });
+      await routeWith(io, {}, { mode: 'high', ...request });
+      await runRun(io, env, { mode: 'headroom', ...request }, [], { spawn: vi.fn<RunSpawner['spawn']>(async () => 0) });
+      expect(urls).not.toContain(OPENAI_URL);
+      expect(urls).not.toContain(CURSOR_URL);
+    });
   });
 
   it('never fetches the status url for route, route --high, run, --once or --json', async () => {

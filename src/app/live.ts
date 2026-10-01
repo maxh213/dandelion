@@ -59,6 +59,7 @@ type LiveOptions = {
   clipboard: Clipboard;
   spawner: FixRunner;
   statusProbe?: () => Promise<ClaudeStatus | undefined>;
+  providerStatusProbes?: Record<string, () => Promise<ClaudeStatus | undefined>>;
   clock?: () => string;
 };
 
@@ -95,6 +96,7 @@ type Session = LiveOptions & {
   notified: Set<string>;
   reprobed: Set<string>;
   status?: ClaudeStatus;
+  providerStatus: Record<string, ClaudeStatus | undefined>;
   flash?: Flash;
   frameTimer?: Timer;
   refreshTimer?: Timer;
@@ -170,6 +172,7 @@ function viewOf(session: Session): LiveView {
     settled: session.settled,
     selected: session.selected,
     status: session.status,
+    providerStatus: session.providerStatus,
     flash: session.flash,
     rows: session.screen.rows,
     columns: session.screen.columns,
@@ -270,9 +273,17 @@ function fetchStatus(session: Session): void {
   });
 }
 
+function fetchProviderStatus(session: Session, id: string, probe: () => Promise<ClaudeStatus | undefined>): void {
+  void probe().then((status) => {
+    session.providerStatus[id] = status;
+    draw(session);
+  });
+}
+
 function startRound(session: Session): void {
   session.eligibility.reload();
   fetchStatus(session);
+  Object.entries(session.providerStatusProbes ?? {}).forEach(([id, probe]) => fetchProviderStatus(session, id, probe));
   session.running = true;
   session.rounds += 1;
   const now = session.clock();
@@ -637,6 +648,7 @@ export function startLive(options: LiveOptions): Promise<number> {
       selected: -1,
       graphing: false,
       notified: new Set(),
+      providerStatus: {},
       reprobed: new Set(),
       quitting: false,
       suspended: false,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FetchOutcome } from '../domain/index.ts';
-import { probeClaudeStatus } from './status.ts';
+import { probeClaudeStatus, probeCursorStatus, probeOpenAiStatus } from './status.ts';
 
 const DEFAULT_URL = 'https://status.claude.com/api/v2/status.json';
 
@@ -68,5 +68,50 @@ describe('probeClaudeStatus', () => {
 
   it('shows nothing when only control characters remain', async () => {
     expect(await probeWith({ status: 200, body: bodyOf('major', '\u001b[2J\u0007\r\n\u007f') }).result).toBeUndefined();
+  });
+});
+
+describe.each([
+  ['probeOpenAiStatus', probeOpenAiStatus, 'DANDELION_OPENAI_STATUS_URL', 'https://status.openai.com/api/v2/status.json'],
+  ['probeCursorStatus', probeCursorStatus, 'DANDELION_CURSOR_STATUS_URL', 'https://status.cursor.com/api/v2/status.json']
+])('%s', (_name, probe, variable, defaultUrl) => {
+  function run(outcome: FetchOutcome, env: Record<string, string | undefined> = {}) {
+    const requests: [string, Record<string, string>, number][] = [];
+    const fetcher = {
+      get: async (url: string, headers: Record<string, string>, timeoutMs: number) => {
+        requests.push([url, headers, timeoutMs]);
+        return outcome;
+      }
+    };
+    return { result: probe({ fetcher }, env), requests };
+  }
+
+  it('fetches the default url with no headers and a 10s timeout', async () => {
+    const { result, requests } = run({ status: 200, body: bodyOf('none') });
+    await result;
+    expect(requests).toEqual([[defaultUrl, {}, 10000]]);
+  });
+
+  it('uses the env url when non-empty and the default when empty', async () => {
+    const custom = run({ status: 200, body: bodyOf('none') }, { [variable]: 'http://127.0.0.1:1/s.json' });
+    await custom.result;
+    expect(custom.requests[0][0]).toBe('http://127.0.0.1:1/s.json');
+    const empty = run({ status: 200, body: bodyOf('none') }, { [variable]: '' });
+    await empty.result;
+    expect(empty.requests[0][0]).toBe(defaultUrl);
+  });
+
+  it('maps minor to warm, major to hot, none to nothing', async () => {
+    expect(await run({ status: 200, body: bodyOf('minor', 'Partial System Degradation') }).result).toEqual({ severity: 'warm', description: 'Partial System Degradation' });
+    expect(await run({ status: 200, body: bodyOf('major') }).result).toEqual({ severity: 'hot', description: 'Partial System Outage' });
+    expect(await run({ status: 200, body: bodyOf('none') }).result).toBeUndefined();
+  });
+
+  it.each([
+    ['a timeout', { failure: 'timeout' }],
+    ['a 503', { status: 503, body: bodyOf('major') }],
+    ['invalid json', { status: 200, body: '<html>' }]
+  ] as [string, FetchOutcome][])('shows nothing for %s', async (_n, outcome) => {
+    expect(await run(outcome).result).toBeUndefined();
   });
 });

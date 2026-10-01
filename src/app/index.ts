@@ -9,6 +9,8 @@ import { PassThrough, pipeline, type Readable, type Writable } from 'node:stream
 import { fileURLToPath } from 'node:url';
 import {
   probeClaudeStatus,
+  probeCursorStatus,
+  probeOpenAiStatus,
   providerProbes,
   type CommandRunner,
   type CommandRunnerResult,
@@ -35,6 +37,7 @@ import {
   renderWaybar,
   renderSnapshot,
   openView,
+  type ClaudeStatus,
   type Eligibility,
   type Hidden,
   type View,
@@ -442,6 +445,12 @@ const realCommandTry: CommandTry = (command, args, input) =>
     child.stdin.end(input);
   });
 
+function providerStatusProbes(io: ProbeIo, env: Record<string, string | undefined>): Record<string, () => Promise<ClaudeStatus | undefined>> {
+  const disabled = new Set(disabledIds(env));
+  const all = { codex: () => probeOpenAiStatus(io, env), cursor: () => probeCursorStatus(io, env) };
+  return Object.fromEntries(Object.entries(all).filter(([id]) => !disabled.has(id)));
+}
+
 export function runLive(
   io: ProbeIo,
   env: Record<string, string | undefined>,
@@ -468,6 +477,7 @@ export function runLive(
     notifier: realNotifier,
     spawner: realRunSpawner,
     statusProbe: () => probeClaudeStatus(io, env),
+    providerStatusProbes: providerStatusProbes(io, env),
     clipboard: openClipboard({ tryCommand: realCommandTry, write: screen.write.bind(screen) }),
     clock
   });

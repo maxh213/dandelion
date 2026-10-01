@@ -64,10 +64,11 @@ type SessionOverrides = {
   spawn?: () => Promise<number | 'missing'>;
   routes?: Routes;
   statusProbe?: () => Promise<ClaudeStatus | undefined>;
+  providerStatusProbes?: Record<string, () => Promise<ClaudeStatus | undefined>>;
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, snapshotText, notifier, copy, spawn, routes, statusProbe } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async (): Promise<CopyResult> => 'command', historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, snapshotText, notifier, copy, spawn, routes, statusProbe, providerStatusProbes } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async (): Promise<CopyResult> => 'command', historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
   const spawner = { spawn: vi.fn(spawn), terminate: vi.fn<(signal: string) => Promise<void>>(async () => undefined) };
   const writes: string[] = [];
@@ -111,7 +112,7 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: viewReplace
   });
   const viewSaved = () => viewReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, launchOf: (line) => launchOf(line, [], env, '/home/u'), keyboard, signals, screen, stopChildren, eligibility, hidden, view, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, launchOf: (line) => launchOf(line, [], env, '/home/u'), keyboard, signals, screen, stopChildren, eligibility, hidden, view, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe, providerStatusProbes });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
@@ -2224,6 +2225,35 @@ describe('external eligibility changes', () => {
     session.press('j');
     expect(session.frames().length).toBeGreaterThan(framesBefore + 5);
     expect(session.stateReads.mock.calls.length).toBe(reads);
+    session.press('q');
+    await session.finished;
+  });
+});
+
+describe('provider status lines', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date(START));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows each status under its own panel, once per full round and never on R', async () => {
+    const codex = vi.fn(async (): Promise<ClaudeStatus | undefined> => ({ severity: 'warm', description: 'Partial System Degradation' }));
+    const cursor = vi.fn(async (): Promise<ClaudeStatus | undefined> => undefined);
+    const session = startSession({ ids: ['codex', 'cursor'], providerStatusProbes: { codex, cursor } });
+    await session.settleRound(0);
+    const lines = session.lastFrame().split('\n');
+    expect(lines[lines.indexOf('codex') + 1]).toBe('status: Partial System Degradation');
+    expect(lines.filter((line) => line.startsWith('status:'))).toHaveLength(1);
+    session.press('R');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(codex).toHaveBeenCalledTimes(1);
+    session.press('r');
+    expect(codex).toHaveBeenCalledTimes(2);
+    expect(cursor).toHaveBeenCalledTimes(2);
     session.press('q');
     await session.finished;
   });

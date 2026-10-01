@@ -80,6 +80,7 @@ export type LiveView = {
   columns?: number;
   status?: ClaudeStatus;
   history?: Pick<History, 'samples'>;
+  providerStatus?: Record<string, ClaudeStatus | undefined>;
   graph?: { id: string; samples: HistorySample[]; usage: ProviderUsage | undefined };
 };
 
@@ -152,9 +153,13 @@ function samplesOf(view: LiveView, slot: LiveSlot): HistorySample[] | undefined 
   return view.history?.samples(slot.id);
 }
 
+function statusOf(view: LiveView, slot: LiveSlot): ClaudeStatus | undefined {
+  return STATUS_IDS.has(slot.id) ? view.status : view.providerStatus?.[slot.id];
+}
+
 function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   const caption = view.flash?.index === index ? view.flash.message : undefined;
-  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view), status: STATUS_IDS.has(slot.id) ? view.status : undefined, samples: samplesOf(view, slot) };
+  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view), status: statusOf(view, slot), samples: samplesOf(view, slot) };
 }
 
 function settledMarks(slot: LiveSlot, usage: ProviderUsage, spinner: number, now: string, marks: PanelMarks): PanelMarks {

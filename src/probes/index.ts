@@ -10,13 +10,13 @@ import { probeHermes, type HermesIo } from './hermes.ts';
 import { probeJunie, type JunieIo } from './junie.ts';
 import { kiloProbe } from './kilo.ts';
 import { probeKimi, type KimiIo } from './kimi.ts';
-import { probeClaudeStatus } from './status.ts';
+import { probeClaudeStatus, probeCursorStatus, probeOpenAiStatus } from './status.ts';
 
 export type { CommandRunner, CommandRunnerResult, RunFailure } from './cli.ts';
 export type { RpcChild, RpcSpawner } from './codex.ts';
 export type { LaunchedProcess, Launcher } from './kimi.ts';
 export type { Fetcher, FileReader };
-export { probeClaudeStatus };
+export { probeClaudeStatus, probeCursorStatus, probeOpenAiStatus };
 
 export type ProbeIo = KimiIo & GrokIo & JunieIo & CodexIo & CursorIo & HermesIo & { fetcher: Fetcher; reader: FileReader };
 

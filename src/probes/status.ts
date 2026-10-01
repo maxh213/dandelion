@@ -2,12 +2,14 @@ import { fieldOf, isFilled, isSuccess, parseJson, printable, type ClaudeStatus, 
 
 export type StatusIo = { fetcher: Pick<Fetcher, 'get'> };
 
-const DEFAULT_URL = 'https://status.claude.com/api/v2/status.json';
+const CLAUDE_URL = 'https://status.claude.com/api/v2/status.json';
+const OPENAI_URL = 'https://status.openai.com/api/v2/status.json';
+const CURSOR_URL = 'https://status.cursor.com/api/v2/status.json';
 const TIMEOUT_MS = 10000;
 const NONE = 'none';
 
-function urlOf(env: Record<string, string | undefined>): string {
-  return env['DANDELION_CLAUDE_STATUS_URL'] || DEFAULT_URL;
+function urlOf(env: Record<string, string | undefined>, name: string, fallback: string): string {
+  return env[name] || fallback;
 }
 
 function severityOf(indicator: unknown): ClaudeStatus['severity'] | undefined {
@@ -31,7 +33,19 @@ function parsed(body: string): ClaudeStatus | undefined {
   }
 }
 
-export async function probeClaudeStatus(io: StatusIo, env: Record<string, string | undefined>): Promise<ClaudeStatus | undefined> {
-  const outcome = await io.fetcher.get(urlOf(env), {}, TIMEOUT_MS);
+async function probeStatus(io: StatusIo, url: string): Promise<ClaudeStatus | undefined> {
+  const outcome = await io.fetcher.get(url, {}, TIMEOUT_MS);
   return isSuccess(outcome) ? parsed(outcome.body) : undefined;
+}
+
+export function probeClaudeStatus(io: StatusIo, env: Record<string, string | undefined>): Promise<ClaudeStatus | undefined> {
+  return probeStatus(io, urlOf(env, 'DANDELION_CLAUDE_STATUS_URL', CLAUDE_URL));
+}
+
+export function probeOpenAiStatus(io: StatusIo, env: Record<string, string | undefined>): Promise<ClaudeStatus | undefined> {
+  return probeStatus(io, urlOf(env, 'DANDELION_OPENAI_STATUS_URL', OPENAI_URL));
+}
+
+export function probeCursorStatus(io: StatusIo, env: Record<string, string | undefined>): Promise<ClaudeStatus | undefined> {
+  return probeStatus(io, urlOf(env, 'DANDELION_CURSOR_STATUS_URL', CURSOR_URL));
 }
