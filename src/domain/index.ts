@@ -229,7 +229,16 @@ export function formatResetAt(resetsAt: string, now: string, zone: string): stri
   return near ? `${parts.get('weekday')} ${clock}` : `${parts.get('month')} ${parts.get('day')} ${clock}`;
 }
 
-const CRITICAL_PCT = 95;
+const DEFAULT_THRESHOLDS = [HOT_PCT, 95];
+
+function ascending(a: number, b: number): number {
+  return a - b;
+}
+
+export function notifyThresholds(raw: string | undefined): number[] {
+  const valid = (raw?.match(/(?<=^|,)\s*\d+\s*(?=,|$)/g) ?? []).map(Number).filter((pct) => pct >= 1 && pct <= FULL_PCT);
+  return valid.length === 0 ? DEFAULT_THRESHOLDS : [...new Set(valid)].sort(ascending);
+}
 
 export type Notification = { key: string; text: string };
 
@@ -243,10 +252,10 @@ function notification(pair: WindowPair, event: string, text: string): Notificati
   return [{ key: `${pair.id}|${pair.current.label}|${pair.current.resetsAt}|${event}`, text }];
 }
 
-function thresholdEvents(pair: WindowPair): Notification[] {
-  const text = `${pair.id} ${pair.current.label} at ${pair.current.usedPct}%`;
-  if (crossed(pair, CRITICAL_PCT)) return notification(pair, 'critical', text);
-  return crossed(pair, HOT_PCT) ? notification(pair, 'hot', text) : [];
+function thresholdEvents(pair: WindowPair, thresholds: number[]): Notification[] {
+  const highest = thresholds.filter((pct) => crossed(pair, pct)).at(-1);
+  if (highest === undefined) return [];
+  return notification(pair, `at${highest}`, `${pair.id} ${pair.current.label} at ${pair.current.usedPct}%`);
 }
 
 function isTripped(usage: ProviderUsage): boolean {
@@ -286,17 +295,17 @@ function nightOf(at: string, midnightAfter: MidnightAfter): Tonight {
   return { nowMs: Date.parse(at), midnightMs: Date.parse(midnightAfter(at)) };
 }
 
-function pairEvents(pair: WindowPair, accountRecovered: boolean, nights: Nights, now: string): Notification[] {
-  return [...thresholdEvents(pair), ...recoveryEvents(pair, accountRecovered), ...evaporationEvents(pair, nights, now), ...resetEvents(pair, now)];
+function pairEvents(pair: WindowPair, accountRecovered: boolean, nights: Nights, now: string, thresholds: number[]): Notification[] {
+  return [...thresholdEvents(pair, thresholds), ...recoveryEvents(pair, accountRecovered), ...evaporationEvents(pair, nights, now), ...resetEvents(pair, now)];
 }
 
-export function notificationEvents(previous: ProviderUsage, current: ProviderUsage, now: string, midnightAfter: MidnightAfter): Notification[] {
+export function notificationEvents(previous: ProviderUsage, current: ProviderUsage, now: string, midnightAfter: MidnightAfter, thresholds: number[] = DEFAULT_THRESHOLDS): Notification[] {
   if (previous.status !== 'ok' || current.status !== 'ok') return [];
   const nights = { before: nightOf(previous.fetchedAt, midnightAfter), tonight: nightOf(now, midnightAfter) };
   const accountRecovered = isTripped(previous) && !isTripped(current);
   return current.windows.flatMap((window) => {
     const before = previous.windows.find((each) => each.label === window.label);
-    return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, accountRecovered, nights, now);
+    return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, accountRecovered, nights, now, thresholds);
   });
 }
 

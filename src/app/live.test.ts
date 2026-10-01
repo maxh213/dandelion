@@ -1572,6 +1572,11 @@ describe('notifications', () => {
     expect(await roundsOf({ DANDELION_NOTIFY: '1' }, [weekly(79), weekly(80), weekly(94), weekly(95)])).toEqual(['claude weekly at 80%', 'claude weekly at 95%']);
   });
 
+  it('uses DANDELION_NOTIFY_THRESHOLDS and notifies each threshold once per reset period', async () => {
+    const env = { DANDELION_NOTIFY: '1', DANDELION_NOTIFY_THRESHOLDS: ' 50 , 90 ' };
+    expect(await roundsOf(env, [weekly(40), weekly(55), weekly(85), weekly(60), weekly(56), weekly(92), weekly(30), weekly(95)])).toEqual(['claude weekly at 55%', 'claude weekly at 92%']);
+  });
+
   it('treats the first round as a baseline and stays quiet while a window stays hot', async () => {
     expect(await roundsOf({ DANDELION_NOTIFY: '1' }, [weekly(85), weekly(85), weekly(88)])).toEqual([]);
   });

@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type ClaudeStatus, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes, type Snapshot, type View } from '../render/index.ts';
+import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, notifyThresholds, orderPanels, renderLiveFrame, type SortOrder, type ClaudeStatus, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes, type Snapshot, type View } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -205,7 +205,7 @@ function fresh(session: Session, key: string): boolean {
 function eventsOf(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): Notification[] {
   if (!notifying(session) || previous === undefined || current === undefined) return [];
   const now = session.clock();
-  return notificationEvents(previous, current, now, (at) => nextLocalMidnight(session.zone, at));
+  return notificationEvents(previous, current, now, (at) => nextLocalMidnight(session.zone, at), notifyThresholds(session.env['DANDELION_NOTIFY_THRESHOLDS']));
 }
 
 function announce(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): void {

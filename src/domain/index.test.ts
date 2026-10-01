@@ -7,6 +7,7 @@ import {
   nextSortOrder,
   nextLocalMidnight,
   notificationEvents,
+  notifyThresholds,
   openEligibility,
   openHidden,
   openHistory,
@@ -875,6 +876,29 @@ describe('notificationEvents', () => {
     expect(texts([week(94)], [week(95)])).toEqual(['claude weekly at 95%']);
     expect(texts([week(70)], [week(97)])).toEqual(['claude weekly at 97%']);
     expect(notificationEvents(usageOf([week(79)]), usageOf([week(80)]), NOW, () => MIDNIGHT)[0].key).toContain('2026-09-18T10:00:00.000Z');
+  });
+
+  const withThresholds = (before: number, after: number, raw: string) =>
+    notificationEvents(usageOf([week(before)]), usageOf([week(after)]), NOW, () => MIDNIGHT, notifyThresholds(raw)).map((event) => event.text);
+
+  it('notifies for a custom threshold crossing only', () => {
+    expect(withThresholds(40, 55, '50,90')).toEqual(['claude weekly at 55%']);
+    expect(withThresholds(55, 85, '50,90')).toEqual([]);
+  });
+
+  it('sends one notification for the highest custom threshold crossed, keyed by it', () => {
+    expect(withThresholds(40, 92, '50,90')).toEqual(['claude weekly at 92%']);
+    const [event] = notificationEvents(usageOf([week(40)]), usageOf([week(92)]), NOW, () => MIDNIGHT, [50, 90]);
+    expect(event.key).toContain('|at90');
+  });
+
+  it.each([[undefined], [''], ['abc'], ['0,150'], ['-5,1.5,x']])('falls back to 80 and 95 for %j', (raw) => {
+    expect(notifyThresholds(raw)).toEqual([80, 95]);
+  });
+
+  it('accepts spaces, sorts and dedupes, and drops invalid entries', () => {
+    expect(notifyThresholds(' 70 , 95 ')).toEqual([70, 95]);
+    expect(notifyThresholds('90,abc,50,90,0,101,100')).toEqual([50, 90, 100]);
   });
 
   it('reports nothing for windows already over a threshold or new windows', () => {
