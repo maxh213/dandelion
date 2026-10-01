@@ -497,8 +497,8 @@ function worstWindow(windows: UsageWindow[]): UsageWindow {
   return (pool.length > 0 ? pool : windows).reduce((worst, window) => (window.usedPct > worst.usedPct ? window : worst));
 }
 
-function soonestReset(windows: UsageWindow[]): string | undefined {
-  const times = windows.flatMap((window) => (window.resetsAt === undefined ? [] : [window.resetsAt]));
+function soonestReset(windows: UsageWindow[], now: string): string | undefined {
+  const times = windows.flatMap((window) => (window.resetsAt === undefined || Date.parse(window.resetsAt) <= Date.parse(now) ? [] : [window.resetsAt]));
   return times.sort((a, b) => Date.parse(a) - Date.parse(b))[0];
 }
 
@@ -529,7 +529,7 @@ function windowRow(usage: OkUsage, noColor: boolean, now: string, marks: PanelMa
   const worst = worstWindow(usage.windows);
   const lead = compactLead(usage.id, marks);
   const meter = `${renderGauge(worst.usedPct, 100, noColor)} ${`${worst.usedPct}%`.padStart(PERCENT_CELLS)}`;
-  const reset = cutCells(countdown(soonestReset(usage.windows), now, marks.absoluteZone), widthOfMarks(marks) - cellCount(lead) - cellCount(meter) - cellCount(flagsOf(marks)) - 1);
+  const reset = cutCells(countdown(soonestReset(usage.windows, now), now, marks.absoluteZone), widthOfMarks(marks) - cellCount(lead) - cellCount(meter) - cellCount(flagsOf(marks)) - 1);
   const weight = marks.selected ? BOLD : '';
   const tail = rightAligned(`${lead}${meter}${reset}`, marks).slice(cellCount(lead) + cellCount(meter));
   return `${styled(lead, weight, noColor || !marks.selected)}${styled(meter, weight + STYLE_TOKENS[usageClass(worst.usedPct)], noColor)}${styled(tail, weight, noColor || !marks.selected)}`;

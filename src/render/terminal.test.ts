@@ -679,6 +679,19 @@ describe('live frame', () => {
       expect(rows).toEqual(['  x             ####----------------  20%', '  y             ####################  99%']);
     });
 
+    it('skips resets already in the past when picking the soonest one', () => {
+      const past = '2026-09-13T09:55:00.000Z';
+      const later = '2026-09-13T12:00:00.000Z';
+      const windows = [{ label: 'a', kind: 'rolling' as const, usedPct: 50, resetsAt: past }, { label: 'b', kind: 'weekly' as const, usedPct: 20, resetsAt: later }];
+      expect(compact([okUsage('x', windows)])[0]).toBe('  x             ##########----------  50% ↻ 2h0m');
+      expect(compact([okUsage('x', windows)], { absoluteResets: true, zone: 'UTC' })[0]).toMatch(/^ {2}x {13}#{10}-{10} {2}50% ↻ .*12:00/);
+    });
+
+    it('shows no reset when every reset has already passed', () => {
+      const windows = [{ label: 'a', kind: 'rolling' as const, usedPct: 50, resetsAt: '2026-09-13T09:55:00.000Z' }];
+      expect(compact([okUsage('x', windows)])[0]).toBe('  x             ##########----------  50%');
+    });
+
     it('shows the note, the balance or the reason dim and cut to the width', () => {
       const long = { ...unavailable('hermes'), reason: 'r'.repeat(100) } as ProviderUsage;
       const rows = compact([okUsage('codex', [], { note: 'api-key billing · no usage windows' }), background()[6], long, okUsage('junie', [])]);
