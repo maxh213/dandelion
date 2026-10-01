@@ -307,9 +307,13 @@ describe('live session', () => {
 
   it('starts no second round while a round is still running even when the clock jumped', async () => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '60' } });
+    await session.settleRound(0);
+    session.press('r');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
     vi.setSystemTime(new Date(Date.parse(START) + 7200000));
     await vi.advanceTimersByTimeAsync(1000);
-    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
     session.press('q');
     await session.finished;
   });
