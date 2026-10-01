@@ -2096,6 +2096,24 @@ describe('re-probe after a reset', () => {
       await session.finished;
     });
 
+    it.each([['ql'], ['qL'], ['qx'], ['\x03l'], ['q ']])('ignores the keys after quit in the chunk %j', async (chunk) => {
+      const session = startSession({ ids: ['claude-work'], env: WORK_ENV });
+      await session.settleRound(0);
+      const before = session.lastFrame();
+      session.press(chunk);
+      await expect(session.finished).resolves.toBe(0);
+      expect(session.spawner.spawn).not.toHaveBeenCalled();
+      expect(session.saved()).toEqual([]);
+      expect(session.lastFrame()).toBe(before);
+    });
+
+    it('still starts only one command for ll', async () => {
+      const session = startSession({ ids: ['claude-work'], env: WORK_ENV, spawn: () => new Promise(() => undefined) });
+      await session.settleRound(0);
+      session.press('ll');
+      expect(session.spawner.spawn).toHaveBeenCalledTimes(1);
+    });
+
     it('does not flash a missing command after quitting', async () => {
       let finish: (status: 'missing') => void = () => undefined;
       const session = startSession({ spawn: () => new Promise((resolve) => (finish = resolve)) });

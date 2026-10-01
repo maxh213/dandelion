@@ -519,7 +519,6 @@ async function stopForeground(session: Session, signal: SignalName): Promise<voi
 }
 
 async function quit(session: Session, code: number, signal: SignalName = 'SIGTERM'): Promise<void> {
-  if (session.quitting) return;
   session.quitting = true;
   clearTimeout(session.frameTimer);
   clearTimeout(session.refreshTimer);
@@ -568,9 +567,13 @@ const KEYS = new Map<string, (session: Session) => unknown>([
 
 const TOKEN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]|[\\s\\S]`, 'gu');
 
+function keysIgnored(session: Session): boolean {
+  return session.suspended || session.quitting;
+}
+
 function press(session: Session, chunk: string): void {
   for (const [key] of chunk.matchAll(TOKEN)) {
-    if (session.suspended) return;
+    if (keysIgnored(session)) return;
     KEYS.get(key)?.(session);
   }
 }
