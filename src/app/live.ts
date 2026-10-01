@@ -70,6 +70,7 @@ type Session = LiveOptions & {
   clock: () => string;
   results: LiveSlot['usage'][];
   lastGood: LiveSlot['lastGood'][];
+  seeded: LiveSlot['seeded'][];
   baseline: LiveSlot['lastGood'][];
   inFlight: Set<number>;
   reprobes: Map<number, Promise<unknown>>;
@@ -152,7 +153,7 @@ function whyOf(session: Session): [string[], string[]] | undefined {
 
 function viewOf(session: Session): LiveView {
   return {
-    slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index], probing: session.inFlight.has(index), lastGood: session.lastGood[index] })),
+    slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index], probing: session.inFlight.has(index), seeded: session.seeded[index], lastGood: session.lastGood[index] })),
     spinner: session.spinner,
     refreshing: session.running === true && session.rounds > 1,
     footer: session.footer,
@@ -599,6 +600,13 @@ function press(session: Session, chunk: string): void {
   }
 }
 
+const SEED_MAX_AGE_SECONDS = 24 * 60 * 60;
+
+function seedsOf(options: LiveOptions, now: string): LiveSlot['seeded'][] {
+  const entries = options.snapshot.recent(options.probes.map(({ id }) => id), now, SEED_MAX_AGE_SECONDS);
+  return entries.map((entry) => (entry?.status === 'ok' ? entry : undefined));
+}
+
 export function startLive(options: LiveOptions): Promise<number> {
   return new Promise((done) => {
     const session: Session = {
@@ -606,6 +614,7 @@ export function startLive(options: LiveOptions): Promise<number> {
       clock: options.clock ?? wallClock,
       results: options.probes.map(() => undefined),
       lastGood: options.probes.map(() => undefined),
+      seeded: seedsOf(options, (options.clock ?? wallClock)()),
       baseline: options.probes.map(() => undefined),
       inFlight: new Set(),
       reprobes: new Map(),

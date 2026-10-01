@@ -227,6 +227,7 @@ export function openHistory(env: Record<string, string | undefined>, homeDir: st
 export interface Snapshot<T> {
   record(usages: T[]): boolean;
   fresh(ids: string[], now: string, maxAgeSeconds: number): T[] | undefined;
+  recent(ids: string[], now: string, maxAgeSeconds: number): (T | undefined)[];
 }
 
 const SNAPSHOT_FILE = 'snapshot.json';
@@ -255,6 +256,10 @@ function coveredFresh<T extends { id: string; fetchedAt: string }>(entries: T[],
   return complete.length === ids.length && complete.every((entry) => isRecent(entry, now, maxAgeSeconds)) ? complete : undefined;
 }
 
+function recentEach<T extends { id: string; fetchedAt: string }>(entries: T[] | undefined, ids: string[], now: string, maxAgeSeconds: number): (T | undefined)[] {
+  return ids.map((id) => entries?.find((entry) => entry.id === id && isRecent(entry, now, maxAgeSeconds)));
+}
+
 export function openSnapshot<T extends { id: string; fetchedAt: string }>(env: Record<string, string | undefined>, homeDir: string, file: StateFile, isEntry: (value: unknown) => value is T): Snapshot<T> {
   const path = snapshotPath(env, homeDir);
   return {
@@ -262,6 +267,7 @@ export function openSnapshot<T extends { id: string; fetchedAt: string }>(env: R
     fresh(ids, now, maxAgeSeconds) {
       const entries = readEntries(file, path, isEntry);
       return entries === undefined ? undefined : coveredFresh(entries, ids, now, maxAgeSeconds);
-    }
+    },
+    recent: (ids, now, maxAgeSeconds) => recentEach(readEntries(file, path, isEntry), ids, now, maxAgeSeconds)
   };
 }

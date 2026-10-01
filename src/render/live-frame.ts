@@ -52,7 +52,7 @@ const ROUTES_FILE_ERROR = 'routes file error';
 const FALLBACK_ROWS = 24;
 const STATUS_IDS = new Set(['claude', 'claude-work', 'claude-deepseek']);
 
-export type LiveSlot = { id: string; usage: ProviderUsage | undefined; probing?: boolean; lastGood?: Extract<ProviderUsage, { status: 'ok' }> };
+export type LiveSlot = { id: string; usage: ProviderUsage | undefined; probing?: boolean; seeded?: Extract<ProviderUsage, { status: 'ok' }>; lastGood?: Extract<ProviderUsage, { status: 'ok' }> };
 
 export const ROUTE_FLASH = -1;
 
@@ -166,15 +166,24 @@ function rememberedPanel(slot: LiveSlot, good: NonNullable<LiveSlot['lastGood']>
   return renderPanelRemembered(good, failed, noColor, now, { ...settledMarks(slot, good, spinner, now, marks), fixable: failed.fix !== undefined });
 }
 
+function seededPanel(seeded: NonNullable<LiveSlot['seeded']>, slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
+  return renderPanel(seeded, noColor, now, settledMarks({ ...slot, probing: true }, seeded, spinner, now, marks));
+}
+
+function unsettledPanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
+  return slot.seeded === undefined ? pendingPanel(slot.id, spinner, noColor, marks) : seededPanel(slot.seeded, slot, spinner, noColor, now, marks);
+}
+
 function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
-  if (slot.usage === undefined) return pendingPanel(slot.id, spinner, noColor, marks);
+  if (slot.usage === undefined) return unsettledPanel(slot, spinner, noColor, now, marks);
   if (slot.usage.status !== 'ok' && slot.lastGood !== undefined) return rememberedPanel(slot, slot.lastGood, slot.usage, spinner, noColor, now, marks);
   return renderPanel(slot.usage, noColor, now, { ...settledMarks(slot, slot.usage, spinner, now, marks), fixable: slot.usage.fix !== undefined });
 }
 
 function liveRow(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
-  const settled = slot.usage === undefined ? marks : settledMarks(slot, slot.usage, spinner, now, marks);
-  return renderCompactRow(slot.id, slot.usage, noColor, now, settled, probingLine(spinner));
+  const shown = slot.usage === undefined && slot.seeded !== undefined ? { ...slot, usage: slot.seeded, probing: true } : slot;
+  const settled = shown.usage === undefined ? marks : settledMarks(shown, shown.usage, spinner, now, marks);
+  return renderCompactRow(slot.id, shown.usage, noColor, now, settled, probingLine(spinner));
 }
 
 type BoxAnswer = { model: string; account: string; dimmed: boolean };

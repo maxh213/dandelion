@@ -57,6 +57,7 @@ type SessionOverrides = {
   historyText?: string;
   historyWrites?: boolean;
   snapshotWrites?: boolean;
+  snapshotText?: string;
   notifier?: { notify(text: string): unknown };
   copy?: (text: string) => Promise<CopyResult>;
   ids?: string[];
@@ -66,7 +67,7 @@ type SessionOverrides = {
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, notifier, copy, spawn, routes, statusProbe } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async (): Promise<CopyResult> => 'command', historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, snapshotText, notifier, copy, spawn, routes, statusProbe } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async (): Promise<CopyResult> => 'command', historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
   const spawner = { spawn: vi.fn(spawn), terminate: vi.fn<(signal: string) => Promise<void>>(async () => undefined) };
   const writes: string[] = [];
@@ -82,7 +83,7 @@ function startSession(overrides: SessionOverrides = {}) {
   const historyReplace = vi.fn<(path: string, text: string) => boolean>(() => historyWrites);
   const history = openHistory({}, '/home/u', { read: () => historyText, replace: historyReplace });
   const snapshotReplace = vi.fn<(path: string, text: string) => boolean>(() => snapshotWrites);
-  const snapshot = openUsageSnapshot({ DANDELION_STATE_FILE: '/s/eligibility.json' }, '/home/u', { read: () => '[]', replace: snapshotReplace });
+  const snapshot = openUsageSnapshot({ DANDELION_STATE_FILE: '/s/eligibility.json' }, '/home/u', { read: () => snapshotText ?? '[]', replace: snapshotReplace });
   const snapshotSaved = () => snapshotReplace.mock.calls.map(([path, text]) => ({ path, entries: JSON.parse(text) }));
   const saved = () => replace.mock.calls.map(([, text]) => JSON.parse(text));
   const hiddenReplace = vi.fn<(path: string, text: string) => boolean>(() => hiddenSaves?.shift() ?? true);
@@ -431,6 +432,107 @@ describe('live session', () => {
     expect(session.snapshotSaved()[1].entries[0].windows[0].usedPct).toBe(55);
     session.press('q');
     await session.finished;
+  });
+
+  describe('seeded start', () => {
+    const MINUTE = 60_000;
+    const ago = (ms: number) => new Date(Date.parse(START) - ms).toISOString();
+    const seedOf = (id: string, ms: number, pct = 42): Usage => ({ ...usageOf(id, ago(ms)), windows: [{ label: 'weekly', kind: 'weekly', usedPct: pct }] });
+    const snapshotOf = (...entries: Usage[]) => JSON.stringify(entries);
+
+    it('draws a recent ok entry at once with its rows, a spinner and its data age while other panels probe', () => {
+      const session = startSession({ snapshotText: snapshotOf(seedOf('claude', 7 * MINUTE)) });
+      const frame = session.frames()[0];
+      expect(frame).toMatch(/^claude [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]$/mu);
+      expect(frame).toMatch(/^plan · claude · 0h7m ago$/mu);
+      expect(frame).toContain('42%');
+      expect(frame).toContain('probing…');
+      expect(frame.match(/probing…/gu)?.length).toBeGreaterThan(IDS.length - 1);
+    });
+
+    it('shows probing for an entry older than 24 hours, a non-ok entry and a missing provider', () => {
+      const old = seedOf('claude', 24 * 60 * MINUTE + 1);
+      const failed: Usage = { id: 'agy', displayName: 'agy', windows: [], fetchedAt: ago(MINUTE), status: 'error', reason: 'boom' };
+      const session = startSession({ snapshotText: snapshotOf(old, failed) });
+      const frame = session.frames()[0];
+      expect(frame).not.toContain('42%');
+      expect(frame).not.toContain('boom');
+      expect(frame).not.toContain(' ago');
+      expect(frame.match(/probing…/gu)).toHaveLength(IDS.length + 2);
+    });
+
+    it.each([['missing', undefined], ['corrupt', '{nope'], ['wrong shape', '{}']])('starts exactly as without a snapshot when it is %s', (_name, text) => {
+      expect(startSession({ snapshotText: text }).frames()[0]).toBe(startSession().frames()[0]);
+    });
+
+    it('keeps the route boxes probing and flashes nothing to copy and nothing to launch', async () => {
+      const seeded = startSession({ snapshotText: snapshotOf(...IDS.map((id) => seedOf(id, 7 * MINUTE))) });
+      const plain = startSession();
+      const boxesOf = (frame: string) => frame.split('\n').slice(2, 6);
+      expect(boxesOf(seeded.frames()[0])).toEqual(boxesOf(plain.frames()[0]));
+      seeded.press('c');
+      expect(seeded.lastFrame()).toContain('nothing to copy');
+      seeded.press('C');
+      expect(seeded.lastFrame()).toContain('nothing to copy');
+      seeded.press('l');
+      expect(seeded.lastFrame()).toContain('nothing to launch');
+      seeded.press('L');
+      expect(seeded.lastFrame()).toContain('nothing to launch');
+      expect(seeded.clipboard.copy).not.toHaveBeenCalled();
+      expect(seeded.spawner.spawn).not.toHaveBeenCalled();
+    });
+
+    it('switches a panel to the new rows and resets its data age when its probe settles', async () => {
+      const session = startSession({ snapshotText: snapshotOf(seedOf('claude', 7 * MINUTE)) });
+      session.probes[0].calls[0].resolve({ ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 77 }] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.lastFrame()).toMatch(/^plan · claude · .*0m ago$/mu);
+      expect(session.lastFrame()).not.toContain('7m ago');
+      expect(session.lastFrame()).toContain('77%');
+      expect(session.lastFrame()).not.toContain('42%');
+      expect(session.lastFrame()).toMatch(/^claude$/mu);
+    });
+
+    it('does not use seeded values as the notification baseline', async () => {
+      const weekly = (pct: number): Usage => ({ ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: pct }] });
+      const session = startSession({ env: { NO_COLOR: '1', DANDELION_NOTIFY: '1' }, snapshotText: snapshotOf(seedOf('claude', 7 * MINUTE, 70)) });
+      await session.settleRound(0, { claude: weekly(85) });
+      expect(session.notifier.notify).not.toHaveBeenCalled();
+    });
+
+    it('writes no history sample and no snapshot before the first round settles', async () => {
+      const session = startSession({ snapshotText: snapshotOf(...IDS.map((id) => seedOf(id, MINUTE))) });
+      session.probes[0].calls[0].resolve(usageOf('claude', START));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.historyReplace).not.toHaveBeenCalled();
+      expect(session.snapshotReplace).not.toHaveBeenCalled();
+    });
+
+    it('never draws a provider that is not probed even when the snapshot has it', () => {
+      const session = startSession({ ids: ['agy'], snapshotText: snapshotOf(seedOf('claude', MINUTE), seedOf('agy', MINUTE)) });
+      expect(session.frames()[0]).not.toContain('claude');
+      expect(session.frames()[0]).toContain('agy');
+    });
+
+    it('treats a seeded panel as pending for x, space and R', async () => {
+      const session = startSession({ snapshotText: snapshotOf(seedOf('claude', MINUTE)) });
+      session.press('j');
+      session.press('x');
+      expect(session.lastFrame()).toContain('no fix for this panel');
+      session.press(' ');
+      session.press('R');
+      expect(session.saved()).toEqual([]);
+      expect(session.probes[0].calls).toHaveLength(1);
+    });
+
+    it('sorts a seeded panel as still probing and keeps the compact view drawing it', () => {
+      const session = startSession({ snapshotText: snapshotOf(seedOf('claude', MINUTE)) });
+      session.press('s');
+      const names = session.lastFrame().split('\n').filter((line) => /^(▸ )?(claude|agy)\b/u.test(line));
+      expect(names[0]).toMatch(/^claude/u);
+      session.press('v');
+      expect(session.lastFrame()).toMatch(/claude.*42%/u);
+    });
   });
 
   it('keeps the dashboard running when the snapshot cannot be written', async () => {
