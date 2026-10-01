@@ -46,8 +46,8 @@ function instantInYear(parts: ResetParts, year: number): number {
 function nextInstant(parts: ResetParts, now: string): number {
   const nowMs = Date.parse(now);
   const year = new Date(nowMs).getUTCFullYear();
-  const thisYear = instantInYear(parts, year);
-  return thisYear < nowMs - TWO_DAYS_MS ? instantInYear(parts, year + 1) : thisYear;
+  const candidates = [year - 1, year, year + 1].map((candidate) => instantInYear(parts, candidate));
+  return candidates.filter((instant) => instant >= nowMs - TWO_DAYS_MS)[0];
 }
 
 function instantOrNaN(parts: ResetParts, now: string): number {

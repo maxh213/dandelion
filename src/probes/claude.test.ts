@@ -37,9 +37,9 @@ async function windowsOf(stdout: string) {
   return usage.windows;
 }
 
-async function weeklyResetsAt(reset: string): Promise<string | undefined> {
-  const [weekly] = await windowsOf(`Current week (all models): 50% used · resets ${reset}`);
-  return weekly.resetsAt;
+async function weeklyResetsAt(reset: string, now = NOW): Promise<string | undefined> {
+  const usage = await probeCli({ runner: { run: async () => ({ stdout: `Current week (all models): 50% used · resets ${reset}`, stderr: '' }) }, reader: readerWith([]).reader }, claudeProbe, now);
+  return usage.windows[0].resetsAt;
 }
 
 describe('claudeProbe', () => {
@@ -72,6 +72,16 @@ describe('claudeProbe', () => {
     ['Oct 25, 12:30am (Europe/London)', '2026-10-24T23:30:00Z']
   ])('resolves reset "%s" to %s', async (reset, instant) => {
     expect(await weeklyResetsAt(reset)).toBe(new Date(instant).toISOString());
+  });
+
+  it.each([
+    ['Dec 31, 10pm (America/Los_Angeles)', '2027-01-01T03:00:00Z', '2027-01-01T06:00:00Z'],
+    ['Jan 2, 9am (Europe/London)', '2026-12-31T20:00:00Z', '2027-01-02T09:00:00Z'],
+    ['Dec 30, 9am (Europe/London)', '2027-01-01T03:00:00Z', '2026-12-30T09:00:00Z'],
+    ['Dec 31, 9am (Europe/London)', '2027-01-02T03:00:00Z', '2026-12-31T09:00:00Z'],
+    ['Dec 29, 9am (Europe/London)', '2027-01-02T03:00:00Z', '2027-12-29T09:00:00Z']
+  ])('resolves reset "%s" at %s to %s across the new year', async (reset, now, instant) => {
+    expect(await weeklyResetsAt(reset, now)).toBe(new Date(instant).toISOString());
   });
 
   it.each([
