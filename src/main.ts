@@ -109,6 +109,17 @@ async function unknown(_io: ProbeIo, proc: Proc): Promise<void> {
   proc.exit(2);
 }
 
+const KNOWN_OPTIONS = new Set(['--once', '--max-age']);
+
+function unknownOptionOf(args: string[]): string | undefined {
+  return args.find((arg, i) => arg.startsWith('-') && !KNOWN_OPTIONS.has(arg) && args[i - 1] !== '--max-age');
+}
+
+async function unknownOption(_io: ProbeIo, proc: Proc): Promise<void> {
+  proc.stderr.write(`dandelion: unknown option ${unknownOptionOf(proc.argv.slice(2))}\n${USAGE}`);
+  proc.exit(2);
+}
+
 const SUBCOMMANDS = new Map([['route', route], ['run', run], ['help', help], ['--help', help], ['-h', help]]);
 
 function isUnknownCommand(argv: string[]): boolean {
@@ -119,11 +130,15 @@ function flagModeOf(argv: string[]): ((io: ProbeIo, proc: Proc) => Promise<void>
   return argv.includes('--json') ? json : argv.includes('--line') ? line : argv.includes('--waybar') ? waybar : undefined;
 }
 
+function rejectionOf(argv: string[]): ((io: ProbeIo, proc: Proc) => Promise<void>) | undefined {
+  if (isUnknownCommand(argv)) return unknown;
+  return unknownOptionOf(argv.slice(2)) === undefined ? undefined : unknownOption;
+}
+
 function modeOf(proc: Proc): (io: ProbeIo, proc: Proc) => Promise<void> {
   const flagged = flagModeOf(proc.argv);
   if (flagged !== undefined) return flagged;
-  if (isUnknownCommand(proc.argv)) return unknown;
-  return isLive(proc) ? live : (io, p) => main(io, p.env, p, new Date().toISOString());
+  return rejectionOf(proc.argv) ?? (isLive(proc) ? live : (io, p) => main(io, p.env, p, new Date().toISOString()));
 }
 
 export function runIfMain(metaUrl: string, argv1: string, io: ProbeIo, proc: Proc): Promise<void> {

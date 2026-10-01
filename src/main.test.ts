@@ -391,6 +391,30 @@ describe('main', () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  it.each<[string[], string]>([[['--jsno'], '--jsno'], [['--once', '--lien'], '--lien'], [['--max-age', '30', '-x'], '-x'], [['--once', 'route', '--high'], '--high'], [['-'], '-']])('runIfMain %j reports an unknown option on stderr, exits 2 and runs no probe', async (args, option) => {
+    const run = vi.fn(async () => ({ stdout: '', stderr: '' }));
+    const io: ProbeIo = { ...routeIo, runner: { run } };
+    const { proc, output, errors } = procOf(['node', MAIN, ...args], true, true);
+    await runIfMain(MAIN_URL, MAIN, io, proc);
+    expect(errors()).toMatch(new RegExp(`^dandelion: unknown option ${option}\\nUsage: dandelion \\[command\\]\\n[\\s\\S]*README\\.md[\\s\\S]*\\n$`));
+    expect(output()).toBe('');
+    expect(proc.exit).toHaveBeenCalledExactlyOnceWith(2);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it.each<[string[]]>([[['--once']], [['--once', '--max-age', '30']], [['--max-age', '-5', '--once']], [['--max-age', '--bogus']], [['--json', '--whatever']], [['--line', '--whatever']], [['--waybar']], [['--waybar', '--whatever']]])('runIfMain %j is not rejected as an unknown option', async (args) => {
+    const { proc, errors } = procOf(['node', MAIN, ...args], false, false);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(errors()).not.toContain('unknown option');
+    expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it.each<[string[]]>([[['route', '--bogus']], [['route', '--high', '--bogus']], [['run', '--bogus']]])('runIfMain %j keeps its own argument handling', async (args) => {
+    const { proc, errors } = procOf(['node', MAIN, ...args], false, false);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(errors()).not.toContain('unknown option');
+  });
+
   it.each<[string[]]>([[['--json']], [['--once', '--json']], [['--json', '--once']], [['x', '--json']]])('runIfMain %j prints one JSON line on two terminals without live mode and exits 0', async (args) => {
     const { proc, output, errors, keyboard } = procOf(['node', MAIN, ...args], true, true);
     const before = new Date().toISOString();
@@ -555,7 +579,7 @@ describe('main', () => {
     expect(proc.exit).toHaveBeenCalledWith(1);
   });
 
-  it.each([[['--once', 'route']], [['--once', 'route', '--high']]])('runIfMain keeps the dashboard for %j', async (args) => {
+  it.each([[['--once', 'route']]])('runIfMain keeps the dashboard for %j', async (args) => {
     vi.mocked(runRoute).mockClear();
     const { proc, output } = procOf(['node', MAIN, ...args], true, false);
     await runIfMain(MAIN_URL, MAIN, profileIo, proc);
