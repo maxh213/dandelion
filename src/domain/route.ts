@@ -76,7 +76,7 @@ function resetsTonight(window: RoutableWindow, tonight: Tonight): boolean {
 }
 
 export function evaporates(window: RoutableWindow, tonight: Tonight): boolean {
-  return window.kind === 'weekly' && leftOf(window) < UNTOUCHED_LEFT && resetsTonight(window, tonight);
+  return window.kind === 'weekly' && leftOf(window) < UNTOUCHED_LEFT && leftOf(window) > 0 && resetsTonight(window, tonight);
 }
 
 function bindingLeft(windows: RoutableWindow[]): number {

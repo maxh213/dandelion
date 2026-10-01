@@ -997,7 +997,7 @@ describe('main', () => {
     const route = readme.split('## Route')[1];
     expect(route).toContain('`kilo` is never routed, because it reports a balance');
     expect(route).toContain('`codex` is never routed, because it has no subscription windows to route on');
-    expect(route).toMatch(/Evaporation: a weekly window .* before the next local midnight with less than 97% left/);
+    expect(route).toMatch(/Evaporation: a weekly window .* before the next local midnight with less than 97% and more than 0% left/);
     expect(route).toMatch(/Most headroom: .*lowest left over its rolling and weekly windows \(100 when it has neither\)/);
     for (const id of ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'cursor']) expect(route).toContain(`| ${id} | \`route.${id}.standard\` | \`route.${id}.max\` |`);
   });

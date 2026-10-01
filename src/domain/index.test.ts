@@ -179,6 +179,9 @@ describe('routeLine', () => {
   it.each([
     ['raw floats, headroom', 'claude: rolling 50.4 @-; agy: rolling 50.2 @-', 'model-c high agy'],
     ['96.9 left evaporates', 'claude: weekly 3.1 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'model-a max claude'],
+    ['a weekly at 100 used never evaporates', 'claude: rolling 10 @-, weekly 100 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-, weekly 0 @-', 'model-c high agy'],
+    ['an uncapped cursor weekly never evaporates', 'cursor: weekly 130 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'model-c high agy'],
+    ['99 used still evaporates', 'claude: weekly 99 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'model-a max claude'],
     ['97 left does not evaporate', 'claude: weekly 3 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'model-c high agy'],
     ['reset already past never evaporates', 'claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'model-c high agy'],
     ['reset exactly at now never evaporates', 'claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'model-c high agy'],
@@ -889,7 +892,9 @@ describe('notificationEvents', () => {
     const tonight = '2026-09-13T20:00:00.000Z';
     expect(texts([week(2, tonight)], [week(50, tonight)])).toEqual(['claude weekly is evaporating, resets in 10h0m']);
     expect(texts([week(50, tonight)], [week(51, tonight)])).toEqual([]);
-    expect(texts([week(100, tonight)], [week(50, tonight)])).toEqual([]);
+    expect(texts([week(50, tonight)], [week(100, tonight)])).toEqual(['claude weekly at 100%']);
+    expect(texts([week(100, tonight)], [week(130, tonight)])).toEqual([]);
+    expect(texts([week(100, tonight)], [week(50, tonight)])).toEqual(['claude weekly is evaporating, resets in 10h0m']);
     expect(texts([week(50)], [week(51)])).toEqual([]);
   });
 

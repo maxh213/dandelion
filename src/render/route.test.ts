@@ -66,6 +66,12 @@ describe('renderRoute', () => {
       expect(why(usages, [], 'headroom')).toEqual({ out: 'model-d max kimi\nevaporation: kimi weekly 41% left resets 20:00 before midnight\nunavailable: claude-work, claude-deepseek, agy, grok, cursor, junie, hermes\n', err: '', code: 0 });
     });
 
+    it('leads with headroom when the only evaporating-looking weekly is fully used', () => {
+      const usages = [usage('claude', ['session', 'rolling', 10], ['weekly', 'weekly', 100, SOON]), usage('agy', ['rolling', 'rolling', 0], ['weekly', 'weekly', 0, LATER])];
+      expect(why(usages, [], 'headroom').out.split('\n')[0]).toBe('model-c high agy');
+      expect(why(usages, [], 'headroom').out.split('\n')[1]).toMatch(/^headroom:/);
+    });
+
     it('names the binding headroom, the other accounts and every skipped account', () => {
       const usages = [usage('claude', ['weekly', 'weekly', 37, LATER]), usage('claude-work', ['session', 'rolling', 92], ['weekly', 'weekly', 10, LATER]), usage('agy', ['weekly', 'weekly', 78, LATER]), usage('grok', ['weekly', 'weekly', 1, LATER]), DOWN];
       expect(why(usages, ['grok'], 'headroom').out).toBe(
