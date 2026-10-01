@@ -123,6 +123,35 @@ export function formatCountdown(resetsAt: string, now: string): string {
   return `${hours}h${minutes}m`;
 }
 
+const ROLLING_LENGTH_MS = 5 * MS_PER_HOUR;
+const WEEKLY_LENGTH_MS = 7 * 24 * MS_PER_HOUR;
+const MIN_ELAPSED_SHARE = 0.05;
+
+function windowLengthMs(window: UsageWindow): number | undefined {
+  if (/week/i.test(window.label)) return WEEKLY_LENGTH_MS;
+  return window.kind === 'rolling' ? ROLLING_LENGTH_MS : undefined;
+}
+
+function elapsedMs(window: UsageWindow, nowMs: number, resetMs: number): number | undefined {
+  const lengthMs = windowLengthMs(window);
+  if (lengthMs === undefined || !(resetMs > nowMs)) return undefined;
+  const elapsed = lengthMs - (resetMs - nowMs);
+  return elapsed >= lengthMs * MIN_ELAPSED_SHARE ? elapsed : undefined;
+}
+
+function hasUsage(usedPct: number): boolean {
+  return usedPct > 0 && usedPct < FULL_PCT;
+}
+
+export function projectFull(window: UsageWindow, now: string): string | undefined {
+  const nowMs = Date.parse(now);
+  const resetMs = Date.parse(String(window.resetsAt));
+  const elapsed = elapsedMs(window, nowMs, resetMs);
+  if (elapsed === undefined || !hasUsage(window.usedPct)) return undefined;
+  const fullMs = nowMs + ((FULL_PCT - window.usedPct) * elapsed) / window.usedPct;
+  return fullMs < resetMs ? new Date(fullMs).toISOString() : undefined;
+}
+
 const WEEKDAY_LIMIT_MS = 6 * 24 * MS_PER_HOUR;
 
 function zonedParts(instant: string, zone: string, fields: Intl.DateTimeFormatOptions): Map<string, string> {

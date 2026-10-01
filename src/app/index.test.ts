@@ -211,7 +211,7 @@ describe('claude and agy windows', () => {
     const lines = plain(output).split('\n');
     expect(lines[0]).toMatch(/^DANDELION +10:00:00$/);
     expect(lines.filter((line) => line === RULE)).toHaveLength(11);
-    expect(['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 18, 25, 30, 35, 40, 44, 48, 52]);
+    expect(['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 18, 25, 31, 36, 42, 46, 50, 54]);
     expect(lines[1]).toBe(RULE);
     expect(panelOf(output, 'claude').at(-1)).toBe('claude · personal · claude');
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
@@ -252,7 +252,7 @@ describe('claude and agy windows', () => {
     expect(output).not.toContain('\x1b');
     expect(output).not.toMatch(/[█░━]/);
     expect(output.split('\n')).toContain(`${'Gemini · weekly'.padEnd(35)} --------------------   0% ↻ 7d7h`);
-    expect(new Set(output.replaceAll(/[\x20-\x7e\n]/g, ''))).toEqual(new Set(['↻', '·', '—']));
+    expect(new Set(output.replaceAll(/[\x20-\x7e\n]/g, ''))).toEqual(new Set(['↻', '·', '—', '→']));
   });
 
   it('colours only the gauge and percent of each row by its style token', async () => {
@@ -499,16 +499,17 @@ describe('kimi panel', () => {
     const output = await runApp(routedRunner(), { NO_COLOR: '1' }, NOW);
     const lines = output.split('\n');
     const kimi = lines.indexOf('kimi');
-    expect(lines.slice(kimi - 1, kimi + 5)).toEqual([
+    expect(lines.slice(kimi - 1, kimi + 6)).toEqual([
       '='.repeat(72),
       'kimi',
       'weekly                              ############--------  59% ↻ 5d0h',
+      '  → 100% in ~1d9h (before reset)',
       '5h                                  ########------------  42% ↻ 5h0m',
       'kimi code · kimi',
       '='.repeat(72)
     ]);
     expect(lines.indexOf('agy')).toBeLessThan(kimi);
-    expect(lines[kimi + 5]).toBe('grok');
+    expect(lines[kimi + 6]).toBe('grok');
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
     expect(output).not.toContain('test-token');
     expect(output).not.toContain('Could not parse usage from response');
@@ -518,7 +519,7 @@ describe('kimi panel', () => {
     const output = await runApp(routedRunner(), {}, NOW);
     const WARM = '\x1b[33m';
     expect(output).toContain(
-      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(12)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 5h0m\n${DIM}kimi code · kimi\x1b[0m\n`
+      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(12)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${DIM}  → 100% in ~1d9h (before reset)\x1b[0m\n${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 5h0m\n${DIM}kimi code · kimi\x1b[0m\n`
     );
   });
 
@@ -739,7 +740,7 @@ describe('grok panel', () => {
     expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}grok\x1b[0m\n${DIM}no grok billing snapshot — run grok once\x1b[0m\n${DIM}grok · grok\x1b[0m\n`);
     expect(plain(output)).not.toMatch(/^(stale )?snapshot /m);
     expect(panelOf(output, 'claude')).toHaveLength(5);
-    expect(panelOf(output, 'kimi')).toHaveLength(4);
+    expect(panelOf(output, 'kimi')).toHaveLength(5);
     expect(panelOf(output, 'kilo')[1]).toContain('$14.15');
   });
 });
@@ -819,12 +820,13 @@ describe('codex panel', () => {
     const spawned: string[][] = [];
     const output = await runApp(codexIo(CODEX_CHATGPT, codexSpawner(codexLines(), spawned)), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
     const lines = output.split('\n');
-    expect(['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 18, 25, 30, 35, 40, 44, 48, 52]);
-    expect(lines.slice(34, 40)).toEqual([
+    expect(['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 18, 25, 31, 36, 42, 46, 50, 54]);
+    expect(lines.slice(35, 42)).toEqual([
       '='.repeat(72),
       'codex',
       '5h                                  ########------------  42% ↻ 2h30m',
       'weekly                              #################---  86% ↻ 3d0h',
+      '  → 100% in ~15h37m (before reset)',
       'codex · codex',
       '='.repeat(72)
     ]);
@@ -845,6 +847,7 @@ describe('codex panel', () => {
         '\ncodex',
         `${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 2h30m`,
         `${'weekly'.padEnd(35)} ${HOT}${'█'.repeat(17)}${'░'.repeat(3)}\x1b[0m ${HOT} 86%\x1b[0m ↻ 3d0h`,
+        `${DIM}  → 100% in ~15h37m (before reset)\x1b[0m`,
         `${DIM}codex · codex\x1b[0m\n`
       ].join('\n')
     );

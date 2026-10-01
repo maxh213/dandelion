@@ -1,4 +1,4 @@
-import { HOT_PCT, formatCountdown, formatResetAt, type Balance, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { HOT_PCT, formatCountdown, formatResetAt, projectFull, type Balance, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -187,6 +187,12 @@ export function renderWindowRow(window: UsageWindow, noColor: boolean, now: stri
   return rowWith(window, noColor, now, (text) => styled(text, style, noColor), absoluteZone, layoutOf(width));
 }
 
+function pacedRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone: string | undefined, width?: number): string {
+  const row = renderWindowRow(window, noColor, now, absoluteZone, width);
+  const full = projectFull(window, now);
+  return full === undefined ? row : `${row}\n${dim(`  → 100% in ~${formatCountdown(full, now)} (before reset)`, noColor)}`;
+}
+
 function remainingPct(balance: Balance, reference: number): number {
   return Math.min(100, Math.max(0, Math.round((balance.amount / reference) * 100)));
 }
@@ -261,7 +267,7 @@ function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, marks: 
   return [
     markedRule(marks, noColor),
     headerLine(usage.displayName, marks, (text) => dim(text, noColor)),
-    ...panelBody(usage, noColor, (window) => renderWindowRow(window, noColor, now, marks.absoluteZone, marks.width), usageStyle(noColor), layoutOf(marks.width)),
+    ...panelBody(usage, noColor, (window) => pacedRow(window, noColor, now, marks.absoluteZone, marks.width), usageStyle(noColor), layoutOf(marks.width)),
     ...snapshotLines(usage, now).map((line) => dim(line, noColor)),
     dim(captionLine(usage, marks), noColor)
   ].join('\n');

@@ -681,6 +681,7 @@ describe('live frame', () => {
       'claude',
       'session                             #-------------------   3% ↻ 3d0h',
       'weekly                              #################---  86% ↻ 3d0h',
+      '  → 100% in ~15h37m (before reset)',
       'weekly Fable                        #################### 100% ↻ 3d0h',
       'claude · personal · claude · 0h0m ago'
     ];
@@ -722,7 +723,7 @@ describe('live frame', () => {
     it('opens a short terminal on the banner, the summary, the boxes and the personal claude panel', () => {
       const frame = renderLiveFrame(tenPanelView(), true, NOW);
       expect(frame.endsWith('\n')).toBe(false);
-      expect(frame.split('\n')).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL]);
+      expect(frame.split('\n')).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL.slice(0, -1)]);
     });
 
     it('opens the all-pending frame on the probing boxes and the first two pending panels', () => {
@@ -744,11 +745,11 @@ describe('live frame', () => {
     });
 
     it.each([24, 0, undefined, 12.5])('renders the 24-line budget when rows is %s', (rows) => {
-      expect(frameOf({ rows })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL, ...WORK_PANEL, ...AGY_PANEL, RULE]);
+      expect(frameOf({ rows })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL, ...WORK_PANEL, ...AGY_PANEL]);
     });
 
     it('starts the panel region at offset 0 when selected is omitted', () => {
-      expect(frameOf({ selected: undefined })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL]);
+      expect(frameOf({ selected: undefined })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL.slice(0, -1)]);
     });
 
     it('scrolls only as far as needed to keep the whole selected panel in view', () => {
@@ -777,7 +778,7 @@ describe('live frame', () => {
     });
 
     it('walks back to the first panel with the boxes still in the chrome', () => {
-      expect(frameOf({ selected: 0 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, RULE, '▸ claude', ...CLAUDE_PANEL.slice(2)]);
+      expect(frameOf({ selected: 0 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2)]);
     });
 
     it.each([0, 4, 9])('shows every panel from the first one when they all fit and %i is selected', (selected) => {
@@ -793,7 +794,7 @@ describe('live frame', () => {
     });
 
     it('keeps the help footer as the last line of the frame', () => {
-      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -2), 'h hide · H show hidden · R refresh panel', 'g usage graph of the selected panel · esc/q/g back', FOOTER]);
+      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -3), 'h hide · H show hidden · R refresh panel', 'g usage graph of the selected panel · esc/q/g back', FOOTER]);
     });
 
     it.each<[number, string[]]>([
@@ -808,7 +809,7 @@ describe('live frame', () => {
       const grown = frameOf({ rows: 30 });
       expect(grown).toHaveLength(30);
       expect(grown.slice(0, 12)).toEqual(frameOf());
-      expect(grown.at(-1)).toBe('grok');
+      expect(grown.at(-1)).toBe('kimi code · kimi · 0h0m ago');
       expect(frameOf({ rows: 10 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL.slice(0, 4)]);
       expect(frameOf({ rows: 30, selected: 9 })).toHaveLength(30);
       expect(frameOf({ rows: 30, selected: 9 }).slice(-4)).toEqual([RULE, ...frameOf({ selected: 9 }).slice(-3)]);
@@ -816,7 +817,7 @@ describe('live frame', () => {
 
     it('never clips the once dashboard and draws no boxes there', () => {
       const once = renderDashboard(tenPanels(), true, NOW, [], 'UTC');
-      expect(once.split('\n')).toHaveLength(50);
+      expect(once.split('\n')).toHaveLength(52);
       expect(once).not.toContain('+- route');
       const ids = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
       expect(ids.every((id) => once.includes(`\n${id}\n`))).toBe(true);
@@ -1366,5 +1367,27 @@ describe('viewportLines', () => {
     expect(viewportLines(PANELS, 1, 2)).toEqual(['b2', 'b3']);
     expect(viewportLines(PANELS, 2, 1)).toEqual(['c2']);
     expect(viewportLines(PANELS, 0, 0)).toEqual([]);
+  });
+});
+
+describe('pace warning', () => {
+  const risky: ProviderUsage = {
+    id: 'kimi',
+    displayName: 'kimi',
+    planLabel: 'kimi code',
+    windows: [{ label: '5h', kind: 'rolling', usedPct: 60, resetsAt: '2026-09-13T13:00:00Z' }],
+    fetchedAt: 'now',
+    status: 'ok'
+  };
+  const safe: ProviderUsage = { ...risky, windows: [{ label: '5h', kind: 'rolling', usedPct: 30, resetsAt: '2026-09-13T13:00:00Z' }] };
+  const WARNING = '  → 100% in ~1h20m (before reset)';
+
+  it('adds a dim line under the at-risk row', () => {
+    expect(renderPanelOk(risky as Extract<ProviderUsage, { status: 'ok' }>, true, NOW, PLAIN).split('\n')[3]).toBe(WARNING);
+    expect(renderPanelOk(risky as Extract<ProviderUsage, { status: 'ok' }>, false, NOW, PLAIN).split('\n')[3]).toBe(`\x1b[90m${WARNING}${RESET}`);
+  });
+
+  it('leaves panels without an at-risk window at their old height', () => {
+    expect(renderPanelOk(safe as Extract<ProviderUsage, { status: 'ok' }>, true, NOW, PLAIN).split('\n')).toHaveLength(4);
   });
 });

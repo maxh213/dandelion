@@ -9,6 +9,7 @@ import {
   openHidden,
   openHistory,
   openRoutes,
+  projectFull,
   routeDecision,
   routeLine,
   summariseFleet,
@@ -805,5 +806,48 @@ describe('notificationEvents', () => {
   it('reports nothing unless both results are ok', () => {
     expect(notificationEvents(usageOf([week(10)], 'error'), usageOf([week(99)]), NOW, MIDNIGHT)).toEqual([]);
     expect(notificationEvents(usageOf([week(10)]), usageOf([week(99)], 'error'), NOW, MIDNIGHT)).toEqual([]);
+  });
+});
+
+describe('projectFull', () => {
+  const NOW = '2026-09-13T10:00:00.000Z';
+  const rolling = (usedPct: number, resetsAt?: string): UsageWindow => ({ label: '5h', kind: 'rolling', usedPct, resetsAt: resetsAt ?? '2026-09-13T13:00:00.000Z' });
+
+  it('projects when a rolling window fills before it resets', () => {
+    expect(projectFull(rolling(60), NOW)).toBe('2026-09-13T11:20:00.000Z');
+  });
+
+  it('is undefined when the window resets first', () => {
+    expect(projectFull(rolling(30), NOW)).toBeUndefined();
+    expect(projectFull(rolling(40), NOW)).toBeUndefined();
+  });
+
+  it('is undefined without a known length', () => {
+    expect(projectFull({ label: 'total', kind: 'other', usedPct: 60, resetsAt: '2026-09-13T13:00:00.000Z' }, NOW)).toBeUndefined();
+    expect(projectFull({ label: 'total', kind: 'weekly', usedPct: 60, resetsAt: '2026-09-13T13:00:00.000Z' }, NOW)).toBeUndefined();
+  });
+
+  it('is undefined for a missing or past reset', () => {
+    expect(projectFull({ label: '5h', kind: 'rolling', usedPct: 60 }, NOW)).toBeUndefined();
+    expect(projectFull(rolling(60, NOW), NOW)).toBeUndefined();
+    expect(projectFull(rolling(60, '2026-09-13T09:00:00.000Z'), NOW)).toBeUndefined();
+  });
+
+  it('is undefined for no usage or a full window', () => {
+    expect(projectFull(rolling(0), NOW)).toBeUndefined();
+    expect(projectFull(rolling(100), NOW)).toBeUndefined();
+    expect(projectFull(rolling(120), NOW)).toBeUndefined();
+  });
+
+  it('is undefined when under 5% of the window has elapsed', () => {
+    expect(projectFull(rolling(50, '2026-09-13T14:50:00.000Z'), NOW)).toBeUndefined();
+    expect(projectFull(rolling(50, '2026-09-13T14:45:00.000Z'), NOW)).toBe('2026-09-13T10:15:00.000Z');
+  });
+
+  it('uses seven days for a weekly label', () => {
+    const weekly = (usedPct: number, resetsAt: string): UsageWindow => ({ label: 'Weekly Limit', kind: 'weekly', usedPct, resetsAt });
+    expect(projectFull(weekly(80, '2026-09-15T10:00:00.000Z'), NOW)).toBe('2026-09-14T16:00:00.000Z');
+    expect(projectFull(weekly(50, '2026-09-15T10:00:00.000Z'), NOW)).toBeUndefined();
+    expect(projectFull({ ...weekly(80, '2026-09-15T10:00:00.000Z'), kind: 'other', label: 'WEEK' }, NOW)).toBe('2026-09-14T16:00:00.000Z');
   });
 });
