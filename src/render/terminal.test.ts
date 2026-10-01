@@ -378,6 +378,26 @@ describe('pace marker', () => {
     ['a past reset', { ...fiveHour, resetsAt: '2026-09-13T09:00:00.000Z' }]
   ])('is absent for %s', (_name, window) => {
     expect(renderWindowRow(window, true, NOW)).not.toContain('|');
+    const row = renderWindowRow(window, false, NOW);
+    expect(row).not.toContain('│');
+    expect(row).not.toContain('\x1b[90m');
+    expect(row.split('\x1b[0m')).toHaveLength(3);
+  });
+
+  it('skips empty styled segments at the gauge edges', () => {
+    const first = renderWindowRow({ ...fiveHour, resetsAt: '2026-09-13T15:00:00.000Z' }, false, NOW);
+    const last = renderWindowRow({ ...fiveHour, resetsAt: '2026-09-13T10:00:01.000Z' }, false, NOW);
+    expect(first).not.toContain('\x1b[32m\x1b[0m');
+    expect(last).not.toContain('\x1b[32m\x1b[0m');
+    expect(first).toContain('\x1b[90m│\x1b[0m\x1b[32m');
+  });
+
+  it('draws the pace marker plain inside a stale panel', () => {
+    const usage: ProviderUsage = { id: 'grok', displayName: 'grok', windows: [fiveHour], fetchedAt: 'now', status: 'ok', snapshotAt: '2026-09-10T17:14:22.812Z' };
+    const row = renderPanelOk(usage, false, NOW, PLAIN).split('\n')[2];
+    expect(row).toBe(`\x1b[90m${'5h'.padEnd(35)} ${'█'.repeat(6)}${'░'.repeat(4)}│${'░'.repeat(9)}  30% ↻ 2h30m${RESET}`);
+    expect(row.split('\x1b[0m')).toHaveLength(2);
+    expect(row).not.toContain('\x1b[90m│');
   });
 });
 

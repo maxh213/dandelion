@@ -188,7 +188,11 @@ function paceGauge(window: UsageWindow, noColor: boolean, now: string, paint: (t
   if (fraction === undefined) return paint(gauge);
   const index = Math.min(cells - 1, Math.floor(fraction * cells));
   const chars = [...gauge];
-  return paint(chars.slice(0, index).join('')) + mark(noColor ? '|' : '│') + paint(chars.slice(index + 1).join(''));
+  return paintSlice(chars.slice(0, index), paint) + mark(noColor ? '|' : '│') + paintSlice(chars.slice(index + 1), paint);
+}
+
+function paintSlice(chars: string[], paint: (text: string) => string): string {
+  return chars.length === 0 ? '' : paint(chars.join(''));
 }
 
 function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, mark: (text: string) => string, absoluteZone: string | undefined, layout: Layout): string {

@@ -519,7 +519,7 @@ describe('kimi panel', () => {
     const output = await runApp(routedRunner(), {}, NOW);
     const WARM = '\x1b[33m';
     expect(output).toContain(
-      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(5)}\x1b[0m${DIM}│\x1b[0m${WARM}${'█'.repeat(6)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${DIM}  → 100% in ~1d9h (before reset)\x1b[0m\n${'5h'.padEnd(35)} ${CALM}\x1b[0m${DIM}│\x1b[0m${CALM}${'█'.repeat(7)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 5h0m\n${DIM}kimi code · kimi\x1b[0m\n`
+      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(5)}\x1b[0m${DIM}│\x1b[0m${WARM}${'█'.repeat(6)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${DIM}  → 100% in ~1d9h (before reset)\x1b[0m\n${'5h'.padEnd(35)} ${DIM}│\x1b[0m${CALM}${'█'.repeat(7)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 5h0m\n${DIM}kimi code · kimi\x1b[0m\n`
     );
   });
 
