@@ -89,13 +89,16 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: hiddenReplace
   });
   const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe });
+  const handlers: (() => void)[] = [];
+  const signals = { on: vi.fn((_event: 'SIGINT', listener: () => void) => handlers.push(listener)), off: vi.fn((_event: 'SIGINT', listener: () => void) => handlers.splice(handlers.indexOf(listener), 1)) };
+  const interrupt = () => handlers.slice().forEach((handler) => handler());
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, signals, screen, stopChildren, eligibility, hidden, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { notifier, clipboard, spawner, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, snapshotReplace, snapshotSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { notifier, clipboard, spawner, handlers, signals, interrupt, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, snapshotReplace, snapshotSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -1398,6 +1401,51 @@ describe('fix key', () => {
     expect(session.keyboard.resume).toHaveBeenCalledTimes(1);
     expect(session.frames().length).toBeGreaterThan(framesBefore);
     expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
+    session.press('q');
+    await session.finished;
+  });
+
+  it('ignores SIGINT while the fix runs, then removes the handler and restores the dashboard', async () => {
+    let finish: (status: number) => void = () => undefined;
+    const session = startSession({ spawn: () => new Promise((resolve) => (finish = resolve)) });
+    await selectGrok(session);
+    expect(session.handlers).toHaveLength(0);
+    session.press('x');
+    expect(session.handlers).toHaveLength(1);
+    session.interrupt();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.stopChildren).not.toHaveBeenCalled();
+    expect(session.keyboard.setRawMode).toHaveBeenLastCalledWith(false);
+    finish(130);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.handlers).toHaveLength(0);
+    expect(session.signals.off).toHaveBeenCalledTimes(1);
+    expect(session.writes.at(-3)).toBe(ENTER_ALTERNATE);
+    expect(session.keyboard.setRawMode).toHaveBeenLastCalledWith(true);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
+    expect(session.stopChildren).not.toHaveBeenCalled();
+    session.press('\x03');
+    await session.finished;
+    expect(session.stopChildren).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts no probe and sends no notification while the fix runs, and runs the first round after it exits', async () => {
+    let finish: (status: number) => void = () => undefined;
+    const reset = '2026-09-13T10:02:00.000Z';
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_NOTIFY: '1', DANDELION_REFRESH_SECONDS: '60' }, spawn: () => new Promise((resolve) => (finish = resolve)) });
+    await session.settleRound(0, { grok: withFix('grok'), claude: windowUsage('claude', weekly(10, reset)) });
+    ['j', 'j', 'j', 'j'].forEach((key) => session.press(key));
+    session.press('r');
+    await vi.advanceTimersByTimeAsync(0);
+    session.press('x');
+    session.probes.forEach(({ probe, calls }) => calls[1].resolve(probe.id === 'claude' ? windowUsage('claude', weekly(96, reset)) : usageOf(probe.id, calls[1].now)));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(20 * 60 * 1000);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
+    expect(session.notifier.notify).not.toHaveBeenCalled();
+    finish(0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 3));
     session.press('q');
     await session.finished;
   });

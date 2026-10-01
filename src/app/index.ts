@@ -369,6 +369,7 @@ export function runLive(
     probes: providerProbes(io, env),
     env,
     keyboard,
+    signals: process,
     screen,
     stopChildren,
     eligibility: eligibilityOf(io, env),

@@ -20,6 +20,11 @@ export interface Clipboard {
   copy(text: string): Promise<boolean>;
 }
 
+interface Signals {
+  on(event: 'SIGINT', listener: () => void): unknown;
+  off(event: 'SIGINT', listener: () => void): unknown;
+}
+
 export interface Keyboard {
   setRawMode(raw: boolean): unknown;
   setEncoding(encoding: 'utf8'): unknown;
@@ -33,6 +38,7 @@ type LiveOptions = {
   env: Record<string, string | undefined>;
   screen: Screen;
   keyboard: Keyboard;
+  signals: Signals;
   stopChildren(): Promise<void>;
   eligibility: Eligibility;
   hidden: Hidden;
@@ -171,7 +177,7 @@ function tick(session: Session): void {
 }
 
 function notifying(session: Session): boolean {
-  return (session.env['DANDELION_NOTIFY'] ?? '') !== '';
+  return !session.suspended && (session.env['DANDELION_NOTIFY'] ?? '') !== '';
 }
 
 function fresh(session: Session, key: string): boolean {
@@ -234,7 +240,7 @@ function startRound(session: Session): void {
 }
 
 function refresh(session: Session): void {
-  if (session.running || session.quitting) return;
+  if (session.running || session.quitting || session.suspended) return;
   clearTimeout(session.refreshTimer);
   startRound(session);
   draw(session);
@@ -249,7 +255,7 @@ function settlePanel(session: Session, index: number, generation: number, usage:
 }
 
 function panelBusy(session: Session, index: number): boolean {
-  return session.running === true || session.quitting || session.inFlight.has(index);
+  return session.running === true || session.quitting || session.suspended || session.inFlight.has(index);
 }
 
 function refreshAt(session: Session, index: number): void {
@@ -414,12 +420,18 @@ function restoreAfterFix(session: Session): void {
   refresh(session);
 }
 
+function ignoreInterrupt(): void {
+  return undefined;
+}
+
 async function runFix(session: Session, fix: Fix): Promise<void> {
   session.suspended = true;
+  session.signals.on('SIGINT', ignoreInterrupt);
   session.screen.write(LEAVE_ALTERNATE);
   session.keyboard.setRawMode(false);
   session.keyboard.pause();
   await session.spawner.spawn({ command: fix.command, args: fix.args, env: fix.env ?? {} });
+  session.signals.off('SIGINT', ignoreInterrupt);
   restoreAfterFix(session);
 }
 
