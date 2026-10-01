@@ -79,7 +79,8 @@ function startSession(overrides: SessionOverrides = {}) {
     disk.text = text;
     return true;
   });
-  const eligibility = openEligibility({}, '/home/u', { read: () => disk.text, replace });
+  const stateReads = vi.fn<() => string>(() => disk.text);
+  const eligibility = openEligibility({}, '/home/u', { read: stateReads, replace });
   const historyReplace = vi.fn<(path: string, text: string) => boolean>(() => historyWrites);
   const history = openHistory({}, '/home/u', { read: () => historyText, replace: historyReplace });
   const snapshotReplace = vi.fn<(path: string, text: string) => boolean>(() => snapshotWrites);
@@ -116,7 +117,7 @@ function startSession(overrides: SessionOverrides = {}) {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { notifier, clipboard, spawner, handlers, handlersFor, deliver, signals, interrupt, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, viewReplace, viewSaved, historyReplace, snapshotReplace, snapshotSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { disk, stateReads, notifier, clipboard, spawner, handlers, handlersFor, deliver, signals, interrupt, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, viewReplace, viewSaved, historyReplace, snapshotReplace, snapshotSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -2109,6 +2110,94 @@ describe('fix key', () => {
       session.press('q');
       await session.finished;
     });
+  });
+});
+
+describe('external eligibility changes', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date(START));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const PAIR = ['claude', 'claude-work'];
+  const WORK_ENV = { NO_COLOR: '1', DANDELION_CLAUDE_WORK_CONFIG_DIR: '/work' };
+  const routeBox = (session: ReturnType<typeof startSession>) => session.lastFrame().split('\n').slice(2, 4).join('\n');
+  const claudeSession = async () => {
+    const session = startSession({ ids: PAIR, env: WORK_ENV });
+    await session.settleRound(0);
+    return session;
+  };
+
+  it('shows the new routing at the next full round', async () => {
+    const session = await claudeSession();
+    expect(routeBox(session)).toContain('model-a high');
+    expect(session.lastFrame()).not.toContain('routing off');
+    session.disk.text = '{"claude": false}';
+    session.press('r');
+    await session.settleRound(1);
+    expect(session.lastFrame()).toMatch(/claude +#*-*.*routing off/);
+    expect(session.lastFrame()).not.toMatch(/claude-work.*routing off/);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('reloads after a single-panel re-probe settles', async () => {
+    const session = await claudeSession();
+    session.press('j');
+    session.disk.text = '{"claude": false}';
+    session.press('R');
+    session.probes[0].calls[1].resolve(usageOf('claude', START));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.lastFrame()).toMatch(/claude +#*-*.*routing off/);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('copies and launches the route that skips the provider turned off meanwhile', async () => {
+    const session = await claudeSession();
+    session.disk.text = '{"claude": false}';
+    session.press('c');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.clipboard.copy).toHaveBeenLastCalledWith(expect.stringContaining('claude-work'));
+    session.disk.text = '{"claude-work": false}';
+    session.press('L');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.spawner.spawn).toHaveBeenLastCalledWith({ command: 'claude', args: ['--model', 'model-h1', '--effort', 'max'], env: {} });
+    session.disk.text = '{"claude": false}';
+    session.press('l');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.spawner.spawn).toHaveBeenLastCalledWith({ command: 'claude', args: ['--model', 'model-a', '--effort', 'high'], env: { CLAUDE_CONFIG_DIR: '/work' } });
+    session.press('q');
+    await session.finished;
+  });
+
+  it('treats a corrupt state file read during a round as every provider eligible', async () => {
+    const session = await claudeSession();
+    session.disk.text = '{"claude": false}';
+    session.press('r');
+    await session.settleRound(1);
+    session.disk.text = '{not json';
+    session.press('r');
+    await session.settleRound(2);
+    expect(session.lastFrame()).not.toContain('routing off');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('does not read the state file on plain frame redraws', async () => {
+    const session = await claudeSession();
+    const reads = session.stateReads.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1000);
+    session.press('?');
+    session.press('?');
+    session.press('j');
+    expect(session.stateReads.mock.calls.length).toBe(reads);
+    session.press('q');
+    await session.finished;
   });
 });
 

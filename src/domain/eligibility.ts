@@ -5,6 +5,7 @@ export interface StateFile {
 
 export interface Eligibility {
   ineligible(): string[];
+  reload(): void;
   toggle(id: string): boolean;
 }
 
@@ -48,6 +49,9 @@ export function openEligibility(env: Record<string, string | undefined>, homeDir
   const held = { state: readState(file, path) };
   return {
     ineligible: () => Object.keys(held.state).filter((id) => held.state[id] === false),
+    reload() {
+      held.state = readState(file, path);
+    },
     toggle(id) {
       const next = toggled(readState(file, path), id);
       if (!file.replace(path, serialized(next))) return false;

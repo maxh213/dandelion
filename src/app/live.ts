@@ -271,6 +271,7 @@ function fetchStatus(session: Session): void {
 }
 
 function startRound(session: Session): void {
+  session.eligibility.reload();
   fetchStatus(session);
   session.running = true;
   session.rounds += 1;
@@ -288,6 +289,7 @@ function refresh(session: Session): void {
 }
 
 function settlePanel(session: Session, index: number, usage: LiveSlot['usage']): void {
+  session.eligibility.reload();
   settle(session, index, usage);
   session.settled = session.results.filter((result) => result !== undefined);
   session.snapshot.record(session.settled);
@@ -459,6 +461,7 @@ function copyOutcome(session: Session, line: string, result: CopyResult): void {
 }
 
 function copyLine(session: Session, which: 0 | 1): void {
+  session.eligibility.reload();
   const line = currentRouteLines(viewOf(session), session.clock())?.[which];
   if (line === undefined || line === NO_ROUTE) showFlash(session, ROUTE_FLASH, NOTHING_TO_COPY);
   else void session.clipboard.copy(line).then((result) => copyOutcome(session, line, result));
@@ -509,6 +512,7 @@ async function runLaunch(session: Session, launch: Launch): Promise<void> {
 }
 
 function launchLine(session: Session, which: 0 | 1): void {
+  session.eligibility.reload();
   const line = currentRouteLines(viewOf(session), session.clock())?.[which];
   if (line === undefined || line === NO_ROUTE) showFlash(session, ROUTE_FLASH, NOTHING_TO_LAUNCH);
   else void runLaunch(session, session.launchOf(line));
