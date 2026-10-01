@@ -118,6 +118,6 @@ export function claudeWorkProbe(env: Record<string, string | undefined>, homeDir
     command: claudeProbe.id,
     planLabel: WORK_PLAN,
     env: { CLAUDE_CONFIG_DIR: configDir },
-    requiresDirectory: { path: configDir, missingReason: NO_WORK_CONFIG }
+    requiresDirectory: { path: configDir, missingReason: NO_WORK_CONFIG, missingFix: { command: 'claude', args: [], env: { CLAUDE_CONFIG_DIR: configDir } } }
   };
 }

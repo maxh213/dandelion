@@ -13,7 +13,16 @@ export interface FileReader {
 
 export const USAGE_PARSE_FAILURE = 'Could not parse usage from response';
 
-export class ProbeUnavailable extends Error {}
+export type Fix = { command: string; args: string[]; env?: Record<string, string> };
+
+export class ProbeUnavailable extends Error {
+  readonly fix?: Fix;
+
+  constructor(message: string, fix?: Fix) {
+    super(message);
+    this.fix = fix;
+  }
+}
 
 export function isSuccess(outcome: FetchOutcome): outcome is { status: number; body: string } {
   return 'status' in outcome && outcome.status >= 200 && outcome.status < 300;
@@ -31,6 +40,10 @@ export function successBody(outcome: FetchOutcome, request: string, timeoutMs: n
 
 export function unavailableReason(error: unknown): string {
   return error instanceof ProbeUnavailable ? error.message : USAGE_PARSE_FAILURE;
+}
+
+export function unavailableFix(error: unknown): { fix?: Fix } {
+  return error instanceof ProbeUnavailable && error.fix !== undefined ? { fix: error.fix } : {};
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

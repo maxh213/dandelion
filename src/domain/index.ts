@@ -1,3 +1,4 @@
+import type { Fix } from './ports.ts';
 import { evaporates, trips, type Tonight, type WindowKind } from './route.ts';
 
 export {
@@ -12,9 +13,11 @@ export {
   newestLineMatch,
   parseJson,
   successBody,
+  unavailableFix,
   unavailableReason,
   validInstant,
   type FetchOutcome,
+  type Fix,
   type Fetcher,
   type FileReader
 } from './ports.ts';
@@ -63,6 +66,7 @@ type ProviderIdentity = {
   displayName: string;
   planLabel?: string;
   captionSuffix?: string;
+  fix?: Fix;
   windows: UsageWindow[];
   fetchedAt: string;
 };
@@ -70,6 +74,12 @@ type ProviderIdentity = {
 export type ProviderUsage =
   | (ProviderIdentity & { status: 'ok'; balance?: Balance; snapshotAt?: string; note?: string })
   | (ProviderIdentity & { status: 'unavailable' | 'error'; reason: string });
+
+const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
+
+export function isStale(snapshotAt: string | undefined, now: string): boolean {
+  return Date.parse(now) - new Date(snapshotAt ?? Number.NaN).getTime() > STALE_AFTER_MS;
+}
 
 export function withReset(window: UsageWindow, resetsAt: string | undefined): UsageWindow {
   return resetsAt === undefined ? window : { ...window, resetsAt };

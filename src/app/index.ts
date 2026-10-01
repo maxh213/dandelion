@@ -357,6 +357,7 @@ export function runLive(
     routes: routesOf(env),
     zone: processZone(),
     notifier: realNotifier,
+    spawner: realRunSpawner,
     clipboard: openClipboard({ tryCommand: realCommandTry, write: screen.write.bind(screen) }),
     clock
   });

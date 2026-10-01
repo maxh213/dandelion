@@ -89,8 +89,8 @@ function withAuth(nous?: Record<string, unknown>, accountAnswer?: Answer) {
   return ioOf({ '/auth.json': nous === undefined ? AUTH : authJson(nous) }, accountAnswer);
 }
 
-function unavailable(reason: string) {
-  return { id: 'hermes', displayName: 'hermes', planLabel: 'hermes', fetchedAt: NOW, windows: [], status: 'unavailable', reason };
+function unavailable(reason: string, fix?: { command: string; args: string[] }) {
+  return { id: 'hermes', displayName: 'hermes', planLabel: 'hermes', fetchedAt: NOW, windows: [], status: 'unavailable', reason, ...(fix ? { fix } : {}) };
 }
 
 function okUsage(windows: unknown[], planLabel: string, extra: Record<string, unknown> = {}) {
@@ -144,7 +144,7 @@ describe('probeHermes', () => {
     ['an unparseable expiry', { agent_key: AGENT, agent_key_expires_at: 'soon' }]
   ])('is expired without a request when %s', async (_case, nous) => {
     const { io, requests } = withAuth(nous);
-    expect(await probeHermes(io, ENV, NOW)).toStrictEqual(unavailable(EXPIRED));
+    expect(await probeHermes(io, ENV, NOW)).toStrictEqual(unavailable(EXPIRED, { command: 'hermes', args: ['once'] }));
     expect(requests).toEqual([]);
   });
 
@@ -174,7 +174,7 @@ describe('probeHermes', () => {
     ['a JSON array', { '/auth.json': '["qa-dummy-hermes-agent-key-016"]' }]
   ])('is unavailable without a request for %s', async (_case, files) => {
     const { io, requests } = ioOf(files);
-    expect(await probeHermes(io, ENV, NOW)).toStrictEqual(unavailable(NO_AUTH));
+    expect(await probeHermes(io, ENV, NOW)).toStrictEqual(unavailable(NO_AUTH, { command: 'hermes', args: ['portal', 'login'] }));
     expect(requests).toEqual([]);
   });
 

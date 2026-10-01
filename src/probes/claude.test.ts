@@ -176,9 +176,9 @@ describe('claudeWorkProbe', () => {
 
 describe('claudeWorkProbe without its config dir', () => {
   it.each([
-    ['a configured dir that is not a directory', { DANDELION_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' }],
-    ['no default dir', {}]
-  ])('is the dim work panel that says how to log in for %s, without running claude', async (_case, env) => {
+    ['a configured dir that is not a directory', { DANDELION_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' }, '/no-such-dir'],
+    ['no default dir', {}, '/home/tester/.claude-work']
+  ])('is the dim work panel that says how to log in for %s, without running claude', async (_case, env, dir) => {
     const calls: unknown[][] = [];
     const runner = { run: async (...call: unknown[]) => (calls.push(call), { stdout: WORK_TRANSCRIPT, stderr: '' }) };
     const usage = await probeCli({ runner, reader: readerWith([]).reader }, claudeWorkProbe(env, '/home/tester'), NOW);
@@ -190,7 +190,8 @@ describe('claudeWorkProbe without its config dir', () => {
       windows: [],
       fetchedAt: NOW,
       status: 'unavailable',
-      reason: 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude'
+      reason: 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude',
+      fix: { command: 'claude', args: [], env: { CLAUDE_CONFIG_DIR: dir } }
     });
   });
 });

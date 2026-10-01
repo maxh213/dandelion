@@ -6,12 +6,14 @@ import {
   isFilled,
   parseJson,
   successBody,
+  unavailableFix,
   unavailableReason,
   usedPctFromRemaining,
   validInstant,
   withReset,
   type Fetcher,
   type FileReader,
+  type Fix,
   type ProviderUsage,
   type UsageWindow
 } from '../domain/index.ts';
@@ -28,6 +30,8 @@ const REQUEST_TIMEOUT_MS = 15000;
 const FALLBACK_LABEL = 'hermes';
 const NO_AUTH = 'no hermes auth — run hermes portal login';
 const EXPIRED = 'hermes token expired — run hermes once';
+const LOGIN_FIX: Fix = { command: 'hermes', args: ['portal', 'login'] };
+const ONCE_FIX: Fix = { command: 'hermes', args: ['once'] };
 const NO_PAID = ' · no paid access';
 
 function authFile(reader: FileReader, env: Env): string {
@@ -47,13 +51,13 @@ function bearerOf(nous: unknown): { token: string; expiry: unknown } | undefined
 
 function nousBearer(auth: unknown): { token: string; expiry: unknown } {
   const bearer = bearerOf(fieldOf(fieldOf(auth, 'providers'), 'nous'));
-  if (bearer === undefined) throw new ProbeUnavailable(NO_AUTH);
+  if (bearer === undefined) throw new ProbeUnavailable(NO_AUTH, LOGIN_FIX);
   return bearer;
 }
 
 function unexpiredToken(token: string, expiry: unknown, now: string): string {
   const instant = validInstant(expiry);
-  if (instant === undefined || Date.parse(instant) <= Date.parse(now)) throw new ProbeUnavailable(EXPIRED);
+  if (instant === undefined || Date.parse(instant) <= Date.parse(now)) throw new ProbeUnavailable(EXPIRED, ONCE_FIX);
   return token;
 }
 
@@ -64,7 +68,7 @@ async function readToken(reader: FileReader, env: Env, now: string): Promise<str
     return unexpiredToken(token, expiry, now);
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error;
-    throw new ProbeUnavailable(NO_AUTH);
+    throw new ProbeUnavailable(NO_AUTH, LOGIN_FIX);
   }
 }
 
@@ -123,6 +127,6 @@ export async function probeHermes(io: HermesIo, env: Env, now: string): Promise<
   try {
     return { ...usage, ...(await readHermes(io, env, now)), status: 'ok' };
   } catch (error) {
-    return { ...usage, planLabel: FALLBACK_LABEL, windows: [], status: 'unavailable', reason: unavailableReason(error) };
+    return { ...usage, planLabel: FALLBACK_LABEL, windows: [], status: 'unavailable', reason: unavailableReason(error), ...unavailableFix(error) };
   }
 }

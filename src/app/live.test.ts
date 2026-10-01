@@ -54,15 +54,17 @@ type SessionOverrides = {
   historyWrites?: boolean;
   notifier?: { notify(text: string): unknown };
   copy?: (text: string) => Promise<boolean>;
+  spawn?: () => Promise<number | 'missing'>;
   routes?: Routes;
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier, copy, routes } = { notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier, copy, spawn, routes } = { spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
+  const spawner = { spawn: vi.fn(spawn) };
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
-  const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
+  const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), resume: vi.fn() });
   const screen = Object.assign(new EventEmitter(), { rows, write: (text: string) => writes.push(text) });
   const replace = vi.fn<(path: string, text: string) => boolean>(() => true);
   const eligibility = openEligibility({}, '/home/u', { read: () => JSON.stringify(state), replace });
@@ -78,13 +80,13 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: hiddenReplace
   });
   const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes, zone, notifier, clipboard });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes, zone, notifier, clipboard, spawner });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { notifier, clipboard, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { notifier, clipboard, spawner, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -527,7 +529,7 @@ describe('live session', () => {
     expect(claude[7]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel · s sort', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel · s sort · x fix', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
     session.press('q');
     await session.finished;
   });
@@ -1266,5 +1268,137 @@ describe('notifications', () => {
   it('notifies once when a weekly window starts to evaporate', async () => {
     const tonight = '2026-09-13T20:00:00.000Z';
     expect(await roundsOf({ DANDELION_NOTIFY: '1' }, [weekly(2, tonight), weekly(50, tonight), weekly(51, tonight)])).toEqual(['claude weekly is evaporating, resets in 9h59m']);
+  });
+});
+
+describe('fix key', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date(START));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const FIX = { command: 'grok', args: ['--once'], env: { CLAUDE_CONFIG_DIR: '/work' } };
+  const withFix = (id: string): Usage => ({ ...usageOf(id, START), fix: FIX });
+  const grokOnly = { grok: withFix('grok') };
+
+  async function selectGrok(session: ReturnType<typeof startSession>) {
+    await session.settleRound(0, grokOnly);
+    ['j', 'j', 'j', 'j'].forEach((key) => session.press(key));
+  }
+
+  it('leaves the alternate screen, runs the fix once, then restores the screen and starts a round', async () => {
+    let finish: (status: number) => void = () => undefined;
+    const session = startSession({ spawn: () => new Promise((resolve) => (finish = resolve)) });
+    await selectGrok(session);
+    const framesBefore = session.frames().length;
+    const writesBefore = session.writes.length;
+    session.press('x');
+    expect(session.writes.slice(writesBefore)).toEqual([LEAVE_ALTERNATE]);
+    expect(session.keyboard.setRawMode).toHaveBeenLastCalledWith(false);
+    expect(session.keyboard.pause).toHaveBeenCalledTimes(1);
+    expect(session.spawner.spawn).toHaveBeenCalledTimes(1);
+    expect(session.spawner.spawn).toHaveBeenCalledWith({ command: 'grok', args: ['--once'], env: { CLAUDE_CONFIG_DIR: '/work' } });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(session.writes.length).toBe(writesBefore + 1);
+    expect(session.probes[0].calls).toHaveLength(1);
+    finish(0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.writes[writesBefore + 1]).toBe(ENTER_ALTERNATE);
+    expect(session.keyboard.setRawMode).toHaveBeenLastCalledWith(true);
+    expect(session.keyboard.resume).toHaveBeenCalledTimes(1);
+    expect(session.frames().length).toBeGreaterThan(framesBefore);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
+    session.press('q');
+    await session.finished;
+  });
+
+  it('runs with an empty env when the fix has none and still restores when the command is missing', async () => {
+    const session = startSession({ spawn: async () => 'missing' });
+    await session.settleRound(0, { grok: { ...usageOf('grok', START), fix: { command: 'junie', args: [] } } });
+    ['j', 'j', 'j', 'j'].forEach((key) => session.press(key));
+    session.press('x');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.spawner.spawn).toHaveBeenCalledWith({ command: 'junie', args: [], env: {} });
+    expect(session.writes.at(-3)).toBe(ENTER_ALTERNATE);
+    expect(session.keyboard.setRawMode).toHaveBeenLastCalledWith(true);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('does not start a second round while one is already running', async () => {
+    const session = startSession();
+    await vi.advanceTimersByTimeAsync(0);
+    session.press('j');
+    session.probes[0].calls[0].resolve(withFix('claude'));
+    await vi.advanceTimersByTimeAsync(0);
+    session.press('x');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.spawner.spawn).toHaveBeenCalledTimes(1);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
+    session.press('q');
+    await session.finished;
+  });
+
+  it('does not redraw into the child while it runs and does not restore after quitting', async () => {
+    let finish: (status: number) => void = () => undefined;
+    const session = startSession({ spawn: () => new Promise((resolve) => (finish = resolve)) });
+    await selectGrok(session);
+    session.press('x');
+    session.keyboard.emit('data', '\x03');
+    await vi.advanceTimersByTimeAsync(0);
+    const writes = session.writes.length;
+    finish(0);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.writes.length).toBe(writes);
+    expect(session.keyboard.resume).not.toHaveBeenCalled();
+    await session.finished;
+  });
+
+  it('does nothing without a selection', async () => {
+    const session = startSession();
+    await session.settleRound(0, grokOnly);
+    const writes = session.writes.length;
+    session.press('x');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.spawner.spawn).not.toHaveBeenCalled();
+    expect(session.writes.length).toBe(writes);
+    expect(session.lastFrame()).not.toContain('no fix for this panel');
+    session.press('q');
+    await session.finished;
+  });
+
+  it.each([['a settled panel without a fix', 1], ['a panel still probing', 2]])('flashes no fix for this panel on %s', async (_, steps) => {
+    const session = startSession();
+    await session.settleRound(0, { agy: usageOf('agy', START) });
+    if (steps === 2) session.probes[2].calls[0].resolve = () => undefined;
+    for (let step = 0; step < steps; step += 1) session.press('j');
+    session.press('x');
+    expect(session.spawner.spawn).not.toHaveBeenCalled();
+    expect(session.lastFrame()).toContain('no fix for this panel');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(session.lastFrame()).not.toContain('no fix for this panel');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('shows · x fix on the caption of a panel with a fix only', async () => {
+    const session = startSession();
+    await session.settleRound(0, grokOnly);
+    const lines = session.lastFrame().split('\n');
+    expect(lines.filter((line) => line.endsWith(' · x fix'))).toEqual([expect.stringContaining('grok')]);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('lists x in the ? help', async () => {
+    const session = startSession();
+    session.press('?');
+    expect(session.lastFrame()).toContain('R refresh panel · s sort · x fix');
+    session.press('q');
+    await session.finished;
   });
 });

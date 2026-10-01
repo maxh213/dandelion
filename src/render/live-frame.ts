@@ -34,7 +34,7 @@ import {
 
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
-const HIDE_HELP = 'h hide · H show hidden · R refresh panel · s sort';
+const HIDE_HELP = 'h hide · H show hidden · R refresh panel · s sort · x fix';
 const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back';
 const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
 const BOX_GAP = '  ';
@@ -149,7 +149,7 @@ function settledMarks(slot: LiveSlot, usage: ProviderUsage, spinner: number, now
 
 function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
   if (slot.usage === undefined) return pendingPanel(slot.id, spinner, noColor, marks);
-  return renderPanel(slot.usage, noColor, now, settledMarks(slot, slot.usage, spinner, now, marks));
+  return renderPanel(slot.usage, noColor, now, { ...settledMarks(slot, slot.usage, spinner, now, marks), fixable: slot.usage.fix !== undefined });
 }
 
 type BoxAnswer = { model: string; account: string; dimmed: boolean };

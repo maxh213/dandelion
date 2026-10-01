@@ -129,7 +129,7 @@ async function routeWith(io: ProbeIo, env: Record<string, string | undefined>, r
 
 function startDashboard(io: ProbeIo, env: Record<string, string>, clock?: () => string) {
   const writes: string[] = [];
-  const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn() });
+  const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), resume: vi.fn() });
   const withRoutes = 'DANDELION_ROUTES_FILE' in env ? env : { DANDELION_ROUTES_FILE: ROUTES_FILE, ...env };
   const routed = new Proxy(withRoutes, { get: (target, key) => (key === 'DANDELION_HISTORY_FILE' && !Reflect.has(target, key) ? '/dev/null/history.json' : Reflect.get(target, key)) });
   const finished = runLive(io, routed, keyboard, { rows: 80, write: (text: string) => writes.push(text) }, clock);
@@ -1327,7 +1327,7 @@ describe('cursor panel', () => {
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
       const panels = lines.slice(6, -3).join('\n');
       expect(panels.match(SPINNER_TAIL)).toHaveLength(11);
-      expect(panels.replace(SPINNER_TAIL, '').replace(/ · \d+h\d+m ago/g, '')).toBe(once.split('\n').slice(1).join('\n'));
+      expect(panels.replace(SPINNER_TAIL, '').replace(/ · \d+h\d+m ago/g, '').replace(/ · x fix/g, '')).toBe(once.split('\n').slice(1).join('\n'));
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -2610,7 +2610,7 @@ describe('hermes panel', () => {
       expect(lines[lines.indexOf('▸ hermes') + 2]).toBe('not routable (no usage windows)');
       await vi.advanceTimersByTimeAsync(2000);
       const later = unroutable.lastFrame().split('\n');
-      expect(later[later.indexOf('▸ hermes') + 2]).toBe('hermes · hermes · 0h0m ago');
+      expect(later[later.indexOf('▸ hermes') + 2]).toBe('hermes · hermes · 0h0m ago · x fix');
       expect(readdirSync(scratch)).toEqual([]);
       unroutable.press('q');
       await unroutable.finished;

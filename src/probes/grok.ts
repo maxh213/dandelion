@@ -1,4 +1,4 @@
-import { fieldOf, isCount, isFilled, matchesOnJsonLine, newestLineMatch, validInstant, withReset, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, isFilled, matchesOnJsonLine, newestLineMatch, isStale, validInstant, withReset, type FileReader, type Fix, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type GrokIo = { reader: FileReader };
 
@@ -6,6 +6,7 @@ type Snapshot = { window: UsageWindow; tier: string; ts: string; ended: boolean 
 
 const BILLING_MSG = 'billing: fetched credits config';
 const PERIOD_ENDED = ' · period ended since snapshot';
+const FIX: Fix = { command: 'grok', args: [] };
 const UNAVAILABLE = 'no grok billing snapshot — run grok once';
 
 function grokHome(reader: FileReader, env: Record<string, string | undefined>): string {
@@ -45,11 +46,15 @@ function snapshotsOn(line: string, now: string): Snapshot[] {
   return matchesOnJsonLine(line, (event) => (fieldOf(event, 'msg') === BILLING_MSG ? usableSnapshots(event, now) : []));
 }
 
+function staleFix(snapshotAt: string, now: string): { fix?: Fix } {
+  return isStale(snapshotAt, now) ? { fix: FIX } : {};
+}
+
 export async function probeGrok(io: GrokIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
   const log = await io.reader.read(`${grokHome(io.reader, env)}/logs/unified.jsonl`);
   const snapshot = log === undefined ? undefined : newestLineMatch(log, BILLING_MSG, (line) => snapshotsOn(line, now));
   const usage = { id: 'grok', displayName: 'grok', fetchedAt: now };
-  if (snapshot === undefined) return { ...usage, planLabel: 'grok', windows: [], status: 'unavailable', reason: UNAVAILABLE };
-  const ok = { ...usage, planLabel: snapshot.tier, windows: [snapshot.window], status: 'ok' as const, snapshotAt: snapshot.ts };
+  if (snapshot === undefined) return { ...usage, planLabel: 'grok', windows: [], status: 'unavailable', reason: UNAVAILABLE, fix: FIX };
+  const ok = { ...usage, planLabel: snapshot.tier, windows: [snapshot.window], status: 'ok' as const, snapshotAt: snapshot.ts, ...staleFix(snapshot.ts, now) };
   return snapshot.ended ? { ...ok, captionSuffix: PERIOD_ENDED } : ok;
 }

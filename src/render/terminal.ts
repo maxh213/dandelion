@@ -1,4 +1,4 @@
-import { HOT_PCT, formatCountdown, formatResetAt, projectFull, type Balance, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { HOT_PCT, formatCountdown, formatResetAt, isStale, projectFull, type Balance, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -11,13 +11,13 @@ const PERCENT_CELLS = 4;
 const BOLD = '\x1b[1m';
 const DIM = '\x1b[90m';
 const RESET = '\x1b[0m';
-const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
+const FIX_HINT = ' · x fix';
 const TITLE = 'DANDELION';
 const ROUTING_OFF = 'routing off';
 const HIDDEN = 'hidden';
 const MARKER = '▸ ';
 
-export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; age?: string; spinner?: string; absoluteZone?: string; width?: number };
+export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number };
 
 export type Layout = { width: number; label: number; gauge: number };
 
@@ -227,13 +227,14 @@ function caption(usage: ProviderUsage): string {
   return `${taggedCaption(usage)}${usage.captionSuffix ?? ''}`;
 }
 
-function agedCaption(usage: ProviderUsage, age: string | undefined, width = WIDTH): string {
-  if (age === undefined) return caption(usage);
-  return `${cutCells(caption(usage), width - cellCount(age))}${age}`;
+function agedCaption(usage: ProviderUsage, age: string | undefined, width = WIDTH, hint = ''): string {
+  const room = width - cellCount(hint);
+  const text = age === undefined ? caption(usage) : `${cutCells(caption(usage), room - cellCount(age))}${age}`;
+  return `${text}${hint}`;
 }
 
 function captionLine(usage: ProviderUsage, marks: PanelMarks): string {
-  return marks.caption ?? agedCaption(usage, marks.age, marks.width);
+  return marks.caption ?? agedCaption(usage, marks.age, marks.width, marks.fixable === true ? FIX_HINT : '');
 }
 
 type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
@@ -242,10 +243,6 @@ type FailedUsage = Exclude<ProviderUsage, OkUsage>;
 function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow) => string, paint: (text: string, usedPct: number) => string, layout: Layout): string[] {
   if (usage.windows.length === 0) return [usage.note ?? balanceLine(usage.balance, noColor, paint, layout)];
   return usage.windows.map(row);
-}
-
-function isStale(snapshotAt: string | undefined, now: string): boolean {
-  return Date.parse(now) - new Date(snapshotAt ?? Number.NaN).getTime() > STALE_AFTER_MS;
 }
 
 function snapshotLine(snapshotAt: string, now: string): string {

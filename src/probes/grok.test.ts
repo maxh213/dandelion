@@ -32,7 +32,8 @@ const UNAVAILABLE = {
   fetchedAt: NOW,
   windows: [],
   status: 'unavailable',
-  reason: 'no grok billing snapshot — run grok once'
+  reason: 'no grok billing snapshot — run grok once',
+  fix: { command: 'grok', args: [] }
 };
 
 function readerOf(files: Record<string, string>, home = '/home/tester') {
@@ -75,6 +76,15 @@ describe('probeGrok', () => {
     const usage = await probeGrok(io, env, NOW);
     expect(reads).toEqual(['/home/tester/.grok/logs/unified.jsonl']);
     expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok Heavy', windows: [{ usedPct: 75 }] });
+  });
+
+  it.each([
+    ['older than 48h', '2026-09-13T09:00:01Z', { command: 'grok', args: [] }],
+    ['exactly 48h old', '2026-09-13T09:00:00Z', undefined],
+    ['fresh', '2026-09-11T10:00:00Z', undefined]
+  ])('suggests running grok for a snapshot %s only when it is stale', async (_case, now, fix) => {
+    const usage = await probeGrok(ioWithLog(JSON.stringify(EVENT_60)), HOME, now);
+    expect(usage.fix).toEqual(fix);
   });
 
   it('finds a snapshot on the first line behind a leading newline and trailing blank lines', async () => {

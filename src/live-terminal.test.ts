@@ -29,9 +29,9 @@ const OTHER_PANELS = [
   /\nclaude-work\nweekly +#+-* +86%( ↻ \S+)?\nclaude · work · claude-work · \d+h\d+m ago\n/,
   /\nagy\nGemini · weekly +-+ +0%( ↻ \S+)?\nagy · agy · \d+h\d+m ago\n/,
   /\nkimi\nkimi web exited without printing a token\nkimi code · kimi · \d+h\d+m ago\n/,
-  /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok · \d+h\d+m ago\n/,
+  /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok · \d+h\d+m ago · x fix\n/,
   /\ncodex\napi-key billing · no usage windows\ncodex · codex · \d+h\d+m ago\n/,
-  /\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor · \d+h\d+m ago\n/
+  /\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor · \d+h\d+m ago · x fix\n/
 ];
 const KILO_PENDING = /\nkilo\n\S probing…$/;
 const KILO_TIMED_OUT = '\nkilo\nCommand timed out after 20s\napi balance · kilo';

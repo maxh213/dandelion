@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
+import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -12,6 +12,10 @@ export interface Notifier {
   notify(text: string): unknown;
 }
 
+interface FixRunner {
+  spawn(launch: { command: string; args: string[]; env: Record<string, string> }): Promise<number | 'missing'>;
+}
+
 export interface Clipboard {
   copy(text: string): Promise<boolean>;
 }
@@ -21,6 +25,7 @@ export interface Keyboard {
   setEncoding(encoding: 'utf8'): unknown;
   on(event: 'data', listener: (chunk: string) => void): unknown;
   pause(): unknown;
+  resume(): unknown;
 }
 
 type LiveOptions = {
@@ -36,6 +41,7 @@ type LiveOptions = {
   zone: string;
   notifier: Notifier;
   clipboard: Clipboard;
+  spawner: FixRunner;
   clock?: () => string;
 };
 
@@ -60,6 +66,7 @@ type Session = LiveOptions & {
   running?: boolean;
   rounds: number;
   quitting: boolean;
+  suspended: boolean;
   selected: number;
   graphing: boolean;
   notified: Set<string>;
@@ -87,6 +94,7 @@ const NOT_SAVED = 'routing state not saved';
 const HIDDEN_NOT_SAVED = 'hidden state not saved';
 const NOTHING_TO_COPY = 'nothing to copy';
 const COPY_FAILED = 'copy failed';
+const NO_FIX = 'no fix for this panel';
 
 function refreshSecondsOf(raw: string): number {
   const seconds = DIGITS_ONLY.test(raw) ? Number(raw) : 0;
@@ -126,7 +134,7 @@ function viewOf(session: Session): LiveView {
 }
 
 function draw(session: Session): void {
-  if (session.quitting) return;
+  if (session.quitting || session.suspended) return;
   session.screen.write(`${CLEAR}${renderLiveFrame(viewOf(session), session.noColor, session.clock())}`);
 }
 
@@ -359,6 +367,33 @@ function copyHigh(session: Session): void {
   copyLine(session, 1);
 }
 
+function restoreAfterFix(session: Session): void {
+  session.suspended = false;
+  if (session.quitting) return;
+  session.screen.write(ENTER_ALTERNATE);
+  session.keyboard.setRawMode(true);
+  session.keyboard.resume();
+  draw(session);
+  refresh(session);
+}
+
+async function runFix(session: Session, fix: Fix): Promise<void> {
+  session.suspended = true;
+  session.screen.write(LEAVE_ALTERNATE);
+  session.keyboard.setRawMode(false);
+  session.keyboard.pause();
+  await session.spawner.spawn({ command: fix.command, args: fix.args, env: fix.env ?? {} });
+  restoreAfterFix(session);
+}
+
+function fixSelected(session: Session): void {
+  const index = session.selected;
+  if (index < 0) return;
+  const fix = session.results[index]?.fix;
+  if (fix === undefined) showFlash(session, index, NO_FIX);
+  else void runFix(session, fix);
+}
+
 async function quit(session: Session): Promise<void> {
   if (session.quitting) return;
   session.quitting = true;
@@ -380,6 +415,7 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['t', toggleResetTimes],
   ['c', copyRoute],
   ['C', copyHigh],
+  ['x', fixSelected],
   ['?', toggleFooter],
   ['q', leave],
   ['\x1b', closeGraph],
@@ -422,6 +458,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       graphing: false,
       notified: new Set(),
       quitting: false,
+      suspended: false,
       done
     };
     options.screen.write(ENTER_ALTERNATE);

@@ -1,4 +1,4 @@
-import { withReset, type Balance, type FileReader, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
+import { withReset, type Balance, type FileReader, type Fix, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
 
 export type RunFailure = 'missing' | 'timeout' | 'exit';
 
@@ -18,7 +18,7 @@ export type ReadWindow = { label: string; kind: WindowKind; usedPct: number; res
 
 export type Reading = { windows: ReadWindow[]; balance?: Balance };
 
-type RequiredDirectory = { path: string; missingReason: string };
+type RequiredDirectory = { path: string; missingReason: string; missingFix: Fix };
 
 export type CliProbe = {
   id: string;
@@ -96,5 +96,5 @@ async function runProbe(runner: CommandRunner, probe: CliProbe, now: string): Pr
 export async function probeCli({ runner, reader }: CliIo, probe: CliProbe, now: string): Promise<ProviderUsage> {
   const required = probe.requiresDirectory;
   if (required === undefined || (await reader.isDirectory(required.path))) return runProbe(runner, probe, now);
-  return { id: probe.id, displayName: probe.id, planLabel: probe.planLabel, windows: [], fetchedAt: now, status: 'unavailable', reason: required.missingReason };
+  return { id: probe.id, displayName: probe.id, planLabel: probe.planLabel, windows: [], fetchedAt: now, status: 'unavailable', reason: required.missingReason, fix: required.missingFix };
 }

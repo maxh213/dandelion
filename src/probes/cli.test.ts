@@ -47,8 +47,8 @@ describe('probeCli', () => {
     const calls: unknown[] = [];
     const runner: CommandRunner = { run: async (...call) => (calls.push(call), { stdout: 'weekly', stderr: '' }) };
     const reader = { ...NO_DIRECTORIES, isDirectory: async (path: string) => (checked.push(path), false) };
-    const res = await probeCli({ runner, reader }, probeWith({ requiresDirectory: { path: '/work', missingReason: 'no work dir' } }), 'now');
-    expect(res).toStrictEqual({ id: 'tool', displayName: 'tool', planLabel: 'tool plan', windows: [], fetchedAt: 'now', status: 'unavailable', reason: 'no work dir' });
+    const res = await probeCli({ runner, reader }, probeWith({ requiresDirectory: { path: '/work', missingReason: 'no work dir', missingFix: { command: 'claude', args: [] } } }), 'now');
+    expect(res).toStrictEqual({ id: 'tool', displayName: 'tool', planLabel: 'tool plan', windows: [], fetchedAt: 'now', status: 'unavailable', reason: 'no work dir', fix: { command: 'claude', args: [] } });
     expect(checked).toEqual(['/work']);
     expect(calls).toEqual([]);
   });
@@ -57,7 +57,7 @@ describe('probeCli', () => {
     const checked: string[] = [];
     const reader = { ...NO_DIRECTORIES, isDirectory: async (path: string) => (checked.push(path), path === '/work') };
     const io = { runner: { run: async () => ({ stdout: 'weekly', stderr: '' }) }, reader };
-    expect(await probeCli(io, probeWith({ requiresDirectory: { path: '/work', missingReason: 'no work dir' } }), 'now')).toMatchObject({ status: 'ok' });
+    expect(await probeCli(io, probeWith({ requiresDirectory: { path: '/work', missingReason: 'no work dir', missingFix: { command: 'claude', args: [] } } }), 'now')).toMatchObject({ status: 'ok' });
     expect(await probeCli(io, probe, 'now')).toMatchObject({ status: 'ok' });
     expect(checked).toEqual(['/work']);
   });

@@ -1,4 +1,4 @@
-import { fieldOf, isCount, matchesOnJsonLine, newestLineMatch, usedPctFromRemaining, type FileReader, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { fieldOf, isCount, matchesOnJsonLine, newestLineMatch, isStale, usedPctFromRemaining, type FileReader, type Fix, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export type JunieIo = { reader: FileReader };
 
@@ -8,6 +8,7 @@ type Snapshot = { balance: number; endedAtMs: number };
 
 const SNAPSHOT_TYPE = 'TaskQuotaSnapshot.JetBrains';
 const DEFAULT_REFERENCE = 1000000;
+const FIX: Fix = { command: 'junie', args: [] };
 const UNAVAILABLE = 'no junie quota snapshot — run junie once';
 const NO_REFERENCE = 'balance without a reference';
 
@@ -69,12 +70,16 @@ function withNote(windows: UsageWindow[]): { note?: string } {
   return windows.length === 0 ? { note: NO_REFERENCE } : {};
 }
 
+function staleFix(snapshotAt: string, now: string): { fix?: Fix } {
+  return isStale(snapshotAt, now) ? { fix: FIX } : {};
+}
+
 export async function probeJunie(io: JunieIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
   const snapshot = await newestSessionSnapshot(io.reader, junieHome(io.reader, env));
   const usage = { id: 'junie', displayName: 'junie', fetchedAt: now };
-  if (snapshot === undefined) return { ...usage, planLabel: 'junie', windows: [], status: 'unavailable', reason: UNAVAILABLE };
+  if (snapshot === undefined) return { ...usage, planLabel: 'junie', windows: [], status: 'unavailable', reason: UNAVAILABLE, fix: FIX };
   const windows = creditsWindows(snapshot.balance, referenceOf(env['DANDELION_JUNIE_REFERENCE']));
   const planLabel = `${Math.round(snapshot.balance)} credits`;
   const snapshotAt = new Date(snapshot.endedAtMs).toISOString();
-  return { ...usage, planLabel, windows, status: 'ok', snapshotAt, ...withNote(windows) };
+  return { ...usage, planLabel, windows, status: 'ok', snapshotAt, ...withNote(windows), ...staleFix(snapshotAt, now) };
 }

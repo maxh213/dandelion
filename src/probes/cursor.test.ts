@@ -56,8 +56,8 @@ function withAuth(usage?: Answer, plan?: Answer) {
   return ioOf({ '/auth.json': AUTH }, usage, plan);
 }
 
-function unavailable(reason: string) {
-  return { id: 'cursor', displayName: 'cursor', planLabel: 'cursor', fetchedAt: NOW, windows: [], status: 'unavailable', reason };
+function unavailable(reason: string, fix?: { command: string; args: string[] }) {
+  return { id: 'cursor', displayName: 'cursor', planLabel: 'cursor', fetchedAt: NOW, windows: [], status: 'unavailable', reason, ...(fix ? { fix } : {}) };
 }
 
 describe('probeCursor', () => {
@@ -145,7 +145,7 @@ describe('probeCursor', () => {
     ['a JSON array', { '/auth.json': '["unit-dummy-cursor-token"]' }]
   ])('is unavailable without a request for %s', async (_case, files) => {
     const { io, requests } = ioOf(files);
-    expect(await probeCursor(io, ENV, NOW)).toStrictEqual(unavailable(NO_AUTH));
+    expect(await probeCursor(io, ENV, NOW)).toStrictEqual(unavailable(NO_AUTH, { command: 'cursor-agent', args: ['login'] }));
     expect(requests).toEqual([]);
   });
 

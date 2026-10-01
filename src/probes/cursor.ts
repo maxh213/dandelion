@@ -7,11 +7,13 @@ import {
   isSuccess,
   parseJson,
   successBody,
+  unavailableFix,
   unavailableReason,
   withReset,
   type FetchOutcome,
   type Fetcher,
   type FileReader,
+  type Fix,
   type ProviderUsage,
   type UsageWindow
 } from '../domain/index.ts';
@@ -26,6 +28,7 @@ const REQUEST_TIMEOUT_MS = 15000;
 const DIGITS = /^\d+$/;
 const FALLBACK_LABEL = 'cursor';
 const NO_AUTH = 'no cursor auth — run cursor-agent login';
+const LOGIN_FIX: Fix = { command: 'cursor-agent', args: ['login'] };
 const WINDOW_FIELDS = [
   { label: 'total', key: 'totalPercentUsed' },
   { label: 'auto', key: 'autoPercentUsed' },
@@ -38,7 +41,7 @@ function authFile(reader: FileReader, env: Env): string {
 
 function tokenOf(auth: unknown): string {
   const token = fieldOf(auth, 'accessToken');
-  if (!isFilled(token)) throw new ProbeUnavailable(NO_AUTH);
+  if (!isFilled(token)) throw new ProbeUnavailable(NO_AUTH, LOGIN_FIX);
   return token;
 }
 
@@ -47,7 +50,7 @@ async function readToken(reader: FileReader, env: Env): Promise<string> {
   try {
     return tokenOf(parseJson(String(text)));
   } catch {
-    throw new ProbeUnavailable(NO_AUTH);
+    throw new ProbeUnavailable(NO_AUTH, LOGIN_FIX);
   }
 }
 
@@ -111,6 +114,6 @@ export async function probeCursor(io: CursorIo, env: Env, now: string): Promise<
   try {
     return { ...usage, ...(await readCursor(io, env)), status: 'ok' };
   } catch (error) {
-    return { ...usage, planLabel: FALLBACK_LABEL, windows: [], status: 'unavailable', reason: unavailableReason(error) };
+    return { ...usage, planLabel: FALLBACK_LABEL, windows: [], status: 'unavailable', reason: unavailableReason(error), ...unavailableFix(error) };
   }
 }

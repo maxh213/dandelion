@@ -35,7 +35,8 @@ const UNAVAILABLE = {
   fetchedAt: NOW,
   windows: [],
   status: 'unavailable',
-  reason: 'no junie quota snapshot — run junie once'
+  reason: 'no junie quota snapshot — run junie once',
+  fix: { command: 'junie', args: [] }
 };
 
 function readerOf(files: Record<string, string>, home = '/home/tester') {
@@ -63,6 +64,15 @@ function homeWith(newEvents: string, root = '/junie'): Record<string, string> {
 const HOME = { DANDELION_JUNIE_HOME: '/junie' };
 
 describe('probeJunie', () => {
+  it.each([
+    ['older than 48h', '2026-09-20T12:53:50.119Z', { command: 'junie', args: [] }],
+    ['exactly 48h old', '2026-09-20T12:53:50.118Z', undefined],
+    ['fresh', NOW, undefined]
+  ])('suggests running junie for a snapshot %s only when it is stale', async (_case, now, fix) => {
+    const usage = await probeJunie(readerOf(homeWith(NEW_EVENTS)).io, HOME, now);
+    expect(usage.fix).toEqual(fix);
+  });
+
   it('reads the newest snapshot of the newest session with a credits window against the default reference', async () => {
     const { io, reads } = readerOf(homeWith(NEW_EVENTS));
     expect(await probeJunie(io, HOME, NOW)).toStrictEqual({

@@ -50,7 +50,7 @@ const ENTER_ALTERNATE = '\x1b[?1049h\x1b[?25l';
 function procOf(argv: string[], stdinTTY: boolean | undefined, stdoutTTY: boolean | undefined, env: Record<string, string> = { DANDELION_ROUTES_FILE: ROUTES_FILE }) {
   const writes: string[] = [];
   const errors: string[] = [];
-  const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), isTTY: stdinTTY });
+  const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), resume: vi.fn(), isTTY: stdinTTY });
   const stdout = { isTTY: stdoutTTY, rows: 60, write: (text: string) => writes.push(text) };
   const stderr = { write: (text: string) => errors.push(text) };
   const proc = { argv, env: { NO_COLOR: '1', ...env }, stdin: keyboard, stdout, stderr, exit: vi.fn() };
