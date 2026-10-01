@@ -5,6 +5,7 @@ export const ROUTE_LINES = {
   route: {
     claude: { standard: 'model-alpha-5 high', max: 'model-alpha-5 max' },
     'claude-work': { standard: 'model-alpha-5 high', max: 'model-alpha-5 max' },
+    'claude-deepseek': { standard: 'vendor/model-o max', max: 'vendor/model-o max' },
     agy: { standard: 'model-charlie-98-fast high', max: 'model-charlie-9-pro high' },
     kimi: { standard: 'model-dlt/d3 max', max: 'model-dlt/d3 max' },
     grok: { standard: 'model-e9 xhigh', max: 'model-e9 xhigh' },

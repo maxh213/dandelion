@@ -1,5 +1,6 @@
 import type { Fetcher, FileReader, ProviderUsage } from '../domain/index.ts';
 import { agyProbe } from './agy.ts';
+import { probeClaudeDeepseek } from './claude-deepseek.ts';
 import { claudeProbe, claudeWorkProbe } from './claude.ts';
 import { probeCli, type CliProbe } from './cli.ts';
 import { probeCodex, type CodexIo } from './codex.ts';
@@ -27,6 +28,7 @@ export function providerProbes(io: ProbeIo, env: Record<string, string | undefin
   return [
     cliProbe(io, claudeProbe),
     cliProbe(io, claudeWorkProbe(env, io.reader.homeDir())),
+    { id: 'claude-deepseek', probe: (now) => probeClaudeDeepseek(io, env, now) },
     cliProbe(io, agyProbe),
     { id: 'kimi', probe: (now) => probeKimi(io, env, now) },
     { id: 'grok', probe: (now) => probeGrok(io, env, now) },

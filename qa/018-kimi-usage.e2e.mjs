@@ -21,7 +21,7 @@ const PARSE = 'Could not parse usage from response';
 const CAPTION = 'kimi code · kimi';
 const AGENT = 'qa-dummy-hermes-agent-key-016';
 const ACCESS = 'qa-dummy-hermes-access-016';
-const NAMES = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 const QUOTA = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
 const ENV_NAMES = { claude: 'Q_CLAUDE', work: 'Q_WORK', agy: 'Q_AGY', kimi: 'Q_KIMI' };
 

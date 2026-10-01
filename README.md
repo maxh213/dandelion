@@ -10,6 +10,7 @@ Panels always appear in this order. A provider whose CLI is missing, fails, time
 
 - `claude` (claude · personal) - runs `claude -p "/usage"` (90s timeout) and shows the session, weekly and per-model weekly windows with a reset countdown.
 - `claude-work` (claude · work) - runs the same command with `CLAUDE_CONFIG_DIR` set to the work config dir and shows the same windows for the work account. Without that dir it is unavailable and never runs claude.
+- `claude-deepseek` (claude · deepseek) - reads `ANTHROPIC_AUTH_TOKEN` from `<config dir>/settings.json` and GETs `https://openrouter.ai/api/v1/key` (10s timeout) for the key's spending limit and what remains of it. The window counts as weekly, so it joins headroom and never trips at 90%. The plan label is the reset period and the dollars left, such as `monthly · $20.00 of $20.00`. A null limit says `openrouter key has no spending limit`. Without the dir or a token the panel says `no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude`. The token and the response body are never printed.
 - `agy` - runs `agy -p "/usage"` (60s timeout) and shows each model group's windows; agy reports remaining percent, shown as used percent.
 - `kimi` (kimi code) - reads the OAuth access token from `~/.kimi-code` (`config.toml` for `base_url`, then `credentials/`) and GETs `{base}/usages` (10s request timeout). On the legacy plan the weekly window is `usage` used/limit and the rolling `5h` window is the 300-minute `limits` detail, so a `used_ratio` stuck at 0 does not hide real usage. An expired token says to run `kimi` once. The token is never printed or written. Without a credential file it starts `kimi web --no-open --port <port>`, waits up to 20s for the token it prints, and reads `kimi web`'s local usage endpoint `/api/v1/oauth/usage` (10s request timeout). It shows the weekly window and each rolling `5h` window, each with a reset countdown. The server is then shut down with SIGTERM, then SIGKILL after 5s.
 - `grok` - reads the newest billing snapshot from `<grok home>/logs/unified.jsonl` without running grok, and shows the credits window with a reset countdown, the subscription tier and the snapshot's age. A snapshot older than 48h is shown dim as stale. When the snapshot's billing period has already ended, grok has reset its credits, so the window shows 0% with no reset countdown and the caption ends with `· period ended since snapshot`; routing then sees grok as unused. Without a snapshot the panel says to run grok once.
@@ -19,7 +20,7 @@ Panels always appear in this order. A provider whose CLI is missing, fails, time
 - `hermes` - reads the Nous Portal tokens from the hermes auth file without running hermes, GETs `/api/oauth/account` (15s timeout) for the credits window with a reset countdown and remaining versus the monthly grant, and never prints the tokens. Without a token the panel says to run `hermes portal login`; when the token is expired it says to run `hermes once`.
 - `kilo` (api balance) - runs `kilo profile` (20s timeout) and shows the balance against a reference as a row laid out like a window row: `balance $12.31`, a gauge filled with the remaining share, the remaining percent, and the gauge coloured by the spent share on the usual scale.
 
-All ten probes run in parallel. Window gauges are coloured by usage: below 50% calm, 50-79% warm, 80-94% hot, 95% and above critical.
+All eleven probes run in parallel. Window gauges are coloured by usage: below 50% calm, 50-79% warm, 80-94% hot, 95% and above critical.
 
 ## Run Commands
 
@@ -43,9 +44,9 @@ Press `g` on a panel to see one chart per window: bars of used percent over time
 
 ## Route
 
-`route` must be the first argument; later arguments are ignored, except that `--high` anywhere after it switches to the quality chain below and `--why` anywhere after it adds an explanation (see Route --why). It routes among `claude`, `claude-work`, `agy`, `kimi`, `grok`, `cursor`, `junie` and `hermes`, in dashboard order, taking each one that is ok and has at least one usage window. `kilo` is never routed, because it reports a balance rather than windows, and `codex` is never routed, because it has no subscription windows to route on.
+`route` must be the first argument; later arguments are ignored, except that `--high` anywhere after it switches to the quality chain below and `--why` anywhere after it adds an explanation (see Route --why). It routes among `claude`, `claude-work`, `claude-deepseek`, `agy`, `kimi`, `grok`, `cursor`, `junie` and `hermes`, in dashboard order, taking each one that is ok and has at least one usage window. `kilo` is never routed, because it reports a balance rather than windows, and `codex` is never routed, because it has no subscription windows to route on.
 
-Each window is rolling (claude session, kimi 5h, agy 5h (Claude+GPT · 5h, Gemini · 5h)), weekly (any other label containing "week", grok credits, cursor total, auto and api, junie credits, hermes credits) or other, which route ignores. The plain route leaves out the cursor api window, because its cursor line is `auto`, which draws on the auto pool; `--high` still gates cursor on all its windows. A window's left is 100 minus its used percent, compared without rounding.
+Each window is rolling (claude session, kimi 5h, agy 5h (Claude+GPT · 5h, Gemini · 5h)), weekly (any other label containing "week", grok credits, cursor total, auto and api, junie credits, hermes credits, claude-deepseek spending limit) or other, which route ignores. The plain route leaves out the cursor api window, because its cursor line is `auto`, which draws on the auto pool; `--high` still gates cursor on all its windows. A window's left is 100 minus its used percent, compared without rounding.
 
 1. Evaporation: a weekly window evaporates when it resets after now and before the next local midnight with less than 97% left. If any provider has one, route prints the max line of the provider whose evaporating window has the most left.
 2. Most headroom: otherwise each provider's binding is the lowest left over its rolling and weekly windows (100 when it has neither), and route prints the standard line of the provider with the highest binding.
@@ -64,6 +65,7 @@ The standard and max lines of each provider are in `routes.json` (see below):
 |---|---|---|
 | claude | `route.claude.standard` | `route.claude.max` |
 | claude-work | `route.claude-work.standard` | `route.claude-work.max` |
+| claude-deepseek | `route.claude-deepseek.standard` | `route.claude-deepseek.max` |
 | agy | `route.agy.standard` | `route.agy.max` |
 | kimi | `route.kimi.standard` | `route.kimi.max` |
 | grok | `route.grok.standard` | `route.grok.max` |
@@ -71,7 +73,7 @@ The standard and max lines of each provider are in `routes.json` (see below):
 | junie | `route.junie.standard` | `route.junie.max` |
 | hermes | `route.hermes.standard` | `route.hermes.max` |
 
-Account token: both `route` and `route --high` print `<line> <provider id>`, such as the `route.claude-work.standard` line followed by `claude-work`, because several providers can share a line and the account decides how to launch it; `none` stays alone. `claude` launches claude as usual, `claude-work` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_WORK_CONFIG_DIR` (default `~/.claude-work`), and every other id launches its own CLI. `dandelion run` does this launch: `claude` and `claude-work` run `claude --model <model> --effort <effort>` (the `--effort` pair only when the line has an effort), and `agy`, `kimi`, `grok`, `cursor` (as `cursor-agent`), `junie` and `hermes` run their own CLI with `--model <model>`; their efforts are not passed. The table lives in `src/app/launch.ts`.
+Account token: both `route` and `route --high` print `<line> <provider id>`, such as the `route.claude-work.standard` line followed by `claude-work`, because several providers can share a line and the account decides how to launch it; `none` stays alone. `claude` launches claude as usual, `claude-work` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_WORK_CONFIG_DIR` (default `~/.claude-work`), `claude-deepseek` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR` (default `~/.claude-deepseek`), and every other id launches its own CLI. `dandelion run` does this launch: `claude`, `claude-work` and `claude-deepseek` run `claude --model <model> --effort <effort>` (the `--effort` pair only when the line has an effort), and `agy`, `kimi`, `grok`, `cursor` (as `cursor-agent`), `junie` and `hermes` run their own CLI with `--model <model>`; their efforts are not passed. The table lives in `src/app/launch.ts`.
 
 Route --high: quality first, with no evaporation rule and no headroom comparison. It walks this chain from rank 1 down and prints the line of the first available entry, taken from `routes.json`:
 
@@ -83,7 +85,7 @@ Route --high: quality first, with no evaporation rule and no headroom comparison
 | 4 | grok | (all) | `high.grok` |
 | 5 | agy | (all) | `high.agy` |
 
-An entry with a matcher is gated on the windows whose label contains the matcher in any case, plus every rolling window; a matched window the account does not report counts as 0% used. An (all) entry is gated on every window the provider reports, except the windows another entry of the same provider matches, so the rank 3 entry ignores the Fable window. The 90% trip: an entry is available on an account only when the account is eligible, ok with at least one window, and every gating window is under 90% used; at 90% it pops down to the next entry. Ineligible, unavailable and failed providers are skipped, and `kimi`, `codex`, `junie`, `hermes` and `kilo` are never in the chain, so `--high` does not use junie. `--high` does not use hermes. When both claude accounts are available at one rank, the one with more left (100 minus its highest gating used percent) wins, and a tie goes to `claude`. When no entry is available it prints `none` and exits 1.
+An entry with a matcher is gated on the windows whose label contains the matcher in any case, plus every rolling window; a matched window the account does not report counts as 0% used. An (all) entry is gated on every window the provider reports, except the windows another entry of the same provider matches, so the rank 3 entry ignores the Fable window. The 90% trip: an entry is available on an account only when the account is eligible, ok with at least one window, and every gating window is under 90% used; at 90% it pops down to the next entry. Ineligible, unavailable and failed providers are skipped, and `kimi`, `codex`, `junie`, `hermes`, `kilo` and `claude-deepseek` are never in the chain, so `--high` does not use junie. `--high` does not use hermes. `--high` does not use claude-deepseek. When both claude accounts are available at one rank, the one with more left (100 minus its highest gating used percent) wins, and a tie goes to `claude`. When no entry is available it prints `none` and exits 1.
 
 Route --why: `dandelion route --why` and `dandelion route --high --why` print the same route line first, exactly as without `--why`, then at most two explanation lines, and exit with the same code (1 for `none`, 2 with a bad `routes.json`, which still prints nothing on stdout). For `route`, the first line names the rule and its numbers, such as `evaporation: kimi weekly 41% left resets 21:40 before midnight` (reset time in local time) or `headroom: claude binding 63% left (claude-work 40%, agy 22%)`, and the second lists the skipped accounts by reason, such as `tripped: claude-work (session 92%); ineligible: grok; unavailable: junie, hermes`. For `route --high`, the first line names the winning rank, entry and account, such as `rank 3 opus on claude: gating 71% used`, and the second says why each higher rank was skipped, such as `skipped: rank 1 fable tripped at 95%; rank 2 cursor no open account`. When nothing is routable the route line is `none` and the explanation still lists what was skipped. Plain `route` and `route --high` print exactly what they always did.
 
@@ -96,6 +98,7 @@ To change a routed model, edit routes.json. The lines `route` and `route --high`
   "route": {
     "claude": { "standard": "<line>", "max": "<line>" },
     "claude-work": { "standard": "<line>", "max": "<line>" },
+    "claude-deepseek": { "standard": "<line>", "max": "<line>" },
     "agy": { "standard": "<line>", "max": "<line>" },
     "kimi": { "standard": "<line>", "max": "<line>" },
     "grok": { "standard": "<line>", "max": "<line>" },
@@ -114,6 +117,7 @@ To change a routed model, edit routes.json. The lines `route` and `route --high`
 ## Env-var Ledger
 
 - `DANDELION_KILO_REFERENCE` - The reference amount (in dollars) used to calculate the gauge fill percentage for the `kilo` probe. Defaults to `20`. If set to an empty string, no reference gauge is shown. If set to a custom number, the gauge will fill relative to that amount.
+- `DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR` - The deepseek claude config dir. Defaults to `~/.claude-deepseek` when unset or empty. The probe reads `settings.json` there for the OpenRouter token and `dandelion run` passes the dir to claude as `CLAUDE_CONFIG_DIR`. When it is not a directory, or the token is missing, the panel says `no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude`. The token is never printed.
 - `DANDELION_CLAUDE_WORK_CONFIG_DIR` - The work claude config dir the `claude-work` probe passes to claude as `CLAUDE_CONFIG_DIR`. Defaults to `~/.claude-work` when unset or empty. When it is not a directory the panel says to log in with `CLAUDE_CONFIG_DIR=~/.claude-work claude`.
 - `DANDELION_KIMI_PORT` - The local port `kimi web` is started on for the `kimi` probe when no credential file is present. Defaults to `59177`. Any value other than an integer from 1 to 65535 makes that fallback unavailable.
 - `DANDELION_KIMI_HOME` - The kimi home the `kimi` probe reads `config.toml` and `credentials/` from. Defaults to `~/.kimi-code` when unset or empty. The token is never printed or written.

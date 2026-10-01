@@ -10,7 +10,7 @@ import { rootDir, NPM, startLive, completeFrames, waitWithin, assertClosed } fro
 
 const PREFIX = 'dandelion-qa-009-';
 const OUTER_TIMEOUT_MS = 60000;
-const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
 const NO_GROK = 'no grok billing snapshot — run grok once';
 const NO_CURSOR = 'no cursor auth — run cursor-agent login';
@@ -128,7 +128,7 @@ function panel(run, name) {
 }
 
 function assertDandelionDashboard(run) {
-  assert.match(run.lines[0], /^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+  assert.match(run.lines[0], /^DANDELION +\d{2}:\d{2}:\d{2}$/);
   assert.equal([...run.lines[0]].length, 72, `banner width: ${JSON.stringify(run.lines[0])}`);
   panel(run, 'kilo');
   assert.ok(!/allowance/i.test(run.stdout), `old name in output:\n${run.stdout}`);
@@ -163,7 +163,8 @@ async function everyEntryRunsTheDashboard(bin) {
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
     DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
-    DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir()
+    DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir(),
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek')
   };
   const npm = await exec(NPM, ['start', '--silent', '--', '--once'], env);
   assertDandelionDashboard(npm);
@@ -193,7 +194,8 @@ async function newNamesWork(bin) {
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
     DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
-    DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'no-such-dir')
+    DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'no-such-dir'),
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek')
   };
   const run = await exec(NPM, ['start', '--silent', '--', '--once'], env);
   assertDandelionDashboard(run);
@@ -282,7 +284,8 @@ async function liveIgnoresOldRefreshName(bin) {
     DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing-auth.json'),
     DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
-    DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir()
+    DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir(),
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek')
   };
   const run = startLive(env);
   const settled = () => completeFrames(run).some((frame) => !frame.includes('probing…'));

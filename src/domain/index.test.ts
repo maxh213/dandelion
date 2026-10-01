@@ -24,6 +24,7 @@ const LINES: RouteLines = {
   route: {
     claude: { standard: 'model-a high', max: 'model-a max' },
     'claude-work': { standard: 'model-a high', max: 'model-a max' },
+    'claude-deepseek': { standard: 'vendor/model-o max', max: 'vendor/model-o max' },
     agy: { standard: 'model-c high', max: 'model-c max' },
     kimi: { standard: 'model-d max', max: 'model-d max' },
     grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
@@ -78,6 +79,7 @@ const F: RouteLines = {
   route: {
     claude: { standard: 'model-a high', max: 'model-a max' },
     'claude-work': { standard: 'model-b high', max: 'model-b max' },
+    'claude-deepseek': { standard: 'vendor/model-o max', max: 'vendor/model-o max' },
     agy: { standard: 'model-c high', max: 'model-c max' },
     kimi: { standard: 'model-d', max: 'model-d max' },
     grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
@@ -128,7 +130,7 @@ describe('routeLine', () => {
     expect(routeDecision(usages, NOW, MIDNIGHT, ['grok'])).toEqual({
       chosen: { rule: 'headroom', id: 'agy', left: 60 },
       rivals: [],
-      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'kimi', 'cursor', 'junie', 'hermes'] }
+      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'claude-deepseek', 'kimi', 'cursor', 'junie', 'hermes'] }
     });
     expect(routeLine(LINES, usages, NOW, MIDNIGHT, ['grok'])).toBe('model-c high agy');
   });
@@ -191,6 +193,7 @@ describe('routeLine', () => {
   it.each([
     ['claude', 'model-a high', 'model-a max'],
     ['claude-work', 'model-a high', 'model-a max'],
+    ['claude-deepseek', 'vendor/model-o max', 'vendor/model-o max'],
     ['agy', 'model-c high', 'model-c max'],
     ['kimi', 'model-d max', 'model-d max'],
     ['grok', 'model-e xhigh', 'model-e xhigh'],
@@ -321,6 +324,8 @@ describe('routeLine', () => {
     ['claude evaporates', `claude: rolling 0 @-, weekly 86 @${IN_2H}; agy: rolling 0 @-, weekly 0 @${IN_72H}`, 'model-a max claude'],
     ['claude headroom', `claude: rolling 0 @-, weekly 3 @${IN_2H}; agy: rolling 10 @-, weekly 10 @${IN_72H}`, 'model-a high claude'],
     ['claude-work headroom', `claude: rolling 20 @-, weekly 30 @${IN_72H}; claude-work: rolling 10 @-, weekly 5 @${IN_72H}; agy: rolling 15 @-, weekly 20 @${IN_72H}`, 'model-b high claude-work'],
+    ['claude-deepseek headroom at 5% used', `claude: rolling 20 @-, weekly 30 @${IN_72H}; claude-deepseek: weekly 5 @${IN_72H}`, 'vendor/model-o max claude-deepseek'],
+    ['claude-deepseek weekly at 95% does not trip', 'claude-deepseek: weekly 95 @2026-09-20T00:00:00.000Z', 'vendor/model-o max claude-deepseek'],
     ['agy evaporates, tie', `agy: rolling 0 @-, weekly 90 @${IN_2H}; kimi: rolling 0 @-, weekly 90 @${IN_2H}`, 'model-c max agy'],
     ['one-word kimi line', `kimi: rolling 10 @-, weekly 10 @${IN_72H}; grok: weekly 50 @${IN_72H}`, 'model-d kimi'],
     ['grok', `grok: weekly 50 @${IN_72H}`, 'model-e xhigh grok'],

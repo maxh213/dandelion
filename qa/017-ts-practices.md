@@ -40,8 +40,8 @@ ha; hs; jh "$JH" 701512.73275
 10. Run `: > "$HF/requests.log"; ha past; he NO_COLOR=1 A=--once 2>&1 | tee /tmp/017.exp; echo LOG; cat "$HF/requests.log"; ha; AUTH="$HF/missing.json" he NO_COLOR=1 A=--once; hs unauthorized; : > "$HF/requests.log"; he NO_COLOR=1 A=--once 2>&1 | tee /tmp/017.401; grep -cE 'qa-dummy-hermes-(agent-key|access)-016' /tmp/017.401; cat "$HF/requests.log"; ha; hs`.
     - **Expected:** first `hermes token expired — run hermes once` and `hermes · hermes`, LOG empty. Then `no hermes auth — run hermes portal login`. Then `hermes account request failed: HTTP 401` within 5s, grep prints `0`, log is `GET /api/oauth/account Bearer qa-dummy-hermes-agent-key-016 application/json`.
 
-11. Run `node -p 'const p=require("./package.json"); [p.name, JSON.stringify(p.bin), p.scripts, p.dependencies]'; grep -n 'All ten probes\|hermes\|junie' README.md`.
-    - **Expected:** `['dandelion', '{"dandelion":"src/main.ts"}', { start: 'node src/main.ts', test: 'vitest run', qa: 'node qa/e2e.mjs' }, undefined]`. README still has "All ten probes run in parallel", hermes between junie and kilo, and `--high` does not use hermes.
+11. Run `node -p 'const p=require("./package.json"); [p.name, JSON.stringify(p.bin), p.scripts, p.dependencies]'; grep -n 'All eleven probes\|hermes\|junie' README.md`.
+    - **Expected:** `['dandelion', '{"dandelion":"src/main.ts"}', { start: 'node src/main.ts', test: 'vitest run', qa: 'node qa/e2e.mjs' }, undefined]`. README still has "All eleven probes run in parallel", hermes between junie and kilo, and `--high` does not use hermes.
 
 12. Run `pkill -f "$HF/server.mjs"; rm -rf "$H0" /tmp/017.once /tmp/017.b /tmp/017.h1 /tmp/017.h2 /tmp/017.bare /tmp/017.exp /tmp/017.401`, then the clean-up of `qa/016-hermes.md`.
     - **Expected:** nothing is left in `/tmp` from this procedure. The 001–016 e2e files were not edited.

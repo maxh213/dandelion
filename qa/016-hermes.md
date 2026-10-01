@@ -61,7 +61,7 @@ ha; hs; jh "$JH" 701512.73275
    - **Expected:** first the hermes panel is dim with `hermes token expired — run hermes once` and `hermes · hermes`, and LOG is empty. Then `no hermes auth — run hermes portal login` and `hermes · hermes`, LOG still empty. Then `hermes account request failed: HTTP 401` within 5s, grep prints `0`, and the log is `GET /api/oauth/account Bearer qa-dummy-hermes-agent-key-016 application/json`.
 
 10. Run `node qa/e2e.mjs; pgrep -fa dandelion-qa; grep -n 'hermes\|HERMES' README.md`.
-    - **Expected:** exits 0 and every `*.e2e.mjs` prints PASS, including the 016 hermes e2es. `pgrep` prints nothing. README has the hermes provider bullet between junie and kilo, "All ten probes run in parallel", both ledger entries, the route table row for hermes naming `route.hermes.standard` and `route.hermes.max`, `hermes credits` among weekly windows, and says `--high` does not use hermes.
+    - **Expected:** exits 0 and every `*.e2e.mjs` prints PASS, including the 016 hermes e2es. `pgrep` prints nothing. README has the hermes provider bullet between junie and kilo, "All eleven probes run in parallel", both ledger entries, the route table row for hermes naming `route.hermes.standard` and `route.hermes.max`, `hermes credits` among weekly windows, and says `--high` does not use hermes.
 
 11. Run `pkill -f "$HF/server.mjs"; rm -f /tmp/h1 /tmp/h2 /tmp/h.out /tmp/h.exp /tmp/h.miss /tmp/h.401`, then the clean-up of `qa/015-junie.md`.
     - **Expected:** nothing is left in `/tmp` from this procedure. The auth file was never rewritten by the app.

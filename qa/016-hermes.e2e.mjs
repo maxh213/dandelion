@@ -23,7 +23,7 @@ const HTTP_401 = 'hermes account request failed: HTTP 401';
 const AGENT = 'qa-dummy-hermes-agent-key-016';
 const ACCESS = 'qa-dummy-hermes-access-016';
 const CAPTION = 'Plus · $5.50 of $22 · hermes';
-const NAMES = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 const QUOTA = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
 const ACCOUNT_GET = `GET /api/oauth/account Bearer ${AGENT} application/json`;
 
@@ -526,11 +526,11 @@ async function failuresExpiredMissing401(ctx) {
 
 async function readmeDocumentsHermes() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
-  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy|kimi|grok|codex|cursor|junie|hermes|kilo)` /.test(line));
+  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|claude-deepseek|agy|kimi|grok|codex|cursor|junie|hermes|kilo)` /.test(line));
   assert.deepEqual(providers.map((line) => line.split('`')[1]), NAMES);
-  assert.match(providers[8], /Nous Portal tokens from the hermes auth file without running hermes/);
-  assert.match(providers[8], /GETs `\/api\/oauth\/account` \(15s timeout\)/);
-  assert.ok(readme.includes('All ten probes run in parallel'));
+  assert.match(providers[9], /Nous Portal tokens from the hermes auth file without running hermes/);
+  assert.match(providers[9], /GETs `\/api\/oauth\/account` \(15s timeout\)/);
+  assert.ok(readme.includes('All eleven probes run in parallel'));
   assert.match(readme, /^- `DANDELION_HERMES_AUTH_FILE` - .*Defaults to `~\/\.hermes\/auth\.json`/m);
   assert.match(readme, /^- `DANDELION_HERMES_PORTAL_BASE` - .*Defaults to `https:\/\/portal\.nousresearch\.com`/m);
   assert.ok(readme.includes('| hermes | `route.hermes.standard` | `route.hermes.max` |'));

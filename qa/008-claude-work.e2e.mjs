@@ -9,7 +9,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NPM = join(dirname(process.execPath), 'npm');
 const OUTER_TIMEOUT_MS = 60000;
 const PREFIX = 'dandelion-qa-008-';
-const PANEL_ORDER = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const PANEL_ORDER = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
 const PERSONAL_LINES = [
   'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)',
@@ -85,6 +85,7 @@ function runOnce(pathDir, bin, grokHome, workConfigDir) {
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
     DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir,
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(workConfigDir, 'no-deepseek'),
     DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'),
   };
   const result = spawnSync(NPM, ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });

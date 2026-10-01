@@ -21,6 +21,7 @@ const LINES: RouteLines = {
   route: {
     claude: { standard: 'model-a high', max: 'model-a max' },
     'claude-work': { standard: 'model-a high', max: 'model-a max' },
+    'claude-deepseek': { standard: 'vendor/model-o max', max: 'vendor/model-o max' },
     agy: { standard: 'model-c high', max: 'model-c max' },
     kimi: { standard: 'model-d max', max: 'model-d max' },
     grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },

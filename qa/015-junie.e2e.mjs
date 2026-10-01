@@ -18,7 +18,7 @@ const CALM = '\x1b[32m';
 const DIM = '\x1b[90m';
 const NOT_ROUTABLE = 'not routable (no usage windows)';
 const UNAVAILABLE = 'no junie quota snapshot — run junie once';
-const NAMES = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 const QUOTA = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
 
 const FIXTURE = `#!/usr/bin/env node
@@ -480,7 +480,7 @@ async function fleetSummary(ctx) {
 async function readmeDocumentsJunie() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
   assert.match(readme, /^- `junie` - reads the newest completion snapshot from `<junie home>\/sessions\/<id>\/events\.jsonl`/m);
-  assert.ok(readme.includes('All ten probes run in parallel'));
+  assert.ok(readme.includes('All eleven probes run in parallel'));
   assert.match(readme, /^- `DANDELION_JUNIE_HOME` - .*Defaults to `~\/\.junie`.*never writes to it/m);
   assert.match(readme, /^- `DANDELION_JUNIE_REFERENCE` - .*Defaults to `1000000`.*empty string, there is no reference/m);
   assert.ok(readme.includes('| junie | `route.junie.standard` | `route.junie.max` |'));

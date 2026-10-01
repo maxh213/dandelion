@@ -161,7 +161,7 @@ async function defaultStateFilePath(ctx) {
 
 function withoutClock(stdout) {
   const lines = stdout.split('\n');
-  lines[0] = lines[0].replace(/\d{2}:\d{2}:\d{2}Z$/, 'HH:MM:SSZ');
+  lines[0] = lines[0].replace(/\d{2}:\d{2}:\d{2}$/, 'HH:MM:SS');
   return lines;
 }
 

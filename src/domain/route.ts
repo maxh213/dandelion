@@ -16,7 +16,7 @@ export interface RoutesFile {
   read(path: string): string;
 }
 
-const ROUTED_IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'cursor', 'junie', 'hermes'];
+const ROUTED_IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'cursor', 'junie', 'hermes'];
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
 const FULL_LEFT = 100;

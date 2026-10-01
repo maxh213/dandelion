@@ -9,6 +9,7 @@ type Target = { command: string; modelFlag: string; effortFlag?: string };
 const TARGETS: Record<string, Target> = {
   claude: { command: 'claude', modelFlag: '--model', effortFlag: '--effort' },
   'claude-work': { command: 'claude', modelFlag: '--model', effortFlag: '--effort' },
+  'claude-deepseek': { command: 'claude', modelFlag: '--model', effortFlag: '--effort' },
   agy: { command: 'agy', modelFlag: '--model' },
   kimi: { command: 'kimi', modelFlag: '--model' },
   grok: { command: 'grok', modelFlag: '--model' },
@@ -17,8 +18,14 @@ const TARGETS: Record<string, Target> = {
   hermes: { command: 'hermes', modelFlag: '--model' }
 };
 
+function claudeConfig(env: Env, homeDir: string, name: string, fallback: string): Record<string, string> {
+  return { CLAUDE_CONFIG_DIR: env[name] || `${homeDir}/${fallback}` };
+}
+
 function accountEnv(account: string, env: Env, homeDir: string): Record<string, string> {
-  return account === 'claude-work' ? { CLAUDE_CONFIG_DIR: env['DANDELION_CLAUDE_WORK_CONFIG_DIR'] || `${homeDir}/.claude-work` } : {};
+  if (account === 'claude-work') return claudeConfig(env, homeDir, 'DANDELION_CLAUDE_WORK_CONFIG_DIR', '.claude-work');
+  if (account === 'claude-deepseek') return claudeConfig(env, homeDir, 'DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR', '.claude-deepseek');
+  return {};
 }
 
 function flagsOf({ modelFlag, effortFlag }: Target, model: string, effort: string | undefined): string[] {

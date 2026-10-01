@@ -92,7 +92,7 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
     delete env.DANDELION_KIMI_PORT;
     delete env.DANDELION_CURSOR_API_BASE;
     delete env.CLAUDE_CONFIG_DIR;
-    Object.assign(env, { DANDELION_KIMI_HOME: dir, DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') }, extraEnv);
+    Object.assign(env, { DANDELION_KIMI_HOME: dir, DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') }, extraEnv);
     return spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -318,7 +318,7 @@ describe('main', () => {
     expect(output().endsWith('}\n')).toBe(true);
     expect(output().slice(0, -1)).not.toContain('\n');
     expect(snapshot.generatedAt >= before && snapshot.generatedAt <= after).toBe(true);
-    expect(snapshot.providers).toHaveLength(10);
+    expect(snapshot.providers).toHaveLength(11);
     expect([snapshot.route, snapshot.routeHigh]).toEqual(['model-a high claude', 'model-h1 max claude']);
     expect(errors()).toBe('');
     expect(keyboard.setRawMode).not.toHaveBeenCalled();
@@ -467,6 +467,7 @@ describe('main', () => {
       route: {
         claude: { standard: 'model-a high', max: 'model-a max' },
         'claude-work': { standard: 'model-b high', max: 'model-b max' },
+        'claude-deepseek': { standard: 'vendor/model-o max', max: 'vendor/model-o max' },
         agy: { standard: 'model-c high', max: 'model-c max' },
         kimi: { standard: 'model-d', max: 'model-d max' },
         grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
@@ -568,7 +569,7 @@ describe('main', () => {
     expect(index.stdout).toMatch(/^100755 /);
     const readme = readFileSync('README.md', 'utf-8');
     expect(readme.startsWith('# Dandelion Dashboard\n\nDandelion is a terminal dashboard')).toBe(true);
-    expect(readme).toContain('All ten probes run in parallel');
+    expect(readme).toContain('All eleven probes run in parallel');
   });
 
   it('prints the same DANDELION dashboard through node src/main.ts and a dandelion symlink', () => {
@@ -583,7 +584,7 @@ describe('main', () => {
       writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
       const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const runs = ['src/main.ts', join(dir, 'dandelion')].map((entry) => spawnSync(process.execPath, [entry, '--once'], { env, encoding: 'utf-8', timeout: 60000 }));
-      const panelOrder = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+      const panelOrder = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
       for (const run of runs) {
         expect(run.status).toBe(0);
         const lines = run.stdout.split('\n');
@@ -603,7 +604,7 @@ describe('main', () => {
     try {
       linkNodeAndShell(dir);
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_HOME: dir, DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
+      const env: NodeJS.ProcessEnv = { ...process.env, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_HOME: dir, DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8', timeout: 60000 });
       expect(result.status).toBe(0);
       expect(result.stdout).toMatch(/\ngrok\n[^]*\ncodex\napi-key billing · no usage windows\ncodex · codex\n[^]*\ncursor\n[^]*\nkilo\n/);
@@ -613,9 +614,9 @@ describe('main', () => {
     }
   });
 
-  it('prints ten dim unavailable panels in order when no CLI is on PATH, grok and junie homes are empty and cursor auth is missing', () => {
+  it('prints eleven dim unavailable panels in order when no CLI is on PATH, grok and junie homes are empty and cursor auth is missing', () => {
     const grokHome = mkdtempSync(join(tmpdir(), 'dandelion-grok-'));
-    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_KIMI_HOME: grokHome, DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome, DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json') };
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: '', DANDELION_KIMI_HOME: grokHome, DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: grokHome, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing.json'), DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(grokHome, 'no-deepseek'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json') };
     delete env.NO_COLOR;
     const result = spawnSync(process.execPath, ['src/main.ts'], { env, encoding: 'utf-8' });
     rmSync(grokHome, { recursive: true, force: true });
@@ -624,6 +625,7 @@ describe('main', () => {
     const panels = [
       ['claude', 'claude CLI not found in PATH', 'claude · personal · claude'],
       ['claude-work', 'claude CLI not found in PATH', 'claude · work · claude-work'],
+      ['claude-deepseek', 'no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude', 'claude · deepseek · claude-deepseek'],
       ['agy', 'agy CLI not found in PATH', 'agy · agy'],
       ['kimi', 'kimi CLI not found in PATH', 'kimi code · kimi'],
       ['grok', 'no grok billing snapshot — run grok once', 'grok · grok'],
@@ -707,13 +709,13 @@ describe('main', () => {
     expect(junie).toContain("the snapshot's age");
     expect(junie).toContain('older than 48h is shown dim as stale');
     expect(junie).toContain('says to run junie once');
-    expect(readme).toContain('All ten probes run in parallel');
+    expect(readme).toContain('All eleven probes run in parallel');
     expect(readme).not.toContain('All nine probes run in parallel');
     expect(readme).toMatch(/^- `DANDELION_JUNIE_HOME` - .*Defaults to `~\/\.junie`.*never writes to it/m);
     expect(readme).toMatch(/^- `DANDELION_JUNIE_REFERENCE` - .*Defaults to `1000000`.*empty string, there is no reference.*not a positive number uses the default/m);
     const route = readme.split('## Route')[1].split('## ')[0];
     expect(route).toContain('`grok`, `cursor`, `junie` and `hermes`, in dashboard order');
-    expect(route).toContain('junie credits, hermes credits)');
+    expect(route).toContain('junie credits, hermes credits, claude-deepseek spending limit)');
     expect(route).toContain('| cursor | `route.cursor.standard` | `route.cursor.max` |\n| junie | `route.junie.standard` | `route.junie.max` |\n');
     expect(route).toContain('so `--high` does not use junie');
   });
@@ -731,13 +733,13 @@ describe('main', () => {
     expect(hermes).toContain('never prints the tokens');
     expect(hermes).toContain('hermes portal login');
     expect(hermes).toContain('hermes once');
-    expect(readme).toContain('All ten probes run in parallel');
+    expect(readme).toContain('All eleven probes run in parallel');
     expect(readme).not.toContain('All nine probes run in parallel');
     expect(readme).toMatch(/^- `DANDELION_HERMES_AUTH_FILE` - .*Defaults to `~\/\.hermes\/auth\.json`/m);
     expect(readme).toMatch(/^- `DANDELION_HERMES_PORTAL_BASE` - .*Defaults to `https:\/\/portal\.nousresearch\.com`/m);
     const route = readme.split('## Route')[1].split('## ')[0];
     expect(route).toContain('`junie` and `hermes`, in dashboard order');
-    expect(route).toContain('hermes credits)');
+    expect(route).toContain('hermes credits, claude-deepseek spending limit)');
     expect(route).toContain('| junie | `route.junie.standard` | `route.junie.max` |\n| hermes | `route.hermes.standard` | `route.hermes.max` |\n');
     expect(route).toContain('`--high` does not use hermes');
   });
@@ -754,6 +756,25 @@ describe('main', () => {
     expect(readme).toMatch(/^- `DANDELION_CLAUDE_WORK_CONFIG_DIR` - .*Defaults to `~\/\.claude-work`/m);
   });
 
+  it('README documents the deepseek claude account', () => {
+    const readme = readFileSync('README.md', 'utf-8');
+    const providers = readme.split('\n').filter((line) => /^- `claude-deepseek` /.test(line));
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toContain('(claude · deepseek)');
+    expect(providers[0]).toContain('https://openrouter.ai/api/v1/key');
+    expect(providers[0]).toContain('10s timeout');
+    expect(providers[0]).toContain('openrouter key has no spending limit');
+    expect(providers[0]).toContain('no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude');
+    expect(providers[0]).toContain('never printed');
+    expect(readme).toContain('All eleven probes run in parallel');
+    expect(readme).toMatch(/^- `DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR` - .*Defaults to `~\/\.claude-deepseek`/m);
+    const route = readme.split('## Route')[1].split('## ')[0];
+    expect(route).toContain('| claude-deepseek | `route.claude-deepseek.standard` | `route.claude-deepseek.max` |');
+    expect(route).toContain('claude-deepseek spending limit');
+    expect(route).toContain('`--high` does not use claude-deepseek');
+    expect(route).toMatch(/`claude-deepseek` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR` \(default `~\/\.claude-deepseek`\)/);
+  });
+
   it('README documents route', () => {
     const readme = readFileSync('README.md', 'utf-8');
     const commands = readme.split('## Run Commands')[1].split('## ')[0];
@@ -763,7 +784,7 @@ describe('main', () => {
     expect(route).toContain('`codex` is never routed, because it has no subscription windows to route on');
     expect(route).toMatch(/Evaporation: a weekly window .* before the next local midnight with less than 97% left/);
     expect(route).toMatch(/Most headroom: .*lowest left over its rolling and weekly windows \(100 when it has neither\)/);
-    for (const id of ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'cursor']) expect(route).toContain(`| ${id} | \`route.${id}.standard\` | \`route.${id}.max\` |`);
+    for (const id of ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'cursor']) expect(route).toContain(`| ${id} | \`route.${id}.standard\` | \`route.${id}.max\` |`);
   });
 
   it('README documents route --high and the account token', () => {
@@ -837,7 +858,7 @@ describe('main', () => {
     expect(readme).toMatch(/^- `DANDELION_ROUTES_FILE` - .*unset or empty\. A relative path is taken from the working directory\.$/m);
     const route = readme.split('## Route')[1].split('## ')[0];
     const tableRows = route.split('\n').filter((line) => /^\| (\d|claude|agy|kimi|grok|cursor|junie|hermes)/.test(line));
-    expect(tableRows).toHaveLength(13);
+    expect(tableRows).toHaveLength(14);
     expect(tableRows.every((row) => /`(route\.[a-z-]+\.(standard|max)|high\.[a-z]+)` \|$/.test(row))).toBe(true);
   });
 

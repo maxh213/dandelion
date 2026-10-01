@@ -22,15 +22,16 @@ const HTTP_401 = 'hermes account request failed: HTTP 401';
 const AGENT = 'qa-dummy-hermes-agent-key-016';
 const ACCESS = 'qa-dummy-hermes-access-016';
 const CAPTION = 'Plus · $5.50 of $22 · hermes';
-const HELP = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
-const KILO_GAUGE = `$14.15 ${'#'.repeat(14)}${'-'.repeat(6)}`;
-const NAMES = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const HELP = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
+const KILO_GAUGE = `${'balance $14.15'.padEnd(35)} ${'#'.repeat(14)}${'-'.repeat(6)}  71%`.padEnd(72);
+const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
 const QUOTA = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
 const ACCOUNT_GET = `GET /api/oauth/account Bearer ${AGENT} application/json`;
 const RESET = /(3d0h|2d23h)/;
 const BARE_PANELS = [
   ['claude', 'claude CLI not found in PATH', 'claude · personal · claude'],
   ['claude-work', 'claude CLI not found in PATH', 'claude · work · claude-work'],
+  ['claude-deepseek', 'no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude', 'claude · deepseek · claude-deepseek'],
   ['agy', 'agy CLI not found in PATH', 'agy · agy'],
   ['kimi', 'kimi CLI not found in PATH', 'kimi code · kimi'],
   ['grok', 'no grok billing snapshot — run grok once', 'grok · grok'],
@@ -412,7 +413,7 @@ async function onceDashboard(ctx) {
   assert.ok(result.stdout.length > 0, 'empty --once stdout');
   assert.ok(!result.stdout.includes(ENTER), describe('once wrote alternate screen', result));
   const banner = result.stdout.split('\n')[0];
-  assert.match(banner, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+  assert.match(banner, /^DANDELION +\d{2}:\d{2}:\d{2}$/);
   assert.equal([...banner].length, 72, `banner width: ${JSON.stringify(banner)}`);
   assertOrder(result.stdout);
   const junie = panelLines(result.stdout, 'junie');
@@ -424,7 +425,7 @@ async function onceDashboard(ctx) {
   assertCredits(hermes[1], 75);
   assert.equal(hermes[2], CAPTION);
   const kilo = panelLines(result.stdout, 'kilo');
-  assert.equal(kilo[1], KILO_GAUGE.padEnd(72));
+  assert.equal(kilo[1], KILO_GAUGE);
   assert.equal(kilo[2], 'api balance · kilo');
   assert.equal(panelLines(result.stdout, 'codex')[1], 'api-key billing · no usage windows');
   assertWidth(result.stdout);
@@ -446,7 +447,7 @@ async function dandelionOnceMatches(ctx, nodeOnce) {
   assert.equal(named.status, 0, describe('dandelion --once', named));
   assert.ok(named.stdout.length > 0, 'empty dandelion --once stdout');
   assert.ok(!named.stdout.includes(ENTER), describe('dandelion wrote alternate screen', named));
-  assert.match(named.stdout.split('\n')[0], /^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+  assert.match(named.stdout.split('\n')[0], /^DANDELION +\d{2}:\d{2}:\d{2}$/);
   assert.equal(withoutClock(named.stdout), withoutClock(nodeOnce.stdout), describe('dandelion --once drifted', named));
   assertNoTokens(named.stdout, named.stderr);
 }
@@ -478,7 +479,7 @@ async function dashboardNotRoute(ctx) {
     const result = await run(ctx, args, liveCase(100), { junieHome: ctx.junie });
     assert.equal(result.status, 0, describe(args, result));
     const first = result.stdout.split('\n')[0];
-    assert.match(first, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/, describe(args, result));
+    assert.match(first, /^DANDELION +\d{2}:\d{2}:\d{2}$/, describe(args, result));
     assert.ok(!result.stdout.includes(ENTER), describe(`${args} wrote alternate screen`, result));
     assert.ok(!result.stdout.startsWith('model-e xhigh'), describe(args, result));
     assert.ok(!result.stdout.startsWith('model-h1'), describe(args, result));
@@ -624,9 +625,9 @@ async function failuresExpiredMissing401(ctx) {
 
 async function readmeAndPackageJson() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
-  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy|kimi|grok|codex|cursor|junie|hermes|kilo)` /.test(line));
+  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|claude-deepseek|agy|kimi|grok|codex|cursor|junie|hermes|kilo)` /.test(line));
   assert.deepEqual(providers.map((line) => line.split('`')[1]), NAMES);
-  assert.ok(readme.includes('All ten probes run in parallel'));
+  assert.ok(readme.includes('All eleven probes run in parallel'));
   assert.ok(readme.includes('`--high` does not use hermes'));
   const pkg = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8'));
   assert.equal(pkg.name, 'dandelion');

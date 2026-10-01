@@ -36,7 +36,7 @@ async function emptyPathFixture() {
 function runApp(path, extraEnv) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
   const home = path.split(':')[0];
-  const env = { ...inherited, PATH: path, DANDELION_KIMI_HOME: home, DANDELION_GROK_HOME: home, DANDELION_JUNIE_HOME: home, DANDELION_CURSOR_AUTH_FILE: join(home, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(home, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
+  const env = { ...inherited, PATH: path, DANDELION_KIMI_HOME: home, DANDELION_GROK_HOME: home, DANDELION_JUNIE_HOME: home, DANDELION_CURSOR_AUTH_FILE: join(home, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(home, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(workConfigDir, 'no-deepseek'), DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -63,10 +63,10 @@ function assertAscii(stdout) {
 async function happyPathDefaultReference(kiloDir) {
   const stdout = runApp(`${kiloDir}:${nodeBinDir}`, {});
   const plain = stripAnsi(stdout);
-  assert.match(plain, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/m);
+  assert.match(plain, /^DANDELION +\d{2}:\d{2}:\d{2}$/m);
   assert.match(plain, /^kilo$/m);
   assert.ok(plain.includes('━'.repeat(72)), 'missing heavy top rule');
-  assert.ok(plain.includes(`$14.15 ${'█'.repeat(14)}${'░'.repeat(6)}`), `missing 14/6 gauge:\n${plain}`);
+  assert.ok(plain.includes(`${'balance $14.15'.padEnd(35)} ${'█'.repeat(14)}${'░'.repeat(6)}  71%`), `missing 14/6 gauge:\n${plain}`);
   assert.ok(stdout.includes(`${ESC}90mapi balance · kilo`), 'caption is not dim');
   assert.ok(!plain.includes('not found'), 'happy path rendered an unavailable reason');
   assertWidth(stdout);
@@ -76,7 +76,7 @@ async function customReferenceFillsGauge(kiloDir) {
   const stdout = runApp(`${kiloDir}:${nodeBinDir}`, { NO_COLOR: '1', DANDELION_KILO_REFERENCE: '10' });
   assert.ok(!stdout.includes(ESC), 'NO_COLOR output contains escape codes');
   assert.match(stdout, /^DANDELION /m);
-  assert.ok(stdout.includes(`$14.15 ${'#'.repeat(20)}`), `gauge not full at reference 10:\n${stdout}`);
+  assert.ok(stdout.includes(`${'balance $14.15'.padEnd(35)} ${'#'.repeat(20)} 100%`), `gauge not full at reference 10:\n${stdout}`);
   assertAscii(stdout);
   assertWidth(stdout);
 }

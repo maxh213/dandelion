@@ -2,6 +2,7 @@
   "route": {
     "claude":      { "standard": "claude-opus-5-5 high",       "max": "claude-opus-5-5 max" },
     "claude-work": { "standard": "claude-opus-5-5 high",       "max": "claude-opus-5-5 max" },
+    "claude-deepseek": { "standard": "deepseek/deepseek-v4.1-flash max", "max": "deepseek/deepseek-v4.1-flash max" },
     "agy":         { "standard": "gemini-3.8-flash-high high", "max": "gemini-3.1-pro-high high" },
     "kimi":        { "standard": "kimi-code/k3 max",           "max": "kimi-code/k3 max" },
     "grok":        { "standard": "grok-4.7 xhigh",             "max": "grok-4.7 xhigh" },

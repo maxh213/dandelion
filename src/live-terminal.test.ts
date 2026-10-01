@@ -13,7 +13,7 @@ const PREFIX = 'dandelion-qa-007-';
 const ENTER = '\x1b[?1049h';
 const CLEAR = '\x1b[H\x1b[2J';
 const RESTORE = '\x1b[?25h\x1b[?1049l';
-const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const CODEX_FIXTURE = "#!/bin/sh\necho 'Logged in using an API key - sk-proj-***n5zQA' >&2\n";
@@ -82,6 +82,7 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
     DANDELION_KIMI_HOME: grokHome,
     DANDELION_GROK_HOME: grokHome,
     DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome,
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(grokHome, 'no-deepseek'),
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
     DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(grokHome, 'state', 'eligibility.json'),

@@ -281,7 +281,7 @@ async function routeCliMatches(ctx) {
 async function onceHasNoBoxes(ctx) {
   const result = await cli(await envFor(ctx, FULL), ['--once']);
   assert.equal(result.status, 0, `--once exits 0\n${result.stderr}`);
-  assert.match(result.output.split('\n')[0], /^DANDELION +\d{2}:\d{2}:\d{2}Z$/, 'banner first');
+  assert.match(result.output.split('\n')[0], /^DANDELION +\d{2}:\d{2}:\d{2}$/, 'banner first');
   assert.equal(result.output.split('DANDELION').length, 2, 'one dashboard');
   assert.ok(!result.output.includes('+- route') && !result.output.includes('─ route'), 'no box titles');
   assert.ok(!result.output.split('\n').some((line) => /^[+|]/.test(line)), 'no box borders');

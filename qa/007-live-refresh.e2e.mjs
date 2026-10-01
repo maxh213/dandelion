@@ -67,7 +67,7 @@ async function pipedRunsOnce() {
   await assertClosed(run);
   run.child.stdin.destroy();
   const lines = run.output.split('\n');
-  assert.match(lines[0], /^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+  assert.match(lines[0], /^DANDELION +\d{2}:\d{2}:\d{2}$/);
   assert.deepEqual(lines.filter((line) => IDS.includes(line)), IDS);
   assert.equal(run.output.split('DANDELION').length, 2, `more than one dashboard:\n${run.output}`);
   assert.ok(!run.output.includes('probing…'), `pending panel in once output:\n${run.output}`);

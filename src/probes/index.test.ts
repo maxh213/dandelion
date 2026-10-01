@@ -14,8 +14,8 @@ async function* noLines(): AsyncIterable<string> {
 }
 
 describe('providerProbes', () => {
-  it('lists the ten probes in panel order', () => {
-    expect(providerProbes(IDLE_IO, {}).map(({ id }) => id)).toEqual(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo']);
+  it('lists the eleven probes in panel order', () => {
+    expect(providerProbes(IDLE_IO, {}).map(({ id }) => id)).toEqual(['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo']);
   });
 
   it('probes junie from the junie home in env', async () => {

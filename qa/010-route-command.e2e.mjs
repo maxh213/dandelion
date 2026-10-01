@@ -179,7 +179,7 @@ async function routeAnywhereButFirstKeepsTheDashboard(ctx) {
     assert.equal(result.status, 0, describe(args, result));
     const first = result.stdout.split('\n')[0];
     assert.ok(first.startsWith('DANDELION'), describe(args, result));
-    assert.match(first, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/, describe(args, result));
+    assert.match(first, /^DANDELION +\d{2}:\d{2}:\d{2}$/, describe(args, result));
     assert.ok(!result.stdout.includes('model-a'), describe(args, result));
   }
 }

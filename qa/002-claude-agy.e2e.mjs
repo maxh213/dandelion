@@ -58,7 +58,7 @@ async function fixtureDir(overrides) {
 
 function runApp(dir, extraEnv) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, DANDELION_KIMI_HOME: dir, DANDELION_GROK_HOME: dir, DANDELION_JUNIE_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(dir, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
+  const env = { ...inherited, PATH: `${dir}:${nodeBinDir}`, DANDELION_KIMI_HOME: dir, DANDELION_GROK_HOME: dir, DANDELION_JUNIE_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(dir, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(workConfigDir, 'no-deepseek'), DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
   const result = spawnSync(process.execPath, ['src/main.ts', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.error, undefined, `spawn failed: ${result.error}`);
   assert.equal(result.status, 0, `exit ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
@@ -83,7 +83,7 @@ function lineIndex(lines, pattern) {
 
 function assertPanelOrder(plain) {
   const lines = plain.split('\n');
-  const banner = lineIndex(lines, /^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+  const banner = lineIndex(lines, /^DANDELION +\d{2}:\d{2}:\d{2}$/);
   const claude = lineIndex(lines, /^claude$/);
   const claudeWork = lineIndex(lines, /^claude-work$/);
   const agy = lineIndex(lines, /^agy$/);
@@ -100,7 +100,7 @@ async function threeProvidersInOrder(dir) {
   assert.ok(lines.indexOf('agy · agy') > lines.indexOf('agy'), 'agy caption missing');
   assert.ok(lines.indexOf('api balance · kilo') > lines.indexOf('kilo'), 'kilo caption missing');
   assert.ok(stdout.includes(`${ESC}90mclaude · personal · claude`), 'claude caption is not dim');
-  assert.ok(plain.includes(`$14.15 ${'█'.repeat(14)}${'░'.repeat(6)}`), `kilo gauge changed:\n${plain}`);
+  assert.ok(plain.includes(`${'balance $14.15'.padEnd(35)} ${'█'.repeat(14)}${'░'.repeat(6)}  71%`), `kilo gauge changed:\n${plain}`);
   assert.match(plain, new RegExp(`^weekly {30}${'█'.repeat(17)}${'░'.repeat(3)}  86% ${COUNTDOWN}$`, 'm'));
   assert.match(plain, new RegExp(`^session {29}█${'░'.repeat(19)}   3% ${COUNTDOWN}$`, 'm'));
   assert.match(plain, new RegExp(`^weekly Fable {24}${'█'.repeat(20)} 100% ${COUNTDOWN}$`, 'm'));
@@ -136,7 +136,7 @@ async function noColorRows(dir) {
   assert.match(stdout, new RegExp(`^weekly {30}#{17}-{3}  86% ${COUNTDOWN}$`, 'm'));
   assert.match(stdout, /^Gemini Models · Weekly Limit {8}-{20}   0% ↻ (7d0h|6d23h)$/m);
   assert.match(stdout, /^Claude and GPT models · Weekly Lim… -{20}   0% ↻ (7d0h|6d23h)$/m);
-  assert.ok(stdout.includes(`$14.15 ${'#'.repeat(14)}${'-'.repeat(6)}`), 'kilo gauge not ASCII');
+  assert.ok(stdout.includes(`${'balance $14.15'.padEnd(35)} ${'#'.repeat(14)}${'-'.repeat(6)}  71%`), 'kilo gauge not ASCII');
   assert.ok(/^[\x0a\x20-\x7e↻·…—]*$/.test(stdout), `non-ASCII beyond ↻ · … —:\n${stdout}`);
   assertWidth(stdout);
 }

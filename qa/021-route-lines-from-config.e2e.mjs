@@ -110,7 +110,7 @@ const KEY_FAULTS = [
   ['high not an object', (f) => (f.high = 'x'), 'high']
 ];
 
-const ROUTED = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'cursor', 'junie', 'hermes'];
+const ROUTED = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'cursor', 'junie', 'hermes'];
 const CHAIN = ['fable', 'cursor', 'opus', 'grok', 'agy'];
 
 const temps = [];

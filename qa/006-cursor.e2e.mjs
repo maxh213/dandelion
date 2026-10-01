@@ -68,7 +68,7 @@ async function startFixture(cycleEnd) {
 
 async function runApp(pathDir, bin, grokHome, base, authFile) {
   const { DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_GROK_HOME, DANDELION_CURSOR_AUTH_FILE, DANDELION_CURSOR_API_BASE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${pathDir}:${bin}`, NO_COLOR: '1', DANDELION_KIMI_HOME: grokHome, DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: grokHome, DANDELION_CURSOR_API_BASE: base, DANDELION_CURSOR_AUTH_FILE: authFile, DANDELION_HERMES_AUTH_FILE: join(grokHome, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir(PREFIX), DANDELION_STATE_FILE: join(grokHome, 'no-state', 'eligibility.json') };
+  const env = { ...inherited, PATH: `${pathDir}:${bin}`, NO_COLOR: '1', DANDELION_KIMI_HOME: grokHome, DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: grokHome, DANDELION_CURSOR_API_BASE: base, DANDELION_CURSOR_AUTH_FILE: authFile, DANDELION_HERMES_AUTH_FILE: join(grokHome, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir(PREFIX), DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(grokHome, 'no-deepseek'), DANDELION_STATE_FILE: join(grokHome, 'no-state', 'eligibility.json') };
   const child = spawn(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, timeout: OUTER_TIMEOUT_MS });
   let stdout = '';
   let stderr = '';

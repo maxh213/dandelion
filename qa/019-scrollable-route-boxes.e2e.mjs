@@ -11,8 +11,8 @@ import { rootDir, launch, startLive, waitWithin, assertClosed, ENTER, CLEAR, RES
 
 const PREFIX = 'dandelion-qa-019-';
 const HOUR_MS = 3600000;
-const IDS = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
-const HELP = 'keys: ↑↓/jk select · space routing on/off · r refresh · q quit · ? help';
+const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const HELP = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
 const BOX_TOP = '+- route -------------------------+  +- route --high ------------------+';
 const BOX_BOTTOM = '+---------------------------------+  +---------------------------------+';
 const SETTLED_BLOCK = [
@@ -148,7 +148,7 @@ function send(run, key) {
 }
 
 function drawnFrames(run) {
-  return run.output.replaceAll('\r\n', '\n').split(CLEAR).slice(1).map((part) => part.split('\x1b[?25h')[0]).filter((frame) => frame.length > 0);
+  return run.output.replaceAll('\r\n', '\n').split(`${CLEAR}\x1b[0m`).slice(1).map((part) => part.split('\x1b[?25h')[0]).filter((frame) => frame.length > 0);
 }
 
 function lastFrame(run) {
@@ -214,6 +214,7 @@ async function unitRender() {
   const usages = [
     ok('claude', 'claude · personal', [win('session', 'rolling', 3), win('weekly', 'weekly', 86), win('weekly Fable', 'weekly', 100)]),
     ok('claude-work', 'claude · work', [win('session', 'rolling', 0), win('weekly', 'weekly', 12), win('weekly Fable', 'weekly', 23)]),
+    dim('claude-deepseek', 'claude · deepseek', 'no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude'),
     ok('agy', 'agy', [win('Gemini Models · Five Hour Limit', 'rolling', 50), win('Gemini Models · Weekly Limit', 'weekly', 50)]),
     ok('kimi', 'kimi code', [win('weekly', 'weekly', 85), win('5h', 'rolling', 85)]),
     ok('grok', 'SuperGrok', [win('credits', 'weekly', 90)], { snapshotAt: NOW }),
@@ -245,12 +246,12 @@ async function unitRender() {
   assert.equal(pending[7], 'claude');
   assert.equal(pending[10], 'claude-work');
   assert.equal(pending.some((line) => line === 'agy' || line.includes('kilo')), false);
-  const twentyFour = [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), ...CLAUDE_UNIT, ...WORK_UNIT, ...AGY_UNIT, RULE];
+  const twentyFour = [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), ...CLAUDE_UNIT, ...WORK_UNIT, ...DEEPSEEK_UNIT, RULE, 'agy'];
   for (const rows of [24, 0, undefined, 12.5]) {
     assert.deepEqual(frameOf({ rows }), twentyFour, `rows ${rows} is not the 24-line fallback`);
   }
   assert.deepEqual(frameOf({ selected: undefined }), twelve.split('\n'));
-  assert.deepEqual(frameOf({ selected: 9 }), [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), '▸ kilo', '$14.15 ##############------'.padEnd(72), 'api balance · kilo']);
+  assert.deepEqual(frameOf({ selected: 10 }), [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), '▸ kilo', 'balance $14.15                      ##############------  71%           ', 'api balance · kilo · 0h0m ago']);
   const withFooter = frameOf({ selected: 0, footer: true });
   assert.equal(withFooter.length, 12);
   assert.equal(withFooter[6], '▸ claude');
@@ -259,18 +260,18 @@ async function unitRender() {
   assert.deepEqual(frameOf({ rows: 1 }), [BANNER_UNIT]);
   const grown = frameOf({ rows: 30 });
   assert.equal(grown.length, 30);
-  assert.equal(grown.at(-1), 'grok');
+  assert.equal(grown.at(-1), 'weekly                              #################---  85% ↻ 3d0h');
   assert.deepEqual(grown.slice(0, 12), twelve.split('\n'));
   assert.equal(frameOf({ rows: 10 })[7], 'claude');
   assert.equal(frameOf({ rows: 10 }).length, 10);
   const once = renderDashboard(usages, true, NOW, []);
   const onceLines = once.split('\n');
-  assert.equal(onceLines.length, 50, `once lines: ${onceLines.length}`);
+  assert.equal(onceLines.length, 54, `once lines: ${onceLines.length}`);
   assert.equal(once.includes('+- route'), false);
   assert.ok(IDS.every((id) => once.includes(`\n${id}\n`)), 'once is missing a provider');
 }
 
-const BANNER_UNIT = `${'DANDELION'.padEnd(47)}data 0h0m old · 10:00:00Z`;
+const BANNER_UNIT = `${'DANDELION'.padEnd(48)}data 0h0m old · 10:00:00`;
 const SUMMARY_UNIT = '8/14 windows above 80% · next reset: claude session in 3d0h';
 const CLAUDE_UNIT = [
   RULE,
@@ -278,7 +279,7 @@ const CLAUDE_UNIT = [
   'session                             #-------------------   3% ↻ 3d0h',
   'weekly                              #################---  86% ↻ 3d0h',
   'weekly Fable                        #################### 100% ↻ 3d0h',
-  'claude · personal · claude'
+  'claude · personal · claude · 0h0m ago'
 ];
 const WORK_UNIT = [
   RULE,
@@ -286,14 +287,13 @@ const WORK_UNIT = [
   'session                             --------------------   0% ↻ 3d0h',
   'weekly                              ##------------------  12% ↻ 3d0h',
   'weekly Fable                        #####---------------  23% ↻ 3d0h',
-  'claude · work · claude-work'
+  'claude · work · claude-work · 0h0m ago'
 ];
-const AGY_UNIT = [
+const DEEPSEEK_UNIT = [
   RULE,
-  'agy',
-  'Gemini Models · Five Hour Limit     ##########----------  50% ↻ 3d0h',
-  'Gemini Models · Weekly Limit        ##########----------  50% ↻ 3d0h',
-  'agy · agy'
+  'claude-deepseek',
+  'no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude',
+  'claude · deepseek · claude-deepseek · 0h0m ago'
 ];
 
 async function readmeDocumentsFit() {
@@ -325,7 +325,7 @@ async function liveTwelveRowSession(ctx) {
     assert.equal(settled.split('\n')[7], 'claude');
     assert.equal(settled.split('\n').includes('claude-work'), false, `settled frame starts on claude-work:\n${settled}`);
     assert.equal(settled.split('\n').filter((line) => line === 'kilo' || line.endsWith(' kilo') || line.includes('▸ kilo')).length, 0, `kilo in settled 12-row frame:\n${settled}`);
-    send(run, 'j'.repeat(10));
+    send(run, 'j'.repeat(11));
     await waitWithin(run, () => lastFrame(run).split('\n')[6] === '▸ kilo', 20000, 'kilo selected');
     const kilo = lastFrame(run);
     assertHeight(kilo, 12, 'kilo-selected frame');
@@ -333,7 +333,7 @@ async function liveTwelveRowSession(ctx) {
     assertBoxesOnChrome(kilo, 'kilo-selected');
     assert.equal(kilo.split('\n')[6], '▸ kilo');
     assert.equal(kilo.split('\n').filter((line) => line === 'claude').length, 0, `personal claude still in kilo frame:\n${kilo}`);
-    send(run, 'k'.repeat(9));
+    send(run, 'k'.repeat(10));
     await waitWithin(run, () => lastFrame(run).split('\n')[6] === '▸ claude', 20000, 'claude selected');
     send(run, '?');
     await waitWithin(run, () => lastFrame(run).split('\n').at(-1) === HELP, 20000, 'help footer');
@@ -382,7 +382,7 @@ async function liveResize(ctx) {
     assertHeight(grown, 30, '30-row frame');
     assert.equal(grown.split('\n').length, 30);
     assertBoxesOnChrome(grown, '30-row');
-    assert.equal(grown.split('\n').at(-1), 'grok');
+    assert.match(grown.split('\n').at(-1) ?? '', /^weekly +#{17}-+ +85% ↻ /);
     assert.equal(grown.endsWith('\n\n') || grown.split('\n').at(-1) === '', false, `30-row frame has blank padding:\n${JSON.stringify(grown.slice(-40))}`);
     await resizePty(run, 10, 80);
     await waitWithin(run, () => lastFrame(run).split('\n').length === 10, 20000, '10-row resize');
@@ -407,9 +407,9 @@ async function onceAndRoute(ctx) {
   assert.equal(onceStatus, 0, `--once exits ${onceStatus}\n${once.stderr}`);
   const lines = once.output.split('\n');
   if (lines.at(-1) === '') lines.pop();
-  assert.match(lines[0] ?? '', /^DANDELION +\d{2}:\d{2}:\d{2}Z$/);
+  assert.match(lines[0] ?? '', /^DANDELION +\d{2}:\d{2}:\d{2}$/);
   assert.ok(lines.length > 12, `--once clipped to ${lines.length} lines`);
-  assert.equal(lines.length, 50, `--once is ${lines.length} lines, not 50`);
+  assert.equal(lines.length, 54, `--once is ${lines.length} lines, not 54`);
   assert.ok(!once.output.includes('+- route') && !once.output.includes('─ route'), 'once has box titles');
   const headers = lines.filter((line) => IDS.includes(line));
   assert.deepEqual(headers, IDS, `once panel order:\n${once.output}`);
