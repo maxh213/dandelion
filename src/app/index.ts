@@ -412,7 +412,7 @@ export const realRunLauncher: RunSpawner = {
   }
 };
 
-export type RunOutput ={ err: string; code: number };
+export type RunOutput = { err: string; code: number };
 
 function missingCommand(command: string): RunOutput {
   return { err: `dandelion: ${command}: command not found\n`, code: 127 };

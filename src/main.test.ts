@@ -257,6 +257,20 @@ describe('main', () => {
     spawn.mockRestore();
   });
 
+  it('runIfMain run ignores SIGINT and forwards SIGTERM and SIGHUP only while the child runs', async () => {
+    let finish: (code: number) => void = () => undefined;
+    const spawn = vi.spyOn(realRunSpawner, 'spawn').mockImplementation(() => new Promise<number>((resolve) => { finish = resolve; }));
+    const names: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+    const before = names.map((name) => process.listenerCount(name));
+    const running = runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, 'run'], true, true).proc);
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+    expect(names.map((name) => process.listenerCount(name))).toEqual(before.map((count) => count + 1));
+    finish(0);
+    await running;
+    expect(names.map((name) => process.listenerCount(name))).toEqual(before);
+    spawn.mockRestore();
+  });
+
   it.each<[NodeJS.Signals, number]>([['SIGTERM', 143], ['SIGHUP', 129]])('runIfMain live dashboard exits %s with %i', async (signal, code) => {
     const { proc, output, keyboard } = procOf(['node', MAIN], true, true);
     const running = runIfMain(MAIN_URL, MAIN, profileIo, proc);
