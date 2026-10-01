@@ -350,6 +350,19 @@ describe('main', () => {
     expect(vi.mocked(runRoute).mock.calls[0][2].mode).toBe(mode);
   });
 
+  it('runIfMain prints identical usage for --help, -h and help, listing every command', async () => {
+    const texts: string[] = [];
+    for (const arg of ['--help', '-h', 'help']) {
+      const { proc, output } = procOf(['node', MAIN, arg], true, true);
+      await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+      texts.push(output());
+    }
+    expect(new Set(texts).size).toBe(1);
+    for (const command of ['dandelion run', 'dandelion run --high', 'dandelion --json', 'dandelion route --why', 'dandelion route --max-age <seconds>']) {
+      expect(texts[0]).toMatch(new RegExp(`^  ${command.replace(/[-<>]/g, '\\$&')} +\\S`, 'm'));
+    }
+  });
+
   it.each<[string]>([['--help'], ['-h'], ['help']])('runIfMain %s prints the usage to stdout, exits 0 and runs no probe', async (arg) => {
     const run = vi.fn(async () => ({ stdout: '', stderr: '' }));
     const io: ProbeIo = { ...routeIo, runner: { run } };
