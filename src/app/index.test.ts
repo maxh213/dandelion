@@ -1598,19 +1598,62 @@ describe('wiring', () => {
     expect(result.failure).toBe('timeout');
   });
 
-  it('realCommandRunner settles as a timeout and SIGKILLs a child that ignores SIGTERM', async () => {
+  function isAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function killQuietly(pid: number): void {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      return;
+    }
+  }
+
+  async function runIgnoringSigterm(script: string): Promise<{ elapsed: number; failure: string | undefined; pids: number[] }> {
+    const scratch = mkdtempSync(join(tmpdir(), 'dandelion-sigterm-'));
+    const pidFiles = [join(scratch, 'child.pid'), join(scratch, 'grandchild.pid')];
     const started = Date.now();
-    const script = 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)';
-    const result = await realIo.runner.run('node', ['-e', script], 100);
-    expect(result.failure).toBe('timeout');
-    expect(Date.now() - started).toBeLessThan(100 + 5000 + 1000);
+    const pidsOf = () => pidFiles.filter((file) => existsSync(file)).map((file) => Number(readFileSync(file, 'utf8')));
+    try {
+      const result = await realIo.runner.run('node', ['-e', script, ...pidFiles], 100);
+      const elapsed = Date.now() - started;
+      const pids = pidsOf();
+      await vi.waitFor(() => expect(isAlive(pids[0])).toBe(false));
+      return { elapsed, failure: result.failure, pids };
+    } finally {
+      pidsOf().forEach(killQuietly);
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  }
+
+  it('realCommandRunner settles as a timeout and SIGKILLs a child that ignores SIGTERM', async () => {
+    const script = 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000)';
+    const outcome = await runIgnoringSigterm(script);
+    expect(outcome.failure).toBe('timeout');
+    expect(outcome.elapsed).toBeLessThan(100 + 5000 + 1000);
+    expect(outcome.pids).toHaveLength(1);
   }, 15000);
 
-  it('realCommandRunner settles within the kill grace when a grandchild keeps stdout open', async () => {
-    const started = Date.now();
-    const grandchild = 'require("child_process").spawn("sleep", ["8"], { stdio: ["ignore", 1, 2], detached: true }).unref()';
-    await realIo.runner.run('node', ['-e', grandchild], 100);
-    expect(Date.now() - started).toBeLessThan(100 + 5000 + 1000);
+  it('realCommandRunner settles as a timeout when a SIGTERM-ignoring child leaves a grandchild holding stdout', async () => {
+    const script = [
+      'const fs = require("node:fs")',
+      'process.on("SIGTERM", () => {})',
+      'fs.writeFileSync(process.argv[1], String(process.pid))',
+      'const grandchild = require("node:child_process").spawn("sleep", ["30"], { stdio: ["ignore", 1, 2], detached: true })',
+      'fs.writeFileSync(process.argv[2], String(grandchild.pid))',
+      'grandchild.unref()',
+      'setInterval(() => {}, 1000)'
+    ].join(';');
+    const outcome = await runIgnoringSigterm(script);
+    expect(outcome.failure).toBe('timeout');
+    expect(outcome.elapsed).toBeLessThan(100 + 5000 + 1000);
+    expect(outcome.pids).toHaveLength(2);
   }, 15000);
 
   it('realCommandRunner reports a non-zero exit', async () => {
