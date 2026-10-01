@@ -108,6 +108,7 @@ describe('probeCursor', () => {
 
   it.each<[string, unknown, unknown[]]>([
     ['no auto window', { billingCycleEnd: '1790786706000', planUsage: { totalPercentUsed: 31.09, apiPercentUsed: 15.81 } }, [WINDOWS[0], WINDOWS[2]]],
+    ['a total just under the trip', { planUsage: { totalPercentUsed: 89.5 } }, [{ label: 'total', kind: 'weekly', usedPct: 89.5 }]],
     ['a zero, a string and a negative', { planUsage: { totalPercentUsed: 0, autoPercentUsed: '32', apiPercentUsed: -1 } }, [{ label: 'total', kind: 'weekly', usedPct: 0 }]],
     ['a numeric cycle end and an uncapped percent', { billingCycleEnd: 1790786706000, planUsage: { totalPercentUsed: 130 } }, [{ label: 'total', kind: 'weekly', usedPct: 130 }]],
     ['a word cycle end and a half percent', { billingCycleEnd: 'soon', planUsage: { autoPercentUsed: 32.5 } }, [{ label: 'auto', kind: 'weekly', usedPct: 32.5 }]],

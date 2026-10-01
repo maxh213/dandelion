@@ -387,6 +387,14 @@ describe('probeKimi coding API', () => {
     expect(JSON.stringify(usage)).not.toContain('access-token');
   });
 
+  it('keeps a 179 of 200 counter at 89.5% so it stays under the trip', async () => {
+    const body = {
+      limits: [{ window: { duration: 300, timeUnit: 'TIME_UNIT_MINUTE' }, detail: { limit: 200, used: 179, resetTime: 'soon' } }]
+    };
+    const usage = await probeKimi(ioWith(fakeChild(), bodyOf(body), scoped()).io, PORT, NOW);
+    expect(usage.windows).toStrictEqual([{ label: '5h', kind: 'rolling', usedPct: 89.5 }]);
+  });
+
   it('lets a present counter win over a nonzero ratio, including a real zero', async () => {
     const body = {
       usage: { limit: 100, used: 0, resetTime: WEEKLY_RESET },
