@@ -70,6 +70,7 @@ type Session = LiveOptions & {
   clock: () => string;
   results: LiveSlot['usage'][];
   lastGood: LiveSlot['lastGood'][];
+  baseline: LiveSlot['lastGood'][];
   inFlight: Set<number>;
   reprobes: Map<number, Promise<unknown>>;
   settled: SettledRound | undefined;
@@ -208,8 +209,18 @@ function eventsOf(session: Session, previous: LiveSlot['usage'], current: LiveSl
   return notificationEvents(previous, current, now, (at) => nextLocalMidnight(session.zone, at), notifyThresholds(session.env['DANDELION_NOTIFY_THRESHOLDS']));
 }
 
-function announce(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): void {
+function send(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): void {
   for (const { key, text } of eventsOf(session, previous, current)) if (fresh(session, key)) session.notifier.notify(text);
+}
+
+function announce(session: Session, index: number, current: LiveSlot['usage']): void {
+  if (!notifying(session)) return;
+  send(session, session.baseline[index], current);
+  if (current?.status === 'ok') session.baseline[index] = current;
+}
+
+function announceHeldBack(session: Session): void {
+  session.probes.forEach((_, index) => announce(session, index, session.lastGood[index]));
 }
 
 function reorder(session: Session): void {
@@ -217,7 +228,7 @@ function reorder(session: Session): void {
 }
 
 function settle(session: Session, index: number, usage: LiveSlot['usage']): void {
-  announce(session, session.lastGood[index], usage);
+  announce(session, index, usage);
   session.results[index] = usage;
   if (usage?.status === 'ok') session.lastGood[index] = usage;
   session.inFlight.delete(index);
@@ -444,6 +455,7 @@ function copyHigh(session: Session): void {
 function restoreAfterFix(session: Session): void {
   session.suspended = false;
   if (session.quitting) return;
+  announceHeldBack(session);
   session.screen.write(ENTER_ALTERNATE);
   session.keyboard.setRawMode(true);
   session.keyboard.resume();
@@ -570,6 +582,7 @@ export function startLive(options: LiveOptions): Promise<number> {
       clock: options.clock ?? wallClock,
       results: options.probes.map(() => undefined),
       lastGood: options.probes.map(() => undefined),
+      baseline: options.probes.map(() => undefined),
       inFlight: new Set(),
       reprobes: new Map(),
       settled: undefined,

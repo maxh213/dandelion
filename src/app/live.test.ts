@@ -1694,6 +1694,58 @@ describe('fix key', () => {
     await session.finished;
   });
 
+  const heldBack = async (before: Usage, during: Usage, key: string) => {
+    let finish: (status: number) => void = () => undefined;
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_NOTIFY: '1', DANDELION_REFRESH_SECONDS: '60' }, spawn: () => new Promise((resolve) => (finish = resolve)) });
+    await session.settleRound(0, { claude: before });
+    session.press('r');
+    await vi.advanceTimersByTimeAsync(0);
+    session.press(key);
+    session.probes.forEach(({ probe, calls }) => calls[1].resolve(probe.id === 'claude' ? during : usageOf(probe.id, calls[1].now)));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.notifier.notify).not.toHaveBeenCalled();
+    finish(0);
+    await vi.advanceTimersByTimeAsync(0);
+    return session;
+  };
+
+  const settleNextRound = async (session: Awaited<ReturnType<typeof heldBack>>, claude: Usage) => {
+    await session.settleRound(2, { claude });
+    session.press('q');
+    await session.finished;
+    return session.notifier.notify;
+  };
+
+  it('sends a threshold crossing that settled during an l command once after it exits', async () => {
+    const session = await heldBack(windowUsage('claude', weekly(10)), windowUsage('claude', weekly(96)), 'l');
+    expect(session.notifier.notify).toHaveBeenCalledTimes(1);
+    expect(session.notifier.notify).toHaveBeenCalledWith('claude weekly at 96%');
+    const notify = await settleNextRound(session, windowUsage('claude', weekly(96)));
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the 80% crossing held back during an L command once after it exits', async () => {
+    const session = await heldBack(windowUsage('claude', weekly(10)), windowUsage('claude', weekly(85)), 'L');
+    expect(vi.mocked(session.notifier.notify).mock.calls).toEqual([['claude weekly at 85%']]);
+    const notify = await settleNextRound(session, windowUsage('claude', weekly(86)));
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends a recovered account held back during the command after it exits', async () => {
+    const rolling = (usedPct: number) => windowUsage('claude', { label: '5h', kind: 'rolling', usedPct, resetsAt: '2026-09-13T15:00:00.000Z' });
+    const session = await heldBack(rolling(91), rolling(40), 'l');
+    expect(vi.mocked(session.notifier.notify).mock.calls).toEqual([['claude 5h recovered at 40%']]);
+    const notify = await settleNextRound(session, rolling(30));
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends a weekly reset held back during the command after it exits', async () => {
+    const session = await heldBack(windowUsage('claude', weekly(70, '2026-09-13T09:59:30.000Z')), windowUsage('claude', weekly(3, '2026-09-25T10:00:00.000Z')), 'l');
+    expect(vi.mocked(session.notifier.notify).mock.calls).toEqual([['claude weekly reset: 3% used']]);
+    const notify = await settleNextRound(session, windowUsage('claude', weekly(3, '2026-09-25T10:00:00.000Z')));
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
   it('runs with an empty env when the fix has none and still restores when the command is missing', async () => {
     const session = startSession({ spawn: async () => 'missing' });
     await session.settleRound(0, { grok: { ...usageOf('grok', START), fix: { command: 'junie', args: [] } } });
