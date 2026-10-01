@@ -26,6 +26,7 @@ import {
   dim,
   fitToWidth,
   renderCompactRow,
+  padCells,
   renderDimPanel,
   renderPanel,
   renderPanelRemembered,
@@ -186,7 +187,7 @@ function boxSide(noColor: boolean): string {
 
 function boxText(text: string, width: number): string {
   const cells = Math.max(0, width - BOX_CHROME_CELLS);
-  return ` ${cutCells(text, cells).padEnd(cells)} `;
+  return ` ${padCells(cutCells(text, cells), cells)} `;
 }
 
 function dimBoxRow(content: string, noColor: boolean): string {

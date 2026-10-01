@@ -12,7 +12,9 @@ import {
   styleToken,
   STYLE_TOKENS,
   cellCount,
+  cellWidth,
   cutCells,
+  padCells,
   clockTime,
   columnsWidth,
   fitToWidth,
@@ -1097,6 +1099,13 @@ describe('route boxes', () => {
     expect(lines.every((line) => [...line].length === 72)).toBe(true);
   });
 
+  it('keeps the right border aligned when a model name has a wide character', () => {
+    const wide: RouteLines = { ...LINES, route: { ...LINES.route, 'claude-work': { standard: '中文-model', max: '中文-model' } } };
+    const lines = boxLines(boxView(ROUTED, { routes: { lines: wide } }), true, NOW);
+    expect(lines[1].startsWith(`| ${'中文-model'}${' '.repeat(21)} |`)).toBe(true);
+    expect(lines.every((line) => cellCount(line) === 72)).toBe(true);
+  });
+
   it('colours the borders dim, the model line bold and the account row plain', () => {
     const lines = boxLines(boxView(ROUTED), false, NOW);
     expect(lines[0]).toBe(`${DIM}┌─ route ${'─'.repeat(25)}┐${RESET}  ${DIM}┌─ route --high ${'─'.repeat(18)}┐${RESET}`);
@@ -1636,6 +1645,42 @@ describe('cutting cells', () => {
 
   it('leaves an empty text empty at a negative limit', () => {
     expect(cutCells('', -5)).toBe('');
+  });
+});
+
+describe('cell widths', () => {
+  it.each<[string, number]>([['中', 2], ['😀', 2], ['\u0301', 0], ['\ufe0f', 0], ['\u200d', 0], ['a', 1], ['█', 1], ['░', 1], ['─', 1], ['│', 1], ['↻', 1], ['…', 1], ['', 1]])('measures %j as %i cells', (char, cells) => {
+    expect(cellWidth(char)).toBe(char === '' ? 1 : cells);
+  });
+
+  it('counts a text by its cells', () => {
+    expect(cellCount('a中😀e\u0301')).toBe(6);
+  });
+
+  it('pads by cells', () => {
+    expect(padCells('中', 4)).toBe('中  ');
+    expect(padCells('abc', 2)).toBe('abc');
+  });
+
+  it('never splits a wide character when cutting', () => {
+    const cut = cutCells('中文中文中文', 5);
+    expect(cut).toBe('中文…');
+    expect(cellCount(cut)).toBeLessThanOrEqual(5);
+    expect(cutCells('a中中', 4)).toBe('a中…');
+    expect(cutCells('中文', 4)).toBe('中文');
+  });
+
+  it('cuts a styled line at the cell limit and closes the style', () => {
+    expect(fitToWidth('\x1b[1m中中中\x1b[0m', 5)).toBe('\x1b[1m中中\x1b[0m\x1b[0m');
+    expect(fitToWidth('中中a', 3)).toBe('中\x1b[0m');
+  });
+
+  it('keeps a failed panel with wide text inside the frame width', () => {
+    const failed: ProviderUsage = { id: 'kimi', displayName: 'kimi', windows: [], fetchedAt: NOW, status: 'error', reason: '错误：无法连接到服务器，请稍后重试 😀😀 並且再試一次 failure' };
+    const view: LiveView = { slots: [{ id: 'kimi', usage: failed }], spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: LINES }, columns: 60 };
+    const lines = renderLiveFrame(view, true, NOW).split('\n');
+    expect(lines.some((line) => line.includes('错误'))).toBe(true);
+    expect(lines.every((line) => cellCount(line) <= 60)).toBe(true);
   });
 });
 

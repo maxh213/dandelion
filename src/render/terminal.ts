@@ -68,8 +68,95 @@ export function clockTime(instant: string, zone: string): string {
   return clockFormatter(zone).format(new Date(instant));
 }
 
+const ZERO_WIDTH: [number, number][] = [
+  [0x0300, 0x036f],
+  [0x0483, 0x0489],
+  [0x0591, 0x05bd],
+  [0x0610, 0x061a],
+  [0x064b, 0x065f],
+  [0x200b, 0x200f],
+  [0x202a, 0x202e],
+  [0x2060, 0x2064],
+  [0x20d0, 0x20ff],
+  [0xfe00, 0xfe0f],
+  [0xfe20, 0xfe2f],
+  [0xe0100, 0xe01ef]
+];
+
+const WIDE: [number, number][] = [
+  [0x1100, 0x115f],
+  [0x231a, 0x231b],
+  [0x2329, 0x232a],
+  [0x23e9, 0x23ec],
+  [0x23f0, 0x23f0],
+  [0x23f3, 0x23f3],
+  [0x25fd, 0x25fe],
+  [0x2614, 0x2615],
+  [0x2648, 0x2653],
+  [0x267f, 0x267f],
+  [0x2693, 0x2693],
+  [0x26a1, 0x26a1],
+  [0x26aa, 0x26ab],
+  [0x26bd, 0x26be],
+  [0x26c4, 0x26c5],
+  [0x26ce, 0x26ce],
+  [0x26d4, 0x26d4],
+  [0x26ea, 0x26ea],
+  [0x26f2, 0x26f3],
+  [0x26f5, 0x26f5],
+  [0x26fa, 0x26fa],
+  [0x26fd, 0x26fd],
+  [0x2705, 0x2705],
+  [0x270a, 0x270b],
+  [0x2728, 0x2728],
+  [0x274c, 0x274c],
+  [0x274e, 0x274e],
+  [0x2753, 0x2755],
+  [0x2757, 0x2757],
+  [0x2795, 0x2797],
+  [0x27b0, 0x27b0],
+  [0x27bf, 0x27bf],
+  [0x2b1b, 0x2b1c],
+  [0x2b50, 0x2b50],
+  [0x2b55, 0x2b55],
+  [0x2e80, 0x303e],
+  [0x3041, 0x33ff],
+  [0x3400, 0x4dbf],
+  [0x4e00, 0xa4cf],
+  [0xa960, 0xa97f],
+  [0xac00, 0xd7a3],
+  [0xf900, 0xfaff],
+  [0xfe10, 0xfe19],
+  [0xfe30, 0xfe6f],
+  [0xff00, 0xff60],
+  [0xffe0, 0xffe6],
+  [0x1f004, 0x1f004],
+  [0x1f0cf, 0x1f0cf],
+  [0x1f18e, 0x1f18e],
+  [0x1f191, 0x1f19a],
+  [0x1f200, 0x1f64f],
+  [0x1f680, 0x1f6ff],
+  [0x1f900, 0x1f9ff],
+  [0x1fa70, 0x1faff],
+  [0x20000, 0x3fffd]
+];
+
+function within(ranges: [number, number][], code: number): boolean {
+  return ranges.some(([from, to]) => code >= from && code <= to);
+}
+
+export function cellWidth(char: string): number {
+  const code = char.codePointAt(0) ?? 0;
+  if (within(ZERO_WIDTH, code)) return 0;
+  return within(WIDE, code) ? 2 : 1;
+}
+
 export function cellCount(text: string): number {
-  return [...text].length;
+  return [...text].reduce((sum, char) => sum + cellWidth(char), 0);
+}
+
+export function padCells(text: string, cells: number): string {
+  return text + repeatChar(' ', cells - cellCount(text));
 }
 
 function bannerGap(right: string, width: number): string {
@@ -166,13 +253,23 @@ export function styleToken(usedPct: number): StyleToken {
 }
 
 export function cutCells(text: string, limit: number): string {
-  const cells = [...text];
-  if (cells.length <= limit) return text;
-  return limit <= 0 ? '' : `${cells.slice(0, limit - 1).join('').trimEnd()}…`;
+  if (cellCount(text) <= limit) return text;
+  return limit <= 0 ? '' : `${headCells(text, limit - 1).trimEnd()}…`;
+}
+
+function headCells(text: string, limit: number): string {
+  let used = 0;
+  let head = '';
+  for (const char of text) {
+    used += cellWidth(char);
+    if (used > limit) break;
+    head += char;
+  }
+  return head;
 }
 
 function fitLabel(label: string, cells: number): string {
-  return cutCells(label, cells).padEnd(cells);
+  return padCells(cutCells(label, cells), cells);
 }
 
 function resetText(resetsAt: string, now: string, absoluteZone: string | undefined): string {
@@ -338,9 +435,15 @@ function isEscape(token: string): boolean {
 
 export function fitToWidth(line: string, width: number): string {
   const tokens = line.match(TOKEN) ?? [];
-  if (tokens.filter((token) => !isEscape(token)).length <= width) return line;
+  if (cellCount(tokens.filter((token) => !isEscape(token)).join('')) <= width) return line;
   let cells = 0;
-  const kept = tokens.filter((token) => isEscape(token) || cells++ < width);
+  let full = false;
+  const kept = tokens.filter((token) => {
+    if (isEscape(token)) return true;
+    cells += cellWidth(token);
+    full = full || cells > width;
+    return !full;
+  });
   return `${kept.join('')}${RESET}`;
 }
 
