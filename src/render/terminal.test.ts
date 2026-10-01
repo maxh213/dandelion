@@ -1819,6 +1819,34 @@ describe('usage sparkline', () => {
     expect(cellCount(row)).toBeLessThanOrEqual(80);
   });
 
+  describe('with colour on', () => {
+    const gaugeCells = (row: string): number => [...plain(row).slice(36).split(/ +\d+%/)[0]].length;
+    const bare = (columns: number): string[] => rows([], false, columns);
+
+    it('takes exactly nine cells from the gauge', () => {
+      [72, 80, 120].forEach((columns) => {
+        const [row] = rows(rising, false, columns);
+        expect(row).toContain('\x1b');
+        expect(gaugeCells(bare(columns)[0]) - gaugeCells(row)).toBe(9);
+      });
+    });
+
+    it('keeps the visible width equal to a row without a sparkline', () => {
+      for (let columns = 67; columns <= 80; columns++) {
+        const withSpark = rows(rising, false, columns);
+        withSpark.forEach((row, index) => expect(cellCount(plain(row))).toBe(cellCount(plain(bare(columns)[index]))));
+      }
+    });
+
+    it('never leaves a gauge narrower than six cells', () => {
+      for (let columns = 50; columns <= 80; columns++) {
+        const row = rows(rising, false, columns)[0];
+        if (row !== bare(columns)[0]) expect(gaugeCells(row)).toBeGreaterThanOrEqual(6);
+      }
+      expect(rows(rising, false, 66)).toEqual(bare(66));
+    });
+  });
+
   it('leaves the compact view and plain panels unchanged', () => {
     const marks: PanelMarks = { selected: false, ineligible: false };
     const ok = usage as Extract<ProviderUsage, { status: 'ok' }>;

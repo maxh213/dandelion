@@ -287,8 +287,12 @@ function paintSlice(chars: string[], paint: (text: string) => string): string {
   return chars.length === 0 ? '' : paint(chars.join(''));
 }
 
+function sparkCells(spark: string): number {
+  return spark === '' ? 0 : SPARK_BUCKETS + 1;
+}
+
 function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, mark: (text: string) => string, absoluteZone: string | undefined, layout: Layout, spark = ''): string {
-  const gauge = paceGauge(window, noColor, now, paint, mark, layout.gauge - cellCount(spark));
+  const gauge = paceGauge(window, noColor, now, paint, mark, layout.gauge - sparkCells(spark));
   const percent = paint(`${window.usedPct}%`.padStart(PERCENT_CELLS));
   const label = fitLabel(window.label, absoluteZone === undefined ? layout.label : layout.label - (LABEL_CELLS - ABSOLUTE_LABEL_CELLS));
   return `${label} ${gauge} ${percent}${spark}${countdown(window.resetsAt, now, absoluteZone)}`;
