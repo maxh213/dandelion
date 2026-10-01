@@ -364,6 +364,34 @@ describe('live session', () => {
     await session.finished;
   });
 
+  describe.each([
+    ['the r key', async (session: ReturnType<typeof startSession>) => session.press('r')],
+    ['the refresh timer', async () => vi.advanceTimersByTimeAsync(60000)]
+  ])('a full round started by %s during an R re-probe', (_name, begin) => {
+    it('reuses the in-flight probe, shows its result and ends once', async () => {
+      const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '60' } });
+      await session.settleRound(0);
+      session.press('j');
+      session.press('R');
+      expect(session.probes[0].calls).toHaveLength(2);
+      await begin(session);
+      expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
+      session.probes.slice(1).forEach(({ probe, calls }) => calls[1].resolve(usageOf(probe.id, calls[1].now)));
+      await vi.advanceTimersByTimeAsync(0);
+      const recorded = session.historyReplace.mock.calls.length;
+      session.probes[0].calls[1].resolve({ ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 77 }] });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.lastFrame()).toContain('77%');
+      expect(session.historyReplace).toHaveBeenCalledTimes(recorded + 1);
+      await vi.advanceTimersByTimeAsync(59000);
+      expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 3));
+      session.press('q');
+      await session.finished;
+    });
+  });
+
   it('ends a round even when a probe rejects', async () => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
     session.probes[0].calls[0].reject(new Error('boom'));
@@ -875,24 +903,6 @@ describe('live session', () => {
     session.press('R');
     await session.finished;
     expect(session.probes[0].calls).toHaveLength(2);
-  });
-
-  it('starts a full round while a single panel probe runs and drops the stale single result', async () => {
-    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '10' } });
-    await session.settleRound(0);
-    session.press('j');
-    session.press('R');
-    session.press('r');
-    expect(session.probes.map(({ calls }) => calls.length)).toEqual([3, ...IDS.slice(1).map(() => 2)]);
-    session.probes.slice(1).forEach(({ probe, calls }) => calls[1].resolve(usageOf(probe.id, calls[1].now)));
-    session.probes[0].calls[2].resolve({ ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 33 }] });
-    await vi.advanceTimersByTimeAsync(0);
-    session.probes[0].calls[1].resolve({ ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 99 }] });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(session.lastFrame()).toContain('33%');
-    expect(session.lastFrame()).not.toContain('99%');
-    session.press('q');
-    await session.finished;
   });
 
   it.each([['q'], ['\x03']])('quits on %j: restores the terminal, stops children and draws nothing more', async (key) => {
