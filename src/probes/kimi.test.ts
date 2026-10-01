@@ -247,6 +247,7 @@ describe('probeKimi', () => {
       status: 'unavailable',
       reason
     });
+    expect(usage).not.toHaveProperty('fix');
     expect(child.stops).toBe(1);
   });
 
@@ -514,6 +515,7 @@ describe('probeKimi coding API', () => {
     const { io, launches, requests } = ioWith(fakeChild(), bodyOf(LEGACY), scoped(body));
     const usage = await probeKimi(io, PORT, NOW);
     expect(usage).toMatchObject({ status: 'unavailable', reason });
+    expect('fix' in usage).toBe(reason.includes('expired'));
     expect(launches).toEqual([]);
     expect(requests).toEqual([]);
     expect(JSON.stringify(usage)).not.toContain('access-token');
@@ -582,21 +584,21 @@ describe('probeKimi expired token refresh', () => {
     const { io } = refreshing(child, Number.POSITIVE_INFINITY);
     const probe = probeKimi(io, PORT, NOW);
     await vi.advanceTimersByTimeAsync(20000);
-    expect(await probe).toMatchObject({ status: 'unavailable', reason: 'kimi token expired and kimi web did not refresh it — run kimi once' });
+    expect(await probe).toMatchObject({ status: 'unavailable', reason: 'kimi token expired and kimi web did not refresh it — run kimi once', fix: { command: 'kimi', args: [] } });
     expect(child.stops).toBe(1);
   });
 
   it('reports a failed refresh when kimi web exits without refreshing', async () => {
     const child = fakeChild('', true);
     const { io, requests } = refreshing(child, Number.POSITIVE_INFINITY);
-    expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired and kimi web did not refresh it — run kimi once' });
+    expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired and kimi web did not refresh it — run kimi once', fix: { command: 'kimi', args: [] } });
     expect(requests).toEqual([]);
     expect(child.stops).toBe(1);
   });
 
   it('keeps the expired message when kimi is not installed', async () => {
     const { io } = refreshing(undefined, 1);
-    expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once' });
+    expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once', fix: { command: 'kimi', args: [] } });
   });
 
   it('keeps polling when the credential file is unreadable mid-write', async () => {
@@ -628,7 +630,7 @@ describe('probeKimi expired token refresh', () => {
     for (const body of [{ refresh_token: '' }, {}]) {
       const files = scoped(JSON.stringify({ access_token: 'stale-token', expires_at: expiredAt, ...body }));
       const { io, launches } = ioWith(fakeChild(), bodyOf(LEGACY), files);
-      expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once' });
+      expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once', fix: { command: 'kimi', args: [] } });
       expect(launches).toEqual([]);
     }
   });

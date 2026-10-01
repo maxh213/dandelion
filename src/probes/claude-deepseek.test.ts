@@ -164,8 +164,20 @@ describe('probeClaudeDeepseek', () => {
     ['a JSON array', { [`${DIR}/settings.json`]: '["token"]' }, [DIR]]
   ])('is unavailable without a request for %s', async (_case, files, dirs) => {
     const { io, requests } = ioOf(files, dirs);
-    expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual(unavailable(NO_CONFIG));
+    expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual({ ...unavailable(NO_CONFIG), fix: { command: 'claude', args: [], env: { CLAUDE_CONFIG_DIR: DIR } } });
     expect(requests).toEqual([]);
+  });
+
+  it('offers the fix for the default config dir', async () => {
+    const { io } = ioOf({}, []);
+    expect(await probeClaudeDeepseek(io, {}, NOW)).toMatchObject({ fix: { command: 'claude', args: [], env: { CLAUDE_CONFIG_DIR: '/home/tester/.claude-deepseek' } } });
+  });
+
+  it('has no fix when ok or when the key has no limit', async () => {
+    const ok = ioOf({ [`${DIR}/settings.json`]: settings() });
+    expect(await probeClaudeDeepseek(ok.io, ENV, NOW)).not.toHaveProperty('fix');
+    const noLimit = ioOf({ [`${DIR}/settings.json`]: settings() }, [DIR], answer(keyBody({ limit: null })));
+    expect(await probeClaudeDeepseek(noLimit.io, ENV, NOW)).not.toHaveProperty('fix');
   });
 
   it('reports a thrown request as a parse failure and does not print the token', async () => {

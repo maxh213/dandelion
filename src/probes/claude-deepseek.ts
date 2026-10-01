@@ -5,6 +5,7 @@ import {
   isFilled,
   parseJson,
   successBody,
+  unavailableFix,
   unavailableReason,
   usedPctFromRemaining,
   withReset,
@@ -37,20 +38,24 @@ function finiteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function tokenOf(settings: unknown): string {
+function noConfig(dir: string): ProbeUnavailable {
+  return new ProbeUnavailable(NO_CONFIG, { command: 'claude', args: [], env: { CLAUDE_CONFIG_DIR: dir } });
+}
+
+function tokenOf(settings: unknown, dir: string): string {
   const token = fieldOf(fieldOf(settings, 'env'), 'ANTHROPIC_AUTH_TOKEN');
-  if (!isFilled(token)) throw new ProbeUnavailable(NO_CONFIG);
+  if (!isFilled(token)) throw noConfig(dir);
   return token;
 }
 
 async function readToken(reader: FileReader, dir: string): Promise<string> {
-  if (!(await reader.isDirectory(dir))) throw new ProbeUnavailable(NO_CONFIG);
+  if (!(await reader.isDirectory(dir))) throw noConfig(dir);
   const text = await reader.read(`${dir}/settings.json`);
   try {
-    return tokenOf(parseJson(String(text)));
+    return tokenOf(parseJson(String(text)), dir);
   } catch (error) {
     if (error instanceof ProbeUnavailable) throw error;
-    throw new ProbeUnavailable(NO_CONFIG);
+    throw noConfig(dir);
   }
 }
 
@@ -124,6 +129,6 @@ export async function probeClaudeDeepseek(io: DeepseekIo, env: Env, now: string)
   try {
     return { ...usage, ...(await readAccount(io, env, now)), status: 'ok' };
   } catch (error) {
-    return { ...usage, planLabel: PLAN, windows: [], status: 'unavailable', reason: unavailableReason(error) };
+    return { ...usage, planLabel: PLAN, windows: [], status: 'unavailable', reason: unavailableReason(error), ...unavailableFix(error) };
   }
 }

@@ -7,6 +7,7 @@ import {
   isRecord,
   parseJson,
   successBody,
+  unavailableFix,
   unavailableReason,
   validInstant,
   withReset,
@@ -41,6 +42,7 @@ const DEFAULT_BASE = 'https://api.kimi.com/coding/v1';
 const USER_AGENT = 'kimi-code-cli/2.1.1';
 const NO_AUTH = 'no kimi auth — run kimi login';
 const EXPIRED = 'kimi token expired — run kimi once';
+const KIMI_FIX = { command: 'kimi', args: [] };
 const NOT_REFRESHED = 'kimi token expired and kimi web did not refresh it — run kimi once';
 const TOKEN = /token=([A-Za-z0-9._-]+)|Bearer ([A-Za-z0-9._-]+)/;
 const WEEKLY = { label: 'weekly', kind: 'weekly' } as const;
@@ -253,7 +255,7 @@ async function waitForFresh(io: KimiIo, env: Env, child: LaunchedProcess, now: s
   const exited = child.hasExited();
   const credential = await loadCredentialOrUndefined(io, env);
   if (isFresh(credential, now)) return authOf(credential);
-  if (exited || waitedMs >= TOKEN_WAIT_MS) throw new ProbeUnavailable(NOT_REFRESHED);
+  if (exited || waitedMs >= TOKEN_WAIT_MS) throw new ProbeUnavailable(NOT_REFRESHED, KIMI_FIX);
   await sleep(POLL_MS);
   return waitForFresh(io, env, child, now, waitedMs + POLL_MS);
 }
@@ -261,7 +263,7 @@ async function waitForFresh(io: KimiIo, env: Env, child: LaunchedProcess, now: s
 async function refreshViaKimi(io: KimiIo, env: Env, now: string): Promise<Auth> {
   const port = parsePort(env['DANDELION_KIMI_PORT']);
   const child = await io.launcher.launch('kimi', ['web', '--no-open', '--port', String(port)]);
-  if (child === undefined) throw new ProbeUnavailable(EXPIRED);
+  if (child === undefined) throw new ProbeUnavailable(EXPIRED, KIMI_FIX);
   try {
     return await waitForFresh(io, env, child, now, 0);
   } finally {
@@ -272,7 +274,7 @@ async function refreshViaKimi(io: KimiIo, env: Env, now: string): Promise<Auth> 
 async function authFor(io: KimiIo, env: Env, credential: Credential, now: string): Promise<Auth> {
   const auth = authOf(credential);
   if (!isExpired(credential.parsed, now)) return auth;
-  if (!isFilled(fieldOf(credential.parsed, 'refresh_token'))) throw new ProbeUnavailable(EXPIRED);
+  if (!isFilled(fieldOf(credential.parsed, 'refresh_token'))) throw new ProbeUnavailable(EXPIRED, KIMI_FIX);
   return refreshViaKimi(io, env, now);
 }
 
@@ -303,6 +305,6 @@ export async function probeKimi(io: KimiIo, env: Env, now: string): Promise<Prov
   try {
     return { ...usage, windows: await readKimi(io, env, now), status: 'ok' };
   } catch (error) {
-    return { ...usage, windows: [], status: 'unavailable', reason: unavailableReason(error) };
+    return { ...usage, windows: [], status: 'unavailable', reason: unavailableReason(error), ...unavailableFix(error) };
   }
 }

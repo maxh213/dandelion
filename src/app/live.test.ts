@@ -1498,6 +1498,19 @@ describe('fix key', () => {
     await session.finished;
   });
 
+  it('offers the kimi expired-token fix on its caption and runs it with x', async () => {
+    const session = startSession({ spawn: async () => 0 });
+    const expired: Usage = { id: 'kimi', displayName: 'kimi', planLabel: 'kimi code', windows: [], fetchedAt: START, status: 'unavailable', reason: 'kimi token expired — run kimi once', fix: { command: 'kimi', args: [] } };
+    await session.settleRound(0, { kimi: expired });
+    expect(session.lastFrame().split('\n').filter((line) => line.endsWith(' · x fix'))).toHaveLength(1);
+    ['j', 'j', 'j'].forEach((key) => session.press(key));
+    session.press('x');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.spawner.spawn).toHaveBeenCalledWith({ command: 'kimi', args: [], env: {} });
+    session.press('q');
+    await session.finished;
+  });
+
   it('does nothing without a selection', async () => {
     const session = startSession();
     await session.settleRound(0, grokOnly);
