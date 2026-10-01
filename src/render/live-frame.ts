@@ -16,10 +16,12 @@ import {
   WIDTH,
   bannerLine,
   bold,
+  columnsWidth,
   cellCount,
   clockTime,
   cutCells,
   dim,
+  fitToWidth,
   renderDimPanel,
   renderPanel,
   repeatChar,
@@ -32,9 +34,8 @@ const REFRESHING = 'refreshing…';
 const HIDE_HELP = 'h hide · H show hidden · R refresh panel';
 const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back';
 const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
-const BOX_WIDTH = 35;
-const BOX_TEXT_CELLS = 31;
 const BOX_GAP = '  ';
+const BOX_CHROME_CELLS = 4;
 const ROUTE_TITLE = 'route';
 const HIGH_TITLE = 'route --high';
 const NO_SUBSCRIPTION = 'no subscription available';
@@ -63,6 +64,7 @@ export type LiveView = {
   selected?: number;
   flash?: Flash;
   rows?: number;
+  columns?: number;
   graph?: { id: string; samples: HistorySample[]; usage: ProviderUsage | undefined };
 };
 
@@ -76,9 +78,13 @@ function dataAge(usages: ProviderUsage[], now: string): string {
   return `data ${formatCountdown(now, oldest)} old · `;
 }
 
+function widthOf(view: LiveView): number {
+  return columnsWidth(view.columns) ?? WIDTH;
+}
+
 function liveBanner(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string {
   const tail = `${dataAge(usages, now)}${clockTime(now, view.zone)}`;
-  return view.refreshing ? splitBanner(REFRESHING, tail, noColor) : bannerLine(tail, noColor);
+  return view.refreshing ? splitBanner(REFRESHING, tail, noColor, widthOf(view)) : bannerLine(tail, noColor, widthOf(view));
 }
 
 function hotSegment(hot: number, windows: number): string {
@@ -89,16 +95,16 @@ function resetSuffix(resetsAt: string, now: string, absoluteZone: string | undef
   return absoluteZone === undefined ? ` in ${formatCountdown(resetsAt, now)}` : ` at ${formatResetAt(resetsAt, now, absoluteZone)}`;
 }
 
-function resetSegment(head: string, next: { id: string; label: string; resetsAt: string }, now: string, absoluteZone: string | undefined): string {
+function resetSegment(head: string, next: { id: string; label: string; resetsAt: string }, now: string, absoluteZone: string | undefined, width: number): string {
   const prefix = `${head}${next.id} `;
   const suffix = resetSuffix(next.resetsAt, now, absoluteZone);
-  return `${prefix}${cutCells(next.label, WIDTH - cellCount(prefix) - cellCount(suffix))}${suffix}`;
+  return `${prefix}${cutCells(next.label, width - cellCount(prefix) - cellCount(suffix))}${suffix}`;
 }
 
-function summaryLine(usages: ProviderUsage[], now: string, absoluteZone: string | undefined): string {
+function summaryLine(usages: ProviderUsage[], now: string, absoluteZone: string | undefined, width: number): string {
   const fleet = summariseFleet(usages, now);
   const head = `${hotSegment(fleet.hot, fleet.windows)} · next reset: `;
-  return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now, absoluteZone);
+  return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now, absoluteZone, width);
 }
 
 function absoluteZoneOf(view: LiveView): string | undefined {
@@ -123,7 +129,7 @@ function isHidden(view: LiveView, slot: LiveSlot): boolean {
 
 function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   const caption = view.flash?.index === index ? view.flash.message : undefined;
-  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view) };
+  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view) };
 }
 
 function settledMarks(slot: LiveSlot, usage: ProviderUsage, spinner: number, now: string, marks: PanelMarks): PanelMarks {
@@ -138,22 +144,23 @@ function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: strin
 
 type BoxAnswer = { model: string; account: string; dimmed: boolean };
 
-function boxTop(title: string, noColor: boolean): string {
+function boxTop(title: string, noColor: boolean, width: number): string {
   const [left, line, right] = noColor ? ['+', '-', '+'] : ['┌', '─', '┐'];
-  const head = `${left}${line} ${title} `;
-  return `${head}${repeatChar(line, BOX_WIDTH - cellCount(head) - 1)}${right}`;
+  const head = cutCells(`${left}${line} ${title} `, width - 1);
+  return `${head}${repeatChar(line, width - cellCount(head) - 1)}${right}`;
 }
 
-function boxBottom(noColor: boolean): string {
-  return noColor ? `+${repeatChar('-', BOX_WIDTH - 2)}+` : `└${repeatChar('─', BOX_WIDTH - 2)}┘`;
+function boxBottom(noColor: boolean, width: number): string {
+  return noColor ? `+${repeatChar('-', width - 2)}+` : `└${repeatChar('─', width - 2)}┘`;
 }
 
 function boxSide(noColor: boolean): string {
   return noColor ? '|' : '│';
 }
 
-function boxText(text: string): string {
-  return ` ${cutCells(text, BOX_TEXT_CELLS).padEnd(BOX_TEXT_CELLS)} `;
+function boxText(text: string, width: number): string {
+  const cells = Math.max(0, width - BOX_CHROME_CELLS);
+  return ` ${cutCells(text, cells).padEnd(cells)} `;
 }
 
 function dimBoxRow(content: string, noColor: boolean): string {
@@ -222,17 +229,19 @@ function boxAnswers(view: LiveView, now: string): [BoxAnswer, BoxAnswer] {
   return [splitRouteLine(route), splitRouteLine(high)];
 }
 
-function renderBox(title: string, answer: BoxAnswer, noColor: boolean): string[] {
-  const top = dim(boxTop(title, noColor), noColor);
-  const bottom = dim(boxBottom(noColor), noColor);
-  if (answer.dimmed) return [top, dimBoxRow(boxText(answer.model), noColor), dimBoxRow(boxText(answer.account), noColor), bottom];
-  return [top, modelBoxRow(boxText(answer.model), noColor), withSides(boxText(answer.account), noColor), bottom];
+function renderBox(title: string, answer: BoxAnswer, noColor: boolean, width: number): string[] {
+  const top = dim(boxTop(title, noColor, width), noColor);
+  const bottom = dim(boxBottom(noColor, width), noColor);
+  const [model, account] = [boxText(answer.model, width), boxText(answer.account, width)];
+  if (answer.dimmed) return [top, dimBoxRow(model, noColor), dimBoxRow(account, noColor), bottom];
+  return [top, modelBoxRow(model, noColor), withSides(account, noColor), bottom];
 }
 
 function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
   const [route, high] = boxAnswers(view, now);
-  const left = renderBox(ROUTE_TITLE, route, noColor);
-  const right = renderBox(HIGH_TITLE, high, noColor);
+  const leftWidth = Math.floor((widthOf(view) - BOX_GAP.length) / 2);
+  const left = renderBox(ROUTE_TITLE, route, noColor, leftWidth);
+  const right = renderBox(HIGH_TITLE, high, noColor, widthOf(view) - BOX_GAP.length - leftWidth);
   return left.map((line, row) => `${line}${BOX_GAP}${right[row]}`);
 }
 
@@ -258,7 +267,7 @@ function regionLines(panels: string[], selected: number | undefined, height: num
 }
 
 function summaryOrFlash(view: LiveView, usages: ProviderUsage[], now: string): string {
-  return view.flash?.index === ROUTE_FLASH ? view.flash.message : summaryLine(usages, now, absoluteZoneOf(view));
+  return view.flash?.index === ROUTE_FLASH ? view.flash.message : summaryLine(usages, now, absoluteZoneOf(view), widthOf(view));
 }
 
 function liveChrome(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string[] {
@@ -291,7 +300,6 @@ function regionHeight(rows: number, chrome: string[], footer: string[]): number 
 }
 
 const Y_LABEL_CELLS = 5;
-const PLOT_CELLS = WIDTH - Y_LABEL_CELLS;
 const MAX_CHART_ROWS = 6;
 const LEVELS = [...'▁▂▃▄▅▆▇█'];
 const FULL_PCT = 100;
@@ -309,6 +317,7 @@ type HistoryView = {
   zone: string;
   rows: number;
   now: string;
+  width: number;
 };
 
 type Column = { usedPct: number; dropped: boolean } | undefined;
@@ -333,20 +342,24 @@ function emptyReason(usage: ProviderUsage | undefined): string {
   return usage.windows.length === 0 ? NO_WINDOWS : NO_HISTORY;
 }
 
-function bucketOf(sample: HistorySample, from: number, span: number): number {
-  return Math.min(PLOT_CELLS - 1, Math.floor(((atMs(sample) - from) / span) * PLOT_CELLS));
+function plotCells(width: number): number {
+  return Math.max(1, width - Y_LABEL_CELLS);
+}
+
+function bucketOf(sample: HistorySample, from: number, span: number, plot: number): number {
+  return Math.min(plot - 1, Math.floor(((atMs(sample) - from) / span) * plot));
 }
 
 function dropFlags(samples: HistorySample[]): boolean[] {
   return samples.map((sample, index) => index > 0 && sample.usedPct < samples[index - 1].usedPct);
 }
 
-function columnsOf(samples: HistorySample[], from: number, to: number): Column[] {
-  const columns: Column[] = Array.from({ length: PLOT_CELLS }, () => undefined);
+function columnsOf(samples: HistorySample[], from: number, to: number, plot: number): Column[] {
+  const columns: Column[] = Array.from({ length: plot }, () => undefined);
   const span = Math.max(1, to - from);
   const drops = dropFlags(samples);
   samples.forEach((sample, index) => {
-    const at = bucketOf(sample, from, span);
+    const at = bucketOf(sample, from, span, plot);
     columns[at] = { usedPct: sample.usedPct, dropped: drops[index] || columns[at]?.dropped === true };
   });
   return columns;
@@ -389,16 +402,16 @@ function stamp(ms: number, zone: string): string {
   return `${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
 }
 
-function axisRow(from: number, to: number, zone: string): string {
+function axisRow(from: number, to: number, zone: string, plot: number): string {
   const left = stamp(from, zone);
   const right = stamp(to, zone);
-  return `${repeatChar(' ', Y_LABEL_CELLS)}${left}${repeatChar(' ', PLOT_CELLS - left.length - right.length)}${right}`;
+  return `${repeatChar(' ', Y_LABEL_CELLS)}${left}${repeatChar(' ', plot - left.length - right.length)}${right}`;
 }
 
-function windowBlock(label: string, samples: HistorySample[], rows: number, range: [number, number], noColor: boolean): string[] {
-  const columns = columnsOf(samples, range[0], range[1]);
+function windowBlock(label: string, samples: HistorySample[], rows: number, range: [number, number], noColor: boolean, width: number): string[] {
+  const columns = columnsOf(samples, range[0], range[1], plotCells(width));
   const latest = samples[samples.length - 1].usedPct;
-  const title = `${cutCells(label, WIDTH - 8)}  ${latest}%`;
+  const title = `${cutCells(label, width - 8)}  ${latest}%`;
   return [bold(title, noColor), ...chartRows(columns, rows, noColor), dim(resetRow(columns, noColor), noColor)];
 }
 
@@ -434,15 +447,24 @@ function renderHistoryView(view: HistoryView, noColor: boolean): string {
   const range: [number, number] = [atMs(samples[0]), Math.max(atMs(samples[samples.length - 1]), Date.parse(view.now))];
   const series = seriesOf(samples);
   const height = chartHeight(view.rows, series.length);
-  const blocks = series.map((one) => windowBlock(one.label, one.samples, height, range, noColor));
-  const axis = dim(axisRow(range[0], range[1], view.zone), noColor);
+  const blocks = series.map((one) => windowBlock(one.label, one.samples, height, range, noColor, view.width));
+  const axis = dim(axisRow(range[0], range[1], view.zone, plotCells(view.width)), noColor);
   const body = visibleBlocks(blocks, Math.max(0, view.rows - CHROME_ROWS));
   return [header(view, spanOf(range[0], range[1]), noColor), ...body, axis, hint].slice(0, view.rows).join('\n');
 }
 
+function fitFrame(frame: string, columns: number | undefined): string {
+  const width = columnsWidth(columns);
+  return width === undefined ? frame : frame.split('\n').map((line) => fitToWidth(line, width)).join('\n');
+}
+
 export function renderLiveFrame(view: LiveView, noColor: boolean, now: string): string {
+  return fitFrame(composeFrame(view, noColor, now), view.columns);
+}
+
+function composeFrame(view: LiveView, noColor: boolean, now: string): string {
   const rows = rowBudget(view.rows);
-  if (view.graph) return renderHistoryView({ ...view.graph, zone: view.zone, rows, now }, noColor);
+  if (view.graph) return renderHistoryView({ ...view.graph, zone: view.zone, rows, now, width: widthOf(view) }, noColor);
   const chrome = liveChrome(view, settledUsages(view.slots), noColor, now);
   const footer = view.footer ? liveFooter(noColor) : [];
   const shown = shownIndexes(view);

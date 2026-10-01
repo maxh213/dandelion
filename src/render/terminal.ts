@@ -2,6 +2,9 @@ import { HOT_PCT, formatCountdown, formatResetAt, type Balance, type ProviderUsa
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
+const MAX_GAUGE_CELLS = 80;
+const MIN_GAUGE_CELLS = 6;
+const MIN_LABEL_CELLS = 14;
 const LABEL_CELLS = 35;
 const ABSOLUTE_LABEL_CELLS = 31;
 const PERCENT_CELLS = 4;
@@ -14,7 +17,9 @@ const ROUTING_OFF = 'routing off';
 const HIDDEN = 'hidden';
 const MARKER = '▸ ';
 
-export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; age?: string; spinner?: string; absoluteZone?: string };
+export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; age?: string; spinner?: string; absoluteZone?: string; width?: number };
+
+export type Layout = { width: number; label: number; gauge: number };
 
 function styled(text: string, code: string, noColor: boolean): string {
   if (noColor) return text;
@@ -30,6 +35,18 @@ export function bold(text: string, noColor: boolean): string {
 
 export function dim(text: string, noColor: boolean): string {
   return styled(text, DIM, noColor);
+}
+
+export function layoutOf(width = WIDTH): Layout {
+  if (width >= WIDTH) return { width, label: LABEL_CELLS, gauge: Math.min(MAX_GAUGE_CELLS, GAUGE_CELLS + width - WIDTH) };
+  const deficit = WIDTH - width;
+  const gaugeCut = Math.min(deficit, GAUGE_CELLS - MIN_GAUGE_CELLS);
+  const labelCut = Math.min(deficit - gaugeCut, LABEL_CELLS - MIN_LABEL_CELLS);
+  return { width, label: LABEL_CELLS - labelCut, gauge: GAUGE_CELLS - gaugeCut };
+}
+
+export function columnsWidth(columns: number | undefined): number | undefined {
+  return Number.isInteger(columns) && Number(columns) > 0 ? columns : undefined;
 }
 
 export function repeatChar(char: string, count: number): string {
@@ -54,17 +71,17 @@ export function cellCount(text: string): number {
   return [...text].length;
 }
 
-function bannerGap(right: string): string {
-  return repeatChar(' ', WIDTH - TITLE.length - cellCount(right));
+function bannerGap(right: string, width: number): string {
+  return repeatChar(' ', width - TITLE.length - cellCount(right));
 }
 
-export function bannerLine(right: string, noColor: boolean): string {
-  return styled(`${TITLE}${bannerGap(right)}${right}`, BOLD, noColor);
+export function bannerLine(right: string, noColor: boolean, width = WIDTH): string {
+  return styled(`${TITLE}${bannerGap(right, width)}${right}`, BOLD, noColor);
 }
 
-export function splitBanner(emphasis: string, right: string, noColor: boolean): string {
+export function splitBanner(emphasis: string, right: string, noColor: boolean, width = WIDTH): string {
   const rest = ` · ${right}`;
-  const lead = TITLE + bannerGap(emphasis + rest);
+  const lead = TITLE + bannerGap(emphasis + rest, width);
   return styled(lead, BOLD, noColor) + dim(emphasis, noColor) + styled(rest, BOLD, noColor);
 }
 
@@ -72,16 +89,16 @@ export function renderBanner(instant: string, zone: string, noColor: boolean): s
   return bannerLine(clockTime(instant, zone), noColor);
 }
 
-function plainRule(noColor: boolean): string {
-  return repeatChar(noColor ? '=' : '━', WIDTH);
+function plainRule(noColor: boolean, width = WIDTH): string {
+  return repeatChar(noColor ? '=' : '━', width);
 }
 
-export function renderRule(noColor: boolean): string {
-  return dim(plainRule(noColor), noColor);
+export function renderRule(noColor: boolean, width = WIDTH): string {
+  return dim(plainRule(noColor, width), noColor);
 }
 
 function markedRule(marks: PanelMarks, noColor: boolean): string {
-  return marks.selected ? styled(plainRule(noColor), BOLD, noColor) : renderRule(noColor);
+  return marks.selected ? styled(plainRule(noColor, marks.width), BOLD, noColor) : renderRule(noColor, marks.width);
 }
 
 function flagsOf(marks: PanelMarks): string {
@@ -93,11 +110,11 @@ function headerLine(name: string, marks: PanelMarks, tag: (text: string) => stri
   const lead = marks.selected ? `${MARKER}${titled}` : titled;
   const flags = flagsOf(marks);
   if (flags === '') return lead;
-  return `${lead}${repeatChar(' ', WIDTH - cellCount(lead) - cellCount(flags))}${tag(flags)}`;
+  return `${lead}${repeatChar(' ', (marks.width ?? WIDTH) - cellCount(lead) - cellCount(flags))}${tag(flags)}`;
 }
 
 function dimPanel(lines: string[], marks: PanelMarks, noColor: boolean): string {
-  if (!marks.selected) return dim([plainRule(noColor), ...lines].join('\n'), noColor);
+  if (!marks.selected) return dim([plainRule(noColor, marks.width), ...lines].join('\n'), noColor);
   return `${markedRule(marks, noColor)}\n${dim(lines.join('\n'), noColor)}`;
 }
 
@@ -105,18 +122,18 @@ export function renderDimPanel(name: string, body: string[], noColor: boolean, m
   return dimPanel([headerLine(name, marks, String), ...body], marks, noColor);
 }
 
-function gaugeCells(filledCells: number, noColor: boolean): string {
+function gaugeCells(filledCells: number, noColor: boolean, cells: number): string {
   const [fillChar, emptyChar] = noColor ? ['#', '-'] : ['█', '░'];
-  return repeatChar(fillChar, filledCells) + repeatChar(emptyChar, GAUGE_CELLS - filledCells);
+  return repeatChar(fillChar, filledCells) + repeatChar(emptyChar, cells - filledCells);
 }
 
-export function renderGauge(amount: number, reference: number, noColor: boolean): string {
-  const filledCells = Math.min(GAUGE_CELLS, Math.round((amount / reference) * GAUGE_CELLS));
-  return gaugeCells(filledCells, noColor);
+export function renderGauge(amount: number, reference: number, noColor: boolean, cells = GAUGE_CELLS): string {
+  const filledCells = Math.min(cells, Math.round((amount / reference) * cells));
+  return gaugeCells(filledCells, noColor, cells);
 }
 
-export function renderEmptyGauge(noColor: boolean): string {
-  return gaugeCells(0, noColor);
+export function renderEmptyGauge(noColor: boolean, cells = GAUGE_CELLS): string {
+  return gaugeCells(0, noColor, cells);
 }
 
 export const STYLE_TOKENS = {
@@ -143,7 +160,7 @@ export function cutCells(text: string, limit: number): string {
   return cells.length > limit ? `${cells.slice(0, limit - 1).join('').trimEnd()}…` : text;
 }
 
-function fitLabel(label: string, cells = LABEL_CELLS): string {
+function fitLabel(label: string, cells: number): string {
   return cutCells(label, cells).padEnd(cells);
 }
 
@@ -155,38 +172,38 @@ function countdown(resetsAt: string | undefined, now: string, absoluteZone: stri
   return resetsAt === undefined ? '' : ` ↻ ${resetText(resetsAt, now, absoluteZone)}`;
 }
 
-function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, absoluteZone?: string): string {
-  const gauge = paint(renderGauge(window.usedPct, 100, noColor));
+function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, absoluteZone: string | undefined, layout: Layout): string {
+  const gauge = paint(renderGauge(window.usedPct, 100, noColor, layout.gauge));
   const percent = paint(`${window.usedPct}%`.padStart(PERCENT_CELLS));
-  const label = fitLabel(window.label, absoluteZone === undefined ? LABEL_CELLS : ABSOLUTE_LABEL_CELLS);
+  const label = fitLabel(window.label, absoluteZone === undefined ? layout.label : layout.label - (LABEL_CELLS - ABSOLUTE_LABEL_CELLS));
   return `${label} ${gauge} ${percent}${countdown(window.resetsAt, now, absoluteZone)}`;
 }
 
-export function renderWindowRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone?: string): string {
+export function renderWindowRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone?: string, width?: number): string {
   const style = STYLE_TOKENS[styleToken(window.usedPct)];
-  return rowWith(window, noColor, now, (text) => styled(text, style, noColor), absoluteZone);
+  return rowWith(window, noColor, now, (text) => styled(text, style, noColor), absoluteZone, layoutOf(width));
 }
 
 function remainingPct(balance: Balance, reference: number): number {
   return Math.min(100, Math.max(0, Math.round((balance.amount / reference) * 100)));
 }
 
-function balanceCells(balance: Balance, noColor: boolean, paint: (text: string, usedPct: number) => string): string {
-  if (balance.reference === undefined) return renderEmptyGauge(noColor);
+function balanceCells(balance: Balance, noColor: boolean, paint: (text: string, usedPct: number) => string, layout: Layout): string {
+  if (balance.reference === undefined) return renderEmptyGauge(noColor, layout.gauge);
   const remaining = remainingPct(balance, balance.reference);
-  const gauge = paint(renderGauge(balance.amount, balance.reference, noColor), 100 - remaining);
+  const gauge = paint(renderGauge(balance.amount, balance.reference, noColor, layout.gauge), 100 - remaining);
   return `${gauge} ${paint(`${remaining}%`.padStart(PERCENT_CELLS), 100 - remaining)}`;
 }
 
-function balanceTail(balance: Balance): number {
-  return balance.reference === undefined ? GAUGE_CELLS : GAUGE_CELLS + 1 + PERCENT_CELLS;
+function balanceTail(balance: Balance, layout: Layout): number {
+  return balance.reference === undefined ? layout.gauge : layout.gauge + 1 + PERCENT_CELLS;
 }
 
-function balanceLine(balance: Balance | undefined, noColor: boolean, paint: (text: string, usedPct: number) => string): string {
-  if (!balance) return ' '.repeat(WIDTH);
-  const label = fitLabel(`balance ${balance.currency}${balance.amount.toFixed(2)}`);
-  const padding = repeatChar(' ', WIDTH - LABEL_CELLS - 1 - balanceTail(balance));
-  return `${label} ${balanceCells(balance, noColor, paint)}${padding}`;
+function balanceLine(balance: Balance | undefined, noColor: boolean, paint: (text: string, usedPct: number) => string, layout: Layout): string {
+  if (!balance) return repeatChar(' ', layout.width);
+  const label = fitLabel(`balance ${balance.currency}${balance.amount.toFixed(2)}`, layout.label);
+  const padding = repeatChar(' ', layout.width - layout.label - 1 - balanceTail(balance, layout));
+  return `${label} ${balanceCells(balance, noColor, paint, layout)}${padding}`;
 }
 
 function usageStyle(noColor: boolean): (text: string, usedPct: number) => string {
@@ -201,20 +218,20 @@ function caption(usage: ProviderUsage): string {
   return `${taggedCaption(usage)}${usage.captionSuffix ?? ''}`;
 }
 
-function agedCaption(usage: ProviderUsage, age: string | undefined): string {
+function agedCaption(usage: ProviderUsage, age: string | undefined, width = WIDTH): string {
   if (age === undefined) return caption(usage);
-  return `${cutCells(caption(usage), WIDTH - cellCount(age))}${age}`;
+  return `${cutCells(caption(usage), width - cellCount(age))}${age}`;
 }
 
 function captionLine(usage: ProviderUsage, marks: PanelMarks): string {
-  return marks.caption ?? agedCaption(usage, marks.age);
+  return marks.caption ?? agedCaption(usage, marks.age, marks.width);
 }
 
 type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
 type FailedUsage = Exclude<ProviderUsage, OkUsage>;
 
-function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow) => string, paint: (text: string, usedPct: number) => string): string[] {
-  if (usage.windows.length === 0) return [usage.note ?? balanceLine(usage.balance, noColor, paint)];
+function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow) => string, paint: (text: string, usedPct: number) => string, layout: Layout): string[] {
+  if (usage.windows.length === 0) return [usage.note ?? balanceLine(usage.balance, noColor, paint, layout)];
   return usage.windows.map(row);
 }
 
@@ -232,7 +249,8 @@ function snapshotLines(usage: OkUsage, now: string): string[] {
 }
 
 function renderPanelStale(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
-  const rows = panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String, marks.absoluteZone), (text) => text);
+  const layout = layoutOf(marks.width);
+  const rows = panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String, marks.absoluteZone, layout), (text) => text, layout);
   return dimPanel([headerLine(usage.displayName, marks, String), ...rows, ...snapshotLines(usage, now), captionLine(usage, marks)], marks, noColor);
 }
 
@@ -240,7 +258,7 @@ function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, marks: 
   return [
     markedRule(marks, noColor),
     headerLine(usage.displayName, marks, (text) => dim(text, noColor)),
-    ...panelBody(usage, noColor, (window) => renderWindowRow(window, noColor, now, marks.absoluteZone), usageStyle(noColor)),
+    ...panelBody(usage, noColor, (window) => renderWindowRow(window, noColor, now, marks.absoluteZone, marks.width), usageStyle(noColor), layoutOf(marks.width)),
     ...snapshotLines(usage, now).map((line) => dim(line, noColor)),
     dim(captionLine(usage, marks), noColor)
   ].join('\n');
@@ -273,4 +291,18 @@ export function renderPanel(usage: ProviderUsage, noColor: boolean, now: string,
 export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string, ineligible: string[], zone: string): string {
   const panels = usages.map((usage) => renderPanel(usage, noColor, now, { selected: false, ineligible: ineligible.includes(usage.id) }));
   return [renderBanner(now, zone, noColor), ...panels].join('\n');
+}
+
+const TOKEN = /\x1b\[[0-9;]*m|[^]/gu;
+
+function isEscape(token: string): boolean {
+  return token.length > 1 && token.startsWith('\x1b');
+}
+
+export function fitToWidth(line: string, width: number): string {
+  const tokens = line.match(TOKEN) ?? [];
+  if (tokens.filter((token) => !isEscape(token)).length <= width) return line;
+  let cells = 0;
+  const kept = tokens.filter((token) => isEscape(token) || cells++ < width);
+  return `${kept.join('')}${RESET}`;
 }

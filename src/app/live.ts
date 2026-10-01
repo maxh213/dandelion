@@ -4,6 +4,7 @@ import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, isRoutable, nextLocalMidnight
 export interface Screen {
   write(text: string): unknown;
   rows?: number;
+  columns?: number;
   on?(event: 'resize', listener: () => void): unknown;
 }
 
@@ -115,6 +116,7 @@ function viewOf(session: Session): LiveView {
     selected: session.selected,
     flash: session.flash,
     rows: session.screen.rows,
+    columns: session.screen.columns,
     graph: session.graphing ? graphOf(session) : undefined
   };
 }

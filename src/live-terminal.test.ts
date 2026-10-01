@@ -99,7 +99,7 @@ function launch(command: string, args: string[], env: NodeJS.ProcessEnv): Run {
 }
 
 function startLive(env: NodeJS.ProcessEnv): Run {
-  return launch('/usr/bin/script', ['-qfec', `stty rows 60 cols 80; '${NPM}' start --silent`, '/dev/null'], env);
+  return launch('/usr/bin/script', ['-qfec', `stty rows 60 cols 72; '${NPM}' start --silent`, '/dev/null'], env);
 }
 
 function completeFrames(run: Run): string[] {
