@@ -41,6 +41,7 @@ const DEFAULT_BASE = 'https://api.kimi.com/coding/v1';
 const USER_AGENT = 'kimi-code-cli/2.1.1';
 const NO_AUTH = 'no kimi auth — run kimi login';
 const EXPIRED = 'kimi token expired — run kimi once';
+const NOT_REFRESHED = 'kimi token expired and kimi web did not refresh it — run kimi once';
 const TOKEN = /token=([A-Za-z0-9._-]+)|Bearer ([A-Za-z0-9._-]+)/;
 const WEEKLY = { label: 'weekly', kind: 'weekly' } as const;
 const ROLLING = { label: '5h', kind: 'rolling' } as const;
@@ -240,11 +241,19 @@ function isFresh(credential: Credential | undefined, now: string): credential is
   return credential !== undefined && !isExpired(credential.parsed, now);
 }
 
+async function loadCredentialOrUndefined(io: KimiIo, env: Env): Promise<Credential | undefined> {
+  try {
+    return await loadCredential(io, env);
+  } catch {
+    return undefined;
+  }
+}
+
 async function waitForFresh(io: KimiIo, env: Env, child: LaunchedProcess, now: string, waitedMs: number): Promise<Auth> {
   const exited = child.hasExited();
-  const credential = await loadCredential(io, env);
+  const credential = await loadCredentialOrUndefined(io, env);
   if (isFresh(credential, now)) return authOf(credential);
-  if (exited || waitedMs >= TOKEN_WAIT_MS) throw new ProbeUnavailable(EXPIRED);
+  if (exited || waitedMs >= TOKEN_WAIT_MS) throw new ProbeUnavailable(NOT_REFRESHED);
   await sleep(POLL_MS);
   return waitForFresh(io, env, child, now, waitedMs + POLL_MS);
 }

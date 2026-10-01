@@ -576,20 +576,20 @@ describe('probeKimi expired token refresh', () => {
     expect(await probe).toMatchObject({ status: 'ok' });
   });
 
-  it('keeps the expired message when the credential stays stale for 20s', async () => {
+  it('reports a failed refresh when the credential stays stale for 20s', async () => {
     vi.useFakeTimers();
     const child = fakeChild('');
     const { io } = refreshing(child, Number.POSITIVE_INFINITY);
     const probe = probeKimi(io, PORT, NOW);
     await vi.advanceTimersByTimeAsync(20000);
-    expect(await probe).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once' });
+    expect(await probe).toMatchObject({ status: 'unavailable', reason: 'kimi token expired and kimi web did not refresh it — run kimi once' });
     expect(child.stops).toBe(1);
   });
 
-  it('keeps the expired message when kimi web exits without refreshing', async () => {
+  it('reports a failed refresh when kimi web exits without refreshing', async () => {
     const child = fakeChild('', true);
     const { io, requests } = refreshing(child, Number.POSITIVE_INFINITY);
-    expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once' });
+    expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired and kimi web did not refresh it — run kimi once' });
     expect(requests).toEqual([]);
     expect(child.stops).toBe(1);
   });
@@ -597,6 +597,21 @@ describe('probeKimi expired token refresh', () => {
   it('keeps the expired message when kimi is not installed', async () => {
     const { io } = refreshing(undefined, 1);
     expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once' });
+  });
+
+  it('keeps polling when the credential file is unreadable mid-write', async () => {
+    vi.useFakeTimers();
+    const child = fakeChild('');
+    const { io } = refreshing(child, 3);
+    const read = io.reader.read;
+    let reads = 0;
+    io.reader.read = async (path) => {
+      if (path === PATH && (reads += 1) === 2) return '{"access_to';
+      return read(path);
+    };
+    const probe = probeKimi(io, PORT, NOW);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await probe).toMatchObject({ status: 'ok' });
   });
 
   it('rejects an invalid port before launching', async () => {
