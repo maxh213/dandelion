@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ProviderUsage, RouteLines, Routes } from '../domain/index.ts';
-import { renderLine, renderRoute, renderRoutesFault, renderSnapshot, type RouteRequest } from './route.ts';
+import { renderLine, renderRoute, renderRoutesFault, renderSnapshot, renderWaybar, type RouteRequest } from './route.ts';
 
 const LINES: RouteLines = {
   route: {
@@ -252,5 +252,46 @@ describe('renderLine', () => {
 
   it('says routes file error for a bad routes file', () => {
     expect(renderLine({ fault: { path: '/x', problem: 'bad' } }, CLAUDE, [], request)).toBe('claude 50% → routes file error\n');
+  });
+});
+
+describe('renderWaybar', () => {
+  const ok = (id: string, ...used: number[]): ProviderUsage => ({ id, displayName: id, fetchedAt: NOW, status: 'ok', windows: used.map((usedPct) => ({ label: 'w', kind: 'weekly', usedPct })) });
+  const failed: ProviderUsage = { id: 'agy', displayName: 'agy', fetchedAt: NOW, status: 'error', reason: 'boom', windows: [] };
+  const request = { now: NOW, zone: 'UTC' };
+  const routes: Routes = { lines: LINES };
+  const parsed = (usages: ProviderUsage[], given: Routes = routes) => JSON.parse(renderWaybar(given, usages, [], request));
+
+  it('reports the worst percent, its class, one tooltip line per listed provider and the route', () => {
+    const usages = [ok('claude', 40, 62.6), failed, ok('kimi', 12)];
+    const out = renderWaybar(routes, usages, [], request);
+    expect(out.endsWith('\n')).toBe(true);
+    expect(out).not.toContain('\x1b');
+    expect(JSON.parse(out)).toEqual({
+      text: renderRoute(LINES, usages, [], { mode: 'headroom', ...request }).out.trimEnd(),
+      tooltip: 'claude 63%\nkimi 12%',
+      class: 'warm',
+      percentage: 63
+    });
+  });
+
+  it.each([
+    [49, 'calm'],
+    [50, 'warm'],
+    [79, 'warm'],
+    [80, 'hot'],
+    [94, 'hot'],
+    [95, 'critical'],
+    [100, 'critical']
+  ])('classes %i%% as %s', (used, expected) => {
+    expect(parsed([ok('claude', used)])).toMatchObject({ percentage: used, class: expected });
+  });
+
+  it('is calm at 0 with an empty tooltip and none when no provider is listed', () => {
+    expect(parsed([failed])).toEqual({ text: 'none', tooltip: '', class: 'calm', percentage: 0 });
+  });
+
+  it('says routes file error for a bad routes file', () => {
+    expect(parsed(CLAUDE, { fault: { path: '/x', problem: 'bad' } }).text).toBe('routes file error');
   });
 });

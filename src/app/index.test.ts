@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { isEntryFile, routesWarning, runApp, runJson, runLine, runLive, runRoute, runRun, realIo, realNotifier, realRunSpawner } from './index.ts';
+import { isEntryFile, routesWarning, runApp, runJson, runLine, runLive, runRoute, runRun, runWaybar, realIo, realNotifier, realRunSpawner } from './index.ts';
 import type { RunSpawner } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
@@ -2304,6 +2304,49 @@ describe('route eligibility state file', () => {
         const now = name === 'holding an old entry' ? '2026-09-13T10:01:01.000Z' : NOW;
         const plain = await runLine(routedRunner(), lineEnv(), lineRequest({ now }));
         expect(await runLine(routedRunner(), lineEnv(), lineRequest({ now, maxAge: 60 }))).toEqual(plain);
+      });
+    });
+
+    describe('--waybar', () => {
+      const waybarRequest = (extra: { maxAge?: number; now?: string } = {}) => ({ now: NOW, zone: 'UTC', ...extra });
+      const idle = (id: string) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 0 }], fetchedAt: NOW });
+      const waybarEnv = () => ({ DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: statePath });
+
+      it('prints one JSON line with the route text and no escape sequence', async () => {
+        const { out, err } = await runWaybar(routedRunner(), waybarEnv(), waybarRequest());
+        const route = await runRoute(routedRunner(), waybarEnv(), requestOf('headroom'));
+        expect(out.endsWith('\n')).toBe(true);
+        expect(out.trimEnd()).not.toContain('\n');
+        expect(out).not.toContain('\x1b');
+        const parsed = JSON.parse(out);
+        expect(Object.keys(parsed).sort()).toEqual(['class', 'percentage', 'text', 'tooltip']);
+        expect(parsed.text).toBe(route.out.trimEnd());
+        expect(err).toBe('');
+      });
+
+      it('says routes file error and warns on stderr with a bad routes file', async () => {
+        const path = join(scratch, 'bad.json');
+        writeFileSync(path, '{"route":');
+        const { out, err } = await runWaybar(routedRunner(), { ...waybarEnv(), DANDELION_ROUTES_FILE: path }, waybarRequest());
+        expect(JSON.parse(out).text).toBe('routes file error');
+        expect(err).toBe(`dandelion: routes file ${path}: is not valid JSON\n`);
+      });
+
+      it('answers from a fresh snapshot without probing', async () => {
+        const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, ...(await liveSnapshot()) };
+        const probed = await runWaybar(probing(), env, waybarRequest());
+        const io = failing();
+        const cached = await runWaybar(io, env, waybarRequest({ now: '2026-09-13T10:04:59.000Z', maxAge: 600 }));
+        expect(cached).toEqual(probed);
+        expect(calls(io)).toBe(0);
+      });
+
+      it('probes as plain --waybar when the snapshot is stale', async () => {
+        mkdirSync(join(scratch, 'state'), { recursive: true });
+        writeFileSync(snapshotPath(), JSON.stringify(IDS.map(idle)));
+        const now = '2026-09-13T10:01:01.000Z';
+        const plain = await runWaybar(routedRunner(), waybarEnv(), waybarRequest({ now }));
+        expect(await runWaybar(routedRunner(), waybarEnv(), waybarRequest({ now, maxAge: 60 }))).toEqual(plain);
       });
     });
 

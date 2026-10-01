@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { disableWarning, isEntryFile, processZone, routesWarning, runApp, runJson, runLine, isMaxAge, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
+import { disableWarning, isEntryFile, processZone, routesWarning, runApp, runJson, runLine, runWaybar, isMaxAge, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -49,6 +49,12 @@ async function line(io: ProbeIo, proc: Proc): Promise<void> {
   proc.stderr.write(err);
 }
 
+async function waybar(io: ProbeIo, proc: Proc): Promise<void> {
+  const { out, err } = await runWaybar(io, proc.env, { now: new Date().toISOString(), zone: processZone(), maxAge: maxAgeOf(proc.argv.slice(2)) });
+  proc.stdout.write(out);
+  proc.stderr.write(err);
+}
+
 async function run(io: ProbeIo, proc: Proc): Promise<void> {
   const args = proc.argv.slice(3);
   const own = runOwnArgs(args);
@@ -81,6 +87,7 @@ const USAGE = [
   '  dandelion --once                     run every probe once, print the dashboard and exit',
   '  dandelion --json                     print a machine-readable snapshot of every provider and both routes',
   '  dandelion --line                     print a one-line plain-text summary for tmux and shell prompts',
+  '  dandelion --waybar                   print one Waybar custom-module JSON line (text, tooltip, class, percentage)',
   '  dandelion route                      print the subscription to use right now',
   '  dandelion route --high               print the strongest model that still has quota',
   '  dandelion route --why                print the route and the rule that chose it',
@@ -109,7 +116,7 @@ function isUnknownCommand(argv: string[]): boolean {
 }
 
 function flagModeOf(argv: string[]): ((io: ProbeIo, proc: Proc) => Promise<void>) | undefined {
-  return argv.includes('--json') ? json : argv.includes('--line') ? line : undefined;
+  return argv.includes('--json') ? json : argv.includes('--line') ? line : argv.includes('--waybar') ? waybar : undefined;
 }
 
 function modeOf(proc: Proc): (io: ProbeIo, proc: Proc) => Promise<void> {

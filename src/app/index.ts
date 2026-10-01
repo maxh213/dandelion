@@ -32,6 +32,7 @@ import {
   renderRoute,
   renderRoutesFault,
   renderLine,
+  renderWaybar,
   renderSnapshot,
   openView,
   type Eligibility,
@@ -351,6 +352,10 @@ export function runJson(io: ProbeIo, env: Record<string, string | undefined>, re
 
 export function runLine(io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest & { maxAge?: number }): Promise<JsonOutput> {
   return runSnapshot(renderLine, io, env, request);
+}
+
+export function runWaybar(io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest & { maxAge?: number }): Promise<JsonOutput> {
+  return runSnapshot(renderWaybar, io, env, request);
 }
 
 export const realNotifier: Notifier = {

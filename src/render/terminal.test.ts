@@ -9,7 +9,6 @@ import {
   renderDashboard,
   viewportLines,
   renderWindowRow,
-  styleToken,
   STYLE_TOKENS,
   cellCount,
   cellWidth,
@@ -22,7 +21,7 @@ import {
   type PanelMarks
 } from './terminal.ts';
 import { renderLiveFrame, type LiveView } from './live-frame.ts';
-import { highRouteLine, nextLocalMidnight, routeLine, type HistorySample, type ProviderUsage, type RouteLines, type UsageWindow } from '../domain/index.ts';
+import { highRouteLine, nextLocalMidnight, routeLine, usageClass, type HistorySample, type ProviderUsage, type RouteLines, type UsageWindow } from '../domain/index.ts';
 
 const LINES: RouteLines = {
   route: {
@@ -449,7 +448,7 @@ describe('window rows', () => {
     [95, 'critical'],
     [100, 'critical']
   ])('styles a %i%% row as %s', (usedPct, token) => {
-    expect(styleToken(usedPct)).toBe(token);
+    expect(usageClass(usedPct)).toBe(token);
     const row = renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct }, false, NOW);
     expect(row.startsWith(`${'weekly'.padEnd(35)} ${STYLE_TOKENS[token]}`)).toBe(true);
   });

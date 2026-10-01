@@ -22,11 +22,11 @@ vi.mock('./app/index.ts', async (importOriginal) => {
     reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
     spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
   };
-  return { ...original, realIo: stubIo, runRoute: vi.fn(original.runRoute), runJson: vi.fn(original.runJson), runLine: vi.fn(original.runLine), runRun: vi.fn(original.runRun) };
+  return { ...original, realIo: stubIo, runRoute: vi.fn(original.runRoute), runJson: vi.fn(original.runJson), runLine: vi.fn(original.runLine), runWaybar: vi.fn(original.runWaybar), runRun: vi.fn(original.runRun) };
 });
 
 const { main, runIfMain } = await import('./main.ts');
-const { runJson, runLine, runRoute, runRun, realRunSpawner } = await import('./app/index.ts');
+const { runJson, runLine, runWaybar, runRoute, runRun, realRunSpawner } = await import('./app/index.ts');
 const { highRouteLine, routeLine } = await import('./domain/index.ts');
 
 const routeIo: ProbeIo = {
@@ -246,7 +246,7 @@ describe('main', () => {
     }
   });
 
-  it.each<[string[]]>([[['--once']], [['route']], [['route', '--high']], [['--json']], [['--line']], [['run']]])('runIfMain %j installs no SIGTERM or SIGHUP handler', async (args) => {
+  it.each<[string[]]>([[['--once']], [['route']], [['route', '--high']], [['--json']], [['--line']], [['--waybar']], [['run']]])('runIfMain %j installs no SIGTERM or SIGHUP handler', async (args) => {
     const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(0);
     const on = vi.spyOn(process, 'on');
     const before = [process.listenerCount('SIGTERM'), process.listenerCount('SIGHUP')];
@@ -364,7 +364,7 @@ describe('main', () => {
       texts.push(output());
     }
     expect(new Set(texts).size).toBe(1);
-    for (const command of ['dandelion run', 'dandelion run --high', 'dandelion --json', 'dandelion --line', 'dandelion route --why', 'dandelion route --max-age <seconds>']) {
+    for (const command of ['dandelion run', 'dandelion run --high', 'dandelion --json', 'dandelion --line', 'dandelion --waybar', 'dandelion route --why', 'dandelion route --max-age <seconds>']) {
       expect(texts[0]).toMatch(new RegExp(`^  ${command.replace(/[-<>]/g, '\\$&')} +\\S`, 'm'));
     }
   });
@@ -444,6 +444,34 @@ describe('main', () => {
     const { proc, output, errors } = procOf(['node', MAIN, '--line'], true, true, { DANDELION_ROUTES_FILE: '/nonexistent/routes.json' });
     await runIfMain(MAIN_URL, MAIN, routeIo, proc);
     expect(output()).toMatch(/→ routes file error\n$/);
+    expect(errors()).toBe('dandelion: routes file /nonexistent/routes.json: cannot be read\n');
+    expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it.each<[string[], number | undefined]>([
+    [['--waybar', '--max-age', '30'], 30],
+    [['--max-age', '5', '--waybar'], 5],
+    [['--waybar'], undefined],
+    [['--waybar', '--max-age', '0'], undefined]
+  ])('runIfMain %j passes max age %s to --waybar', async (args, maxAge) => {
+    vi.mocked(runWaybar).mockClear();
+    await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, ...args], false, false).proc);
+    expect(vi.mocked(runWaybar).mock.calls[0][2].maxAge).toBe(maxAge);
+  });
+
+  it('runIfMain --waybar prints one JSON line on two terminals without live mode and exits 0', async () => {
+    const { proc, output, errors, keyboard } = procOf(['node', MAIN, '--waybar'], true, true);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(output()).toMatch(/^\{.*\}\n$/);
+    expect(output()).not.toContain('\x1b');
+    expect(Object.keys(JSON.parse(output())).sort()).toEqual(['class', 'percentage', 'text', 'tooltip']);
+    expect([errors(), proc.exit.mock.calls, keyboard.setRawMode.mock.calls]).toEqual(['', [], []]);
+  });
+
+  it('runIfMain --waybar with a bad routes file warns on stderr and does not exit', async () => {
+    const { proc, output, errors } = procOf(['node', MAIN, '--waybar'], true, true, { DANDELION_ROUTES_FILE: '/nonexistent/routes.json' });
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(JSON.parse(output()).text).toBe('routes file error');
     expect(errors()).toBe('dandelion: routes file /nonexistent/routes.json: cannot be read\n');
     expect(proc.exit).not.toHaveBeenCalled();
   });

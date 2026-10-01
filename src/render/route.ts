@@ -8,6 +8,7 @@ import {
   routeDecision,
   routeDecisionLine,
   routeLine,
+  usageClass,
   type ChainSkip,
   type ChainWin,
   type ProviderUsage,
@@ -158,13 +159,29 @@ export function renderSnapshot(routes: Routes, usages: ProviderUsage[], ineligib
 
 const ROUTES_ERROR = 'routes file error';
 
-function segmentOf(usage: ProviderUsage): string[] {
-  if (usage.status !== 'ok' || usage.windows.length === 0) return [];
-  return [`${usage.id} ${percent(Math.round(Math.max(...usage.windows.map(({ usedPct }) => usedPct))))}`];
+function listedUsages(usages: ProviderUsage[]): { id: string; worst: number }[] {
+  return usages
+    .filter((usage) => usage.status === 'ok' && usage.windows.length > 0)
+    .map(({ id, windows }) => ({ id, worst: Math.round(Math.max(...windows.map(({ usedPct }) => usedPct))) }));
+}
+
+function routePart(routes: Routes, usages: ProviderUsage[], ineligible: string[], request: SnapshotRequest): string {
+  const { lines, fault } = routes;
+  return fault === undefined ? headroomLine(lines, usages, ineligible, { ...request, mode: 'headroom' }) : ROUTES_ERROR;
 }
 
 export function renderLine(routes: Routes, usages: ProviderUsage[], ineligible: string[], request: SnapshotRequest): string {
-  const { lines, fault } = routes;
-  const route = fault === undefined ? headroomLine(lines, usages, ineligible, { ...request, mode: 'headroom' }) : ROUTES_ERROR;
-  return `${[usages.flatMap(segmentOf).join(' · '), `→ ${route}`].filter((part) => part !== '').join(' ')}\n`;
+  const segments = listedUsages(usages).map(({ id, worst }) => `${id} ${percent(worst)}`).join(' · ');
+  return `${[segments, `→ ${routePart(routes, usages, ineligible, request)}`].filter((part) => part !== '').join(' ')}\n`;
+}
+
+export function renderWaybar(routes: Routes, usages: ProviderUsage[], ineligible: string[], request: SnapshotRequest): string {
+  const listed = listedUsages(usages);
+  const worst = Math.max(0, ...listed.map((entry) => entry.worst));
+  return `${JSON.stringify({
+    text: routePart(routes, usages, ineligible, request),
+    tooltip: listed.map(({ id, worst: used }) => `${id} ${percent(used)}`).join('\n'),
+    class: usageClass(worst),
+    percentage: worst
+  })}\n`;
 }

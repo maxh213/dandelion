@@ -1,4 +1,4 @@
-import { HOT_PCT, elapsedFraction, formatCountdown, formatResetAt, isStale, projectFull, type Balance, type ClaudeStatus, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { elapsedFraction, formatCountdown, formatResetAt, isStale, projectFull, usageClass, type Balance, type ClaudeStatus, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -240,18 +240,6 @@ export const STYLE_TOKENS = {
   critical: '\x1b[35m'
 } as const satisfies Record<string, string>;
 
-type StyleToken = keyof typeof STYLE_TOKENS;
-
-const RAMP: [number, StyleToken][] = [
-  [95, 'critical'],
-  [HOT_PCT, 'hot'],
-  [50, 'warm']
-];
-
-export function styleToken(usedPct: number): StyleToken {
-  return RAMP.find(([threshold]) => usedPct >= threshold)?.[1] ?? 'calm';
-}
-
 export function cutCells(text: string, limit: number): string {
   if (cellCount(text) <= limit) return text;
   return limit <= 0 ? '' : `${headCells(text, limit - 1).trimEnd()}…`;
@@ -301,7 +289,7 @@ function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (tex
 }
 
 export function renderWindowRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone?: string, width?: number): string {
-  const style = STYLE_TOKENS[styleToken(window.usedPct)];
+  const style = STYLE_TOKENS[usageClass(window.usedPct)];
   return rowWith(window, noColor, now, (text) => styled(text, style, noColor), (text) => dim(text, noColor), absoluteZone, layoutOf(width));
 }
 
@@ -334,7 +322,7 @@ function balanceLine(balance: Balance | undefined, noColor: boolean, paint: (tex
 }
 
 function usageStyle(noColor: boolean): (text: string, usedPct: number) => string {
-  return (text, usedPct) => styled(text, STYLE_TOKENS[styleToken(usedPct)], noColor);
+  return (text, usedPct) => styled(text, STYLE_TOKENS[usageClass(usedPct)], noColor);
 }
 
 function taggedCaption(usage: ProviderUsage): string {
@@ -509,7 +497,7 @@ function windowRow(usage: OkUsage, noColor: boolean, now: string, marks: PanelMa
   const reset = cutCells(countdown(soonestReset(usage.windows), now, marks.absoluteZone), widthOfMarks(marks) - cellCount(lead) - cellCount(meter) - cellCount(flagsOf(marks)) - 1);
   const weight = marks.selected ? BOLD : '';
   const tail = rightAligned(`${lead}${meter}${reset}`, marks).slice(cellCount(lead) + cellCount(meter));
-  return `${styled(lead, weight, noColor || !marks.selected)}${styled(meter, weight + STYLE_TOKENS[styleToken(worst.usedPct)], noColor)}${styled(tail, weight, noColor || !marks.selected)}`;
+  return `${styled(lead, weight, noColor || !marks.selected)}${styled(meter, weight + STYLE_TOKENS[usageClass(worst.usedPct)], noColor)}${styled(tail, weight, noColor || !marks.selected)}`;
 }
 
 function usageRow(usage: ProviderUsage, noColor: boolean, now: string, marks: PanelMarks): string {

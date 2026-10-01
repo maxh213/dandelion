@@ -128,6 +128,16 @@ export function usedPctFromRemaining(remaining: number, grant: number): number {
 
 export const HOT_PCT = 80;
 
+const USAGE_RAMP = [
+  [95, 'critical'],
+  [HOT_PCT, 'hot'],
+  [50, 'warm']
+] as const;
+
+export function usageClass(usedPct: number): 'calm' | 'warm' | 'hot' | 'critical' {
+  return USAGE_RAMP.find(([threshold]) => usedPct >= threshold)?.[1] ?? 'calm';
+}
+
 type FleetReset = { id: string; label: string; resetsAt: string };
 
 type FleetSummary = { hot: number; windows: number; next: FleetReset | undefined };
