@@ -12,6 +12,7 @@ import {
   styleToken,
   STYLE_TOKENS,
   cellCount,
+  cutCells,
   clockTime,
   columnsWidth,
   fitToWidth,
@@ -1505,5 +1506,50 @@ describe('claude status line in the live frame', () => {
     expect(renderLiveFrame(view, true, NOW).split('\n')).toContain('status: Partial System Outage');
     const stale = { ...good, snapshotAt: '2026-09-01T00:00:00.000Z' } as ProviderUsage;
     expect(renderLiveFrame({ ...view, slots: [{ id: 'claude', usage: stale }] }, true, NOW).split('\n')).toContain('status: Partial System Outage');
+  });
+});
+
+describe('cutting cells', () => {
+  it.each<[number, string]>([[-5, ''], [0, ''], [1, '…'], [2, 'a…'], [5, 'abcd…'], [6, 'abcdef'], [7, 'abcdef']])('keeps at most the limit of cells at limit %i', (limit, expected) => {
+    expect(cutCells('abcdef', limit)).toBe(expected);
+  });
+
+  it('leaves an empty text empty at a negative limit', () => {
+    expect(cutCells('', -5)).toBe('');
+  });
+});
+
+describe('narrow terminals', () => {
+  const view = (usage: ProviderUsage, columns: number): LiveView => ({
+    slots: [{ id: usage.id, usage }],
+    spinner: 0,
+    refreshing: false,
+    footer: false,
+    ineligible: [],
+    zone: 'UTC',
+    routes: { lines: LINES },
+    columns
+  });
+  const deepseek: ProviderUsage = {
+    id: 'claude-deepseek',
+    displayName: 'claude-deepseek',
+    planLabel: 'monthly · $20.00 of $20.00',
+    windows: [{ label: 'a very long window label', kind: 'weekly', usedPct: 10, resetsAt: '2026-09-13T14:03:00.000Z' }],
+    fetchedAt: NOW,
+    status: 'ok'
+  };
+
+  it('keeps the reset countdown on the summary line when no room is left for the label', () => {
+    const line = renderLiveFrame(view(deepseek, 60), true, NOW).split('\n')[1];
+    expect(line.endsWith(' in 4h3m')).toBe(true);
+    expect(cellCount(line)).toBeLessThanOrEqual(60);
+  });
+
+  it('keeps the age on the caption when no room is left for the caption text', () => {
+    const line = renderLiveFrame(view({ ...deepseek, fetchedAt: '2026-09-13T09:57:00.000Z' }, 11), true, NOW)
+      .split('\n')
+      .find((text) => text.includes('ago'));
+    expect(line?.endsWith(' · 0h3m ago')).toBe(true);
+    expect(cellCount(line ?? '')).toBeLessThanOrEqual(11);
   });
 });

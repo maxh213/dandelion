@@ -166,7 +166,8 @@ export function styleToken(usedPct: number): StyleToken {
 
 export function cutCells(text: string, limit: number): string {
   const cells = [...text];
-  return cells.length > limit ? `${cells.slice(0, limit - 1).join('').trimEnd()}…` : text;
+  if (cells.length <= limit) return text;
+  return limit <= 0 ? '' : `${cells.slice(0, limit - 1).join('').trimEnd()}…`;
 }
 
 function fitLabel(label: string, cells: number): string {
