@@ -215,6 +215,7 @@ describe('renderSnapshot', () => {
 
   it.each([
     ['on pace', { label: '5h', kind: 'rolling', usedPct: 60, resetsAt: '2026-09-14T23:00:00.000Z' }, '2026-09-14T21:20:00.000Z'],
+    ['unknown length', { label: 'mystery', kind: 'weekly', usedPct: 60, resetsAt: '2026-09-14T23:00:00.000Z' }, undefined],
     ['no reset', { label: '5h', kind: 'rolling', usedPct: 60 }, undefined],
     ['unused', { label: '5h', kind: 'rolling', usedPct: 0, resetsAt: '2026-09-14T23:00:00.000Z' }, undefined],
     ['full', { label: '5h', kind: 'rolling', usedPct: 100, resetsAt: '2026-09-14T23:00:00.000Z' }, undefined],
