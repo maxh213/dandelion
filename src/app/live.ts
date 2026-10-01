@@ -107,6 +107,7 @@ const PENDING_TICK_MS = 100;
 const SETTLED_TICK_MS = 1000;
 const FLASH_MS = 2000;
 const DEFAULT_REFRESH_SECONDS = 300;
+const MAX_REFRESH_SECONDS = 2147483;
 const DIGITS_ONLY = /^\d+$/;
 const NOT_ROUTABLE = 'not routable (no usage windows)';
 const NOT_SAVED = 'routing state not saved';
@@ -119,7 +120,7 @@ const NO_FIX = 'no fix for this panel';
 
 function refreshSecondsOf(raw: string): number {
   const seconds = DIGITS_ONLY.test(raw) ? Number(raw) : 0;
-  return seconds > 0 ? seconds : DEFAULT_REFRESH_SECONDS;
+  return seconds > 0 && seconds <= MAX_REFRESH_SECONDS ? seconds : DEFAULT_REFRESH_SECONDS;
 }
 
 function refreshMsOf(env: Record<string, string | undefined>): number {

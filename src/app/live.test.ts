@@ -279,6 +279,21 @@ describe('live session', () => {
     await session.finished;
   });
 
+  it('schedules the next round 2147483000 ms out for the largest accepted value', async () => {
+    const delays: unknown[] = [];
+    const real = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((handler: () => void, delay?: number, ...rest: unknown[]) => {
+      delays.push(delay);
+      return real(handler, delay, ...rest);
+    }) as typeof setTimeout);
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '2147483' } });
+    await session.settleRound(0);
+    expect(delays).toContain(2147483000);
+    session.press('q');
+    await session.finished;
+    vi.restoreAllMocks();
+  });
+
   it.each<[string | undefined, number]>([
     [undefined, 300],
     ['', 300],
@@ -286,7 +301,9 @@ describe('live session', () => {
     ['-5', 300],
     ['2.5', 300],
     ['abc', 300],
-    ['7', 7]
+    ['7', 7],
+    ['99999999', 300],
+    ['2147484', 300]
   ])('starts the next automatic round %j seconds after the first settles -> %i', async (value, seconds) => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: value } });
     await session.settleRound(0);
