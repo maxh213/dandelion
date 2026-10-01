@@ -92,9 +92,12 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: hiddenReplace
   });
   const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const handlers: (() => void)[] = [];
-  const signals = { on: vi.fn((_event: 'SIGINT', listener: () => void) => handlers.push(listener)), off: vi.fn((_event: 'SIGINT', listener: () => void) => handlers.splice(handlers.indexOf(listener), 1)) };
-  const interrupt = () => handlers.slice().forEach((handler) => handler());
+  const registered: [string, () => void][] = [];
+  const handlersFor = (name: string) => registered.filter(([event]) => event === name).map(([, listener]) => listener);
+  const handlers = { get length() { return handlersFor('SIGINT').length; } };
+  const signals = { on: vi.fn((event: string, listener: () => void) => registered.push([event, listener])), off: vi.fn((event: string, listener: () => void) => registered.splice(registered.findIndex(([name, handler]) => name === event && handler === listener), 1)) };
+  const interrupt = () => handlersFor('SIGINT').forEach((handler) => handler());
+  const deliver = (name: string) => handlersFor(name).forEach((handler) => handler());
   const viewReplace = vi.fn<(path: string, text: string) => boolean>(() => viewSaves?.shift() ?? true);
   const view = openView({ DANDELION_STATE_FILE: '/s/eligibility.json' }, '/home/u', {
     read: () => {
@@ -110,7 +113,7 @@ function startSession(overrides: SessionOverrides = {}) {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { notifier, clipboard, spawner, handlers, signals, interrupt, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, viewReplace, viewSaved, historyReplace, snapshotReplace, snapshotSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { notifier, clipboard, spawner, handlers, handlersFor, deliver, signals, interrupt, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, viewReplace, viewSaved, historyReplace, snapshotReplace, snapshotSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -838,6 +841,37 @@ describe('live session', () => {
     expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
   });
 
+  it.each([['SIGTERM', 143], ['SIGHUP', 129]])('restores the terminal, stops children and finishes with %s code %i', async (name, code) => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.deliver(name);
+    expect(session.writes.at(-1)).toBe(LEAVE_ALTERNATE);
+    expect(await session.finished).toBe(code);
+    expect(session.keyboard.setRawMode).toHaveBeenLastCalledWith(false);
+    expect(session.stopChildren).toHaveBeenCalledTimes(1);
+    expect(session.handlersFor('SIGTERM')).toHaveLength(0);
+    expect(session.handlersFor('SIGHUP')).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('listens for SIGTERM and SIGHUP while running and removes both handlers after q', async () => {
+    const session = startSession();
+    expect(session.handlersFor('SIGTERM')).toHaveLength(1);
+    expect(session.handlersFor('SIGHUP')).toHaveLength(1);
+    session.press('q');
+    expect(await session.finished).toBe(0);
+    expect(session.handlersFor('SIGTERM')).toHaveLength(0);
+    expect(session.handlersFor('SIGHUP')).toHaveLength(0);
+  });
+
+  it('tears down once when a signal arrives after q and keeps the first exit code', async () => {
+    const session = startSession();
+    session.press('q');
+    session.deliver('SIGTERM');
+    expect(await session.finished).toBe(0);
+    expect(session.stopChildren).toHaveBeenCalledTimes(1);
+  });
+
   it('cancels the scheduled refresh when quitting after a round has settled', async () => {
     const session = startSession();
     await session.settleRound(0);
@@ -1139,7 +1173,7 @@ describe('route boxes', () => {
       return session;
     }
 
-    async function end(session: { press(key: string): void; finished: Promise<void> }) {
+    async function end(session: { press(key: string): void; finished: Promise<unknown> }) {
       session.press('q');
       await session.finished;
     }

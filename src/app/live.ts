@@ -20,9 +20,11 @@ export interface Clipboard {
   copy(text: string): Promise<boolean>;
 }
 
+type SignalName = 'SIGINT' | 'SIGTERM' | 'SIGHUP';
+
 interface Signals {
-  on(event: 'SIGINT', listener: () => void): unknown;
-  off(event: 'SIGINT', listener: () => void): unknown;
+  on(event: SignalName, listener: () => void): unknown;
+  off(event: SignalName, listener: () => void): unknown;
 }
 
 export interface Keyboard {
@@ -87,7 +89,8 @@ type Session = LiveOptions & {
   frameTimer?: Timer;
   refreshTimer?: Timer;
   flashTimer?: Timer;
-  done(): void;
+  done(code: number): void;
+  terminators: [SignalName, () => void][];
 };
 
 function wallClock(): string {
@@ -398,7 +401,7 @@ function toggleGraph(session: Session): void {
 
 function leave(session: Session): void {
   if (session.graphing) closeGraph(session);
-  else void quit(session);
+  else quitCleanly(session);
 }
 
 function copyOutcome(session: Session, line: string, copied: boolean): void {
@@ -452,7 +455,11 @@ function fixSelected(session: Session): void {
   else void runFix(session, fix);
 }
 
-async function quit(session: Session): Promise<void> {
+function quitCleanly(session: Session): void {
+  void quit(session, 0);
+}
+
+async function quit(session: Session, code: number): Promise<void> {
   if (session.quitting) return;
   session.quitting = true;
   clearTimeout(session.frameTimer);
@@ -461,8 +468,16 @@ async function quit(session: Session): Promise<void> {
   session.screen.write(LEAVE_ALTERNATE);
   session.keyboard.setRawMode(false);
   session.keyboard.pause();
+  for (const [name, listener] of session.terminators) session.signals.off(name, listener);
   await session.stopChildren();
-  session.done();
+  session.done(code);
+}
+
+const TERMINATION_CODES: [SignalName, number][] = [['SIGTERM', 143], ['SIGHUP', 129]];
+
+function listenForTermination(session: Session): void {
+  session.terminators = TERMINATION_CODES.map(([name, code]) => [name, () => void quit(session, code)]);
+  for (const [name, listener] of session.terminators) session.signals.on(name, listener);
 }
 
 const KEYS = new Map<string, (session: Session) => unknown>([
@@ -478,7 +493,7 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['q', leave],
   ['\x1b', closeGraph],
   ['g', toggleGraph],
-  ['\x03', quit],
+  ['\x03', quitCleanly],
   ['j', moveDown],
   ['\x1b[B', moveDown],
   ['k', moveUp],
@@ -494,7 +509,7 @@ function press(session: Session, chunk: string): void {
   for (const [key] of chunk.matchAll(TOKEN)) KEYS.get(key)?.(session);
 }
 
-export function startLive(options: LiveOptions): Promise<void> {
+export function startLive(options: LiveOptions): Promise<number> {
   return new Promise((done) => {
     const session: Session = {
       ...options,
@@ -519,8 +534,10 @@ export function startLive(options: LiveOptions): Promise<void> {
       reprobed: new Set(),
       quitting: false,
       suspended: false,
+      terminators: [],
       done
     };
+    listenForTermination(session);
     options.screen.write(ENTER_ALTERNATE);
     options.keyboard.setRawMode(true);
     options.keyboard.setEncoding('utf8');

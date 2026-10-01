@@ -369,7 +369,7 @@ export function runLive(
   keyboard: Keyboard,
   screen: Screen,
   clock?: () => string
-): Promise<void> {
+): Promise<number> {
   registry.closed = false;
   return startLive({
     probes: providerProbes(io, env),

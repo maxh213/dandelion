@@ -1626,6 +1626,24 @@ describe('quitting the live dashboard', () => {
     expect(pids().filter(isRunning)).toEqual([]);
   }, 20000);
 
+  it('SIGKILLs a kimi web that ignores SIGTERM within the 5s grace after the dashboard receives SIGTERM', async () => {
+    scratch = mkdtempSync(join(tmpdir(), 'dandelion-live-'));
+    const stubborn = ['-e', `process.on("SIGTERM", () => {}); ${HOLD}`, join(scratch, 'kimi')];
+    const launcher: Launcher = { launch: () => realIo.launcher.launch(process.execPath, stubborn) };
+    const before = process.listenerCount('SIGTERM');
+    const dashboard = startDashboard(ioOf(mockRunner(MISSING_RUN).runner, launcher), { NO_COLOR: '1' });
+    await vi.waitFor(() => expect(readFileSync(join(scratch, 'kimi'), 'utf8')).not.toBe(''), { timeout: 10000 });
+    const pid = Number(readFileSync(join(scratch, 'kimi'), 'utf8'));
+    const startedAt = Date.now();
+    process.emit('SIGTERM');
+    expect(await dashboard.finished).toBe(143);
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(4500);
+    expect(Date.now() - startedAt).toBeLessThan(9000);
+    expect(isRunning(pid)).toBe(false);
+    expect(process.listenerCount('SIGTERM')).toBe(before);
+    expect(dashboard.writes).toContain('\x1b[?25h\x1b[?1049l');
+  }, 20000);
+
   it('does not signal a child again on quit once it has settled, been stopped or failed to launch', async () => {
     const dashboard = startDashboard(mockRunner(MISSING_RUN), { NO_COLOR: '1' });
     const kill = vi.spyOn(ChildProcess.prototype, 'kill');

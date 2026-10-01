@@ -61,8 +61,7 @@ function isLive(proc: Proc): boolean {
 }
 
 async function live(io: ProbeIo, proc: Proc): Promise<void> {
-  await runLive(io, proc.env, proc.stdin, proc.stdout);
-  proc.exit(0);
+  proc.exit(await runLive(io, proc.env, proc.stdin, proc.stdout));
 }
 
 const USAGE = [
