@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
-import { openEligibility, openHidden, openHistory, openUsageSnapshot, type ClaudeStatus, type Routes } from '../render/index.ts';
+import { openEligibility, openHidden, openHistory, openUsageSnapshot, openView, type ClaudeStatus, type Routes } from '../render/index.ts';
 import { startLive } from './live.ts';
 
 const LINES = {
@@ -48,8 +48,11 @@ type SessionOverrides = {
   state?: Record<string, unknown>;
   zone?: string;
   rows?: number;
+  columns?: number;
   hiddenText?: string;
   hiddenSaves?: boolean[];
+  viewText?: string;
+  viewSaves?: boolean[];
   historyText?: string;
   historyWrites?: boolean;
   snapshotWrites?: boolean;
@@ -61,13 +64,13 @@ type SessionOverrides = {
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, snapshotWrites, notifier, copy, spawn, routes, statusProbe } = { spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, notifier, copy, spawn, routes, statusProbe } = { spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
   const spawner = { spawn: vi.fn(spawn) };
   const writes: string[] = [];
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), resume: vi.fn() });
-  const screen = Object.assign(new EventEmitter(), { rows, write: (text: string) => writes.push(text) });
+  const screen = Object.assign(new EventEmitter(), { rows, columns, write: (text: string) => writes.push(text) });
   const disk = { text: JSON.stringify(state) };
   const replace = vi.fn<(path: string, text: string) => boolean>((_path, text) => {
     disk.text = text;
@@ -92,13 +95,22 @@ function startSession(overrides: SessionOverrides = {}) {
   const handlers: (() => void)[] = [];
   const signals = { on: vi.fn((_event: 'SIGINT', listener: () => void) => handlers.push(listener)), off: vi.fn((_event: 'SIGINT', listener: () => void) => handlers.splice(handlers.indexOf(listener), 1)) };
   const interrupt = () => handlers.slice().forEach((handler) => handler());
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, signals, screen, stopChildren, eligibility, hidden, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe });
+  const viewReplace = vi.fn<(path: string, text: string) => boolean>(() => viewSaves?.shift() ?? true);
+  const view = openView({ DANDELION_STATE_FILE: '/s/eligibility.json' }, '/home/u', {
+    read: () => {
+      if (viewText === undefined) throw new Error('ENOENT');
+      return viewText;
+    },
+    replace: viewReplace
+  });
+  const viewSaved = () => viewReplace.mock.calls.map(([, text]) => JSON.parse(text));
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, signals, screen, stopChildren, eligibility, hidden, view, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { notifier, clipboard, spawner, handlers, signals, interrupt, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, snapshotReplace, snapshotSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { notifier, clipboard, spawner, handlers, signals, interrupt, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, viewReplace, viewSaved, historyReplace, snapshotReplace, snapshotSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -533,6 +545,71 @@ describe('live session', () => {
     expect(session.lastFrame().split('\n')[1]).not.toContain('sort:');
     session.press('q');
     await session.finished;
+  });
+
+  describe('view.json', () => {
+    const at = (hours: number) => new Date(Date.parse(START) + hours * 3600000).toISOString();
+    const withWindow = (id: string, usedPct: number): Usage => ({ ...usageOf(id, START), windows: [{ label: 'weekly', kind: 'weekly', usedPct, resetsAt: at(50) }] });
+    const headers = (session: ReturnType<typeof startSession>) => session.lastFrame().split('\n').filter((line) => IDS.includes(line.replace('▸ ', '').replace(/ .*/, '')) && !line.startsWith(' ')).map((line) => line.replace('▸ ', ''));
+
+    it('starts in the saved order with absolute reset times without a key press', async () => {
+      const session = startSession({ columns: 120, viewText: '{"sort":"headroom","absoluteResets":true}' });
+      await session.settleRound(0, { claude: withWindow('claude', 90), agy: withWindow('agy', 20) });
+      expect(headers(session).indexOf('agy')).toBeLessThan(headers(session).indexOf('claude'));
+      expect(session.lastFrame().split('\n')[1]).toMatch(/ · sort: headroom$/);
+      expect(session.lastFrame().split('\n').filter((line) => line.includes('↻')).every((line) => /↻ \w{3} \d{2}:\d{2}$|↻ \w{3} \d{1,2} \d{2}:\d{2}$/.test(line))).toBe(true);
+      expect(session.viewReplace).not.toHaveBeenCalled();
+      session.press('q');
+      await session.finished;
+    });
+
+    it.each([
+      ['missing', undefined],
+      ['corrupt', '{nope'],
+      ['unknown sort', '{"sort":"random","absoluteResets":false}'],
+      ['non-boolean times', '{"sort":"reset","absoluteResets":"yes"}'],
+      ['not an object', '[]']
+    ])('starts with dashboard order and countdowns when the file is %s', async (_name, viewText) => {
+      const session = startSession({ viewText });
+      await session.settleRound(0, { claude: withWindow('claude', 90), agy: withWindow('agy', 20) });
+      expect(headers(session).slice(0, 2)).toEqual(['claude', 'agy']);
+      expect(session.lastFrame().split('\n')[1]).not.toContain('sort:');
+      expect(session.lastFrame().split('\n').filter((line) => line.includes('↻')).every((line) => /↻ \d+[dh]\d+[hm]$/.test(line))).toBe(true);
+      session.press('q');
+      await session.finished;
+    });
+
+    it('writes both values to view.json next to the state file when s or t changes the mode', async () => {
+      const session = startSession();
+      session.press('s');
+      session.press('t');
+      session.press('s');
+      session.press('t');
+      session.press('s');
+      expect(session.viewReplace.mock.calls.every(([path]) => path === '/s/view.json')).toBe(true);
+      expect(session.viewSaved()).toEqual([
+        { sort: 'headroom', absoluteResets: false },
+        { sort: 'headroom', absoluteResets: true },
+        { sort: 'reset', absoluteResets: true },
+        { sort: 'reset', absoluteResets: false },
+        { sort: 'dashboard', absoluteResets: false }
+      ]);
+      session.press('q');
+      await session.finished;
+    });
+
+    it('flashes view state not saved and still applies the mode when the write fails', async () => {
+      const session = startSession({ viewSaves: [false, false] });
+      await session.settleRound(0);
+      session.press('s');
+      expect(session.lastFrame().split('\n')[1]).toBe('view state not saved');
+      session.press('t');
+      expect(session.lastFrame().split('\n')[1]).toBe('view state not saved');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(session.lastFrame().split('\n')[1]).toMatch(/ · sort: headroom$/);
+      session.press('q');
+      await session.finished;
+    });
   });
 
   it('keeps pending panels last and walks the sorted order with the arrow keys', async () => {

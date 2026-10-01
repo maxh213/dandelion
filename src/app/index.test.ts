@@ -2152,6 +2152,22 @@ describe('route eligibility state file', () => {
     expect(filesBesidesSnapshot(join(scratch, 'state'))).toEqual(['hidden.json']);
   });
 
+  it('keeps view.json next to the state file, restores it in the next live dashboard and leaves --once and route alone', async () => {
+    const env = { NO_COLOR: '1', DANDELION_STATE_FILE: statePath };
+    const plainOutput = await runApp(routedRunner(), env, NOW);
+    const dashboard = await settledDashboard(routedRunner(), {}, () => NOW);
+    dashboard.press('s');
+    dashboard.press('t');
+    await settleProbes();
+    expect(JSON.parse(readFileSync(join(scratch, 'state', 'view.json'), 'utf8'))).toEqual({ sort: 'headroom', absoluteResets: true });
+    await quit(dashboard);
+    const restarted = await settledDashboard(routedRunner(), {}, () => NOW);
+    expect(restarted.lastFrame()).toContain('sort:');
+    await quit(restarted);
+    expect(await runApp(routedRunner(), env, NOW)).toBe(plainOutput);
+    expect(filesBesidesSnapshot(join(scratch, 'state'))).toEqual(['view.json']);
+  });
+
   it('keeps every panel with a bad routes file and shows routes file error over the unknown key in both boxes', async () => {
     const untilSettled = async (dashboard: ReturnType<typeof startDashboard>) => {
       for (let round = 0; round < 50 && dashboard.lastFrame().includes('probing…'); round += 1) await settleProbes();

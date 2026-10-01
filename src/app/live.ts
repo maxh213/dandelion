@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type ClaudeStatus, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes, type Snapshot } from '../render/index.ts';
+import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type ClaudeStatus, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes, type Snapshot, type View } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -42,6 +42,7 @@ type LiveOptions = {
   stopChildren(): Promise<void>;
   eligibility: Eligibility;
   hidden: Hidden;
+  view: View;
   history: History;
   snapshot: Snapshot<NonNullable<LiveSlot['usage']>>;
   routes: Routes;
@@ -104,6 +105,7 @@ const DIGITS_ONLY = /^\d+$/;
 const NOT_ROUTABLE = 'not routable (no usage windows)';
 const NOT_SAVED = 'routing state not saved';
 const HIDDEN_NOT_SAVED = 'hidden state not saved';
+const VIEW_NOT_SAVED = 'view state not saved';
 const NOTHING_TO_COPY = 'nothing to copy';
 const COPY_FAILED = 'copy failed';
 const NO_FIX = 'no fix for this panel';
@@ -293,14 +295,21 @@ function shownIndexes(session: Session): number[] {
   return session.order.filter((index) => isShown(session, index));
 }
 
+function saveView(session: Session): void {
+  if (session.view.save({ sort: session.sort, absoluteResets: session.absoluteResets })) return;
+  showFlash(session, ROUTE_FLASH, VIEW_NOT_SAVED);
+}
+
 function toggleResetTimes(session: Session): void {
   session.absoluteResets = !session.absoluteResets;
+  saveView(session);
   draw(session);
 }
 
 function cycleSort(session: Session): void {
   session.sort = nextSortOrder(session.sort);
   reorder(session);
+  saveView(session);
   draw(session);
 }
 
@@ -500,8 +509,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       spinner: 0,
       footer: false,
       showHidden: false,
-      absoluteResets: false,
-      sort: 'dashboard',
+      ...options.view.initial(),
       order: options.probes.map((_, index) => index),
       rounds: 0,
       endedAt: Number.NaN,

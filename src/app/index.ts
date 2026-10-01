@@ -31,8 +31,10 @@ import {
   renderRoute,
   renderRoutesFault,
   renderSnapshot,
+  openView,
   type Eligibility,
   type Hidden,
+  type View,
   type History,
   type ProviderUsage,
   type RouteOutput,
@@ -258,6 +260,10 @@ function hiddenOf(io: ProbeIo, env: Record<string, string | undefined>): Hidden 
   return openHidden(env, io.reader.homeDir(), realStateFile);
 }
 
+function viewOf(io: ProbeIo, env: Record<string, string | undefined>): View {
+  return openView(env, io.reader.homeDir(), realStateFile);
+}
+
 function historyOf(io: ProbeIo, env: Record<string, string | undefined>): History {
   return openHistory(env, io.reader.homeDir(), realStateFile);
 }
@@ -374,6 +380,7 @@ export function runLive(
     stopChildren,
     eligibility: eligibilityOf(io, env),
     hidden: hiddenOf(io, env),
+    view: viewOf(io, env),
     history: historyOf(io, env),
     snapshot: snapshotOf(io, env),
     routes: routesOf(env),

@@ -1,4 +1,4 @@
-import { openSnapshot, type Snapshot, type StateFile } from './eligibility.ts';
+import { openSnapshot, type Snapshot, type SortOrder, type StateFile } from './eligibility.ts';
 import { isRecord, validInstant, type Fix } from './ports.ts';
 import { evaporates, trips, type Tonight, type WindowKind } from './route.ts';
 
@@ -48,7 +48,7 @@ export {
 
 export { nextLocalMidnight } from './midnight.ts';
 
-export { openEligibility, openHidden, openHistory, type Eligibility, type Hidden, type History, type HistorySample, type Snapshot, type StateFile } from './eligibility.ts';
+export { openEligibility, openHidden, openHistory, openView, type View, type Eligibility, type Hidden, type History, type HistorySample, type Snapshot, type StateFile } from './eligibility.ts';
 
 export type UsageWindow = {
   label: string;
@@ -265,7 +265,7 @@ export function notificationEvents(previous: ProviderUsage, current: ProviderUsa
   });
 }
 
-export type SortOrder = 'dashboard' | 'headroom' | 'reset';
+export type { SortOrder };
 
 const NEXT_ORDER: Record<SortOrder, SortOrder> = { dashboard: 'headroom', headroom: 'reset', reset: 'dashboard' };
 

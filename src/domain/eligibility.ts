@@ -59,11 +59,11 @@ export function openEligibility(env: Record<string, string | undefined>, homeDir
 
 const HIDDEN_FILE = 'hidden.json';
 
-function hiddenPath(env: Record<string, string | undefined>, homeDir: string): string {
+function siblingPath(env: Record<string, string | undefined>, homeDir: string, name: string): string {
   const state = statePath(env, homeDir);
   const slash = state.lastIndexOf('/');
   const directory = slash === -1 ? '.' : state.slice(0, slash);
-  return `${directory}/${HIDDEN_FILE}`;
+  return `${directory}/${name}`;
 }
 
 function readIds(file: StateFile, path: string): string[] {
@@ -118,12 +118,47 @@ function readSamples(file: StateFile, path: string): HistorySample[] {
   }
 }
 
+const SORT_ORDERS = ['dashboard', 'headroom', 'reset'] as const;
+
+export type SortOrder = (typeof SORT_ORDERS)[number];
+
+type ViewState = { sort: SortOrder; absoluteResets: boolean };
+
+export interface View {
+  initial(): ViewState;
+  save(state: ViewState): boolean;
+}
+
+const VIEW_FILE = 'view.json';
+const DEFAULT_VIEW: ViewState = { sort: 'dashboard', absoluteResets: false };
+
+function isViewState(value: unknown): value is ViewState {
+  return isPlainObject(value) && SORT_ORDERS.includes(value['sort'] as SortOrder) && typeof value['absoluteResets'] === 'boolean';
+}
+
+function readView(file: StateFile, path: string): ViewState {
+  try {
+    const value: unknown = JSON.parse(file.read(path));
+    return isViewState(value) ? { sort: value.sort, absoluteResets: value.absoluteResets } : DEFAULT_VIEW;
+  } catch {
+    return DEFAULT_VIEW;
+  }
+}
+
+export function openView(env: Record<string, string | undefined>, homeDir: string, file: StateFile): View {
+  const path = siblingPath(env, homeDir, VIEW_FILE);
+  return {
+    initial: () => readView(file, path),
+    save: (state) => file.replace(path, `${JSON.stringify({ sort: state.sort, absoluteResets: state.absoluteResets })}\n`)
+  };
+}
+
 function withToggled(ids: string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((held) => held !== id) : [...ids, id];
 }
 
 export function openHidden(env: Record<string, string | undefined>, homeDir: string, file: StateFile): Hidden {
-  const path = hiddenPath(env, homeDir);
+  const path = siblingPath(env, homeDir, HIDDEN_FILE);
   const held = { ids: readIds(file, path) };
   return {
     ids: () => held.ids,
