@@ -2107,6 +2107,15 @@ describe('re-probe after a reset', () => {
       expect(session.lastFrame()).toBe(before);
     });
 
+    it('starts no fix for a panel with a fix when x follows q in the chunk', async () => {
+      const session = startSession();
+      await session.settleRound(0, { grok: { ...usageOf('grok', START), fix: { command: 'grok', args: [], env: {} } } });
+      ['j', 'j', 'j', 'j'].forEach((key) => session.press(key));
+      session.press('qx');
+      await expect(session.finished).resolves.toBe(0);
+      expect(session.spawner.spawn).not.toHaveBeenCalled();
+    });
+
     it('still starts only one command for ll', async () => {
       const session = startSession({ ids: ['claude-work'], env: WORK_ENV, spawn: () => new Promise(() => undefined) });
       await session.settleRound(0);
