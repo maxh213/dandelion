@@ -535,6 +535,33 @@ describe('live frame', () => {
     expect([...summary].length).toBeLessThanOrEqual(72);
   });
 
+  describe('the sort suffix on the summary line', () => {
+    const agyOnly = [okUsage('agy', [{ label: 'Claude and GPT models · Weekly Limit', kind: 'weekly', usedPct: 10, resetsAt: '2026-09-13T11:59:00Z' }])];
+    const summaryWith = (extra: Partial<LiveView>, columns = 72) => renderLiveFrame(viewOf(agyOnly, { columns, ...extra }), true, NOW).split('\n')[1] ?? '';
+
+    it.each(['headroom', 'reset'] as const)('cuts the label first in %s order', (sort) => {
+      const line = summaryWith({ sort });
+      expect(line.endsWith(` in 1h59m · sort: ${sort}`)).toBe(true);
+      expect(line).toContain('…');
+      expect([...line].length).toBeLessThanOrEqual(72);
+    });
+
+    it('keeps the absolute reset time before the suffix', () => {
+      const line = summaryWith({ sort: 'reset', absoluteResets: true, zone: 'UTC' });
+      expect(line).toMatch(/… at \w{3} \d{2}:\d{2} · sort: reset$/);
+      expect([...line].length).toBeLessThanOrEqual(72);
+    });
+
+    it('leaves the dashboard order unchanged', () => {
+      expect(summaryWith({ sort: 'dashboard' })).toBe(summaryWith({}));
+      expect(summaryWith({})).toBe('all windows below 80% · next reset: agy Claude and GPT models… in 1h59m');
+    });
+
+    it('still cuts to the frame width when nothing fits', () => {
+      expect([...summaryWith({ sort: 'headroom' }, 40)].length).toBeLessThanOrEqual(40);
+    });
+  });
+
   it('ignores the windows of unavailable results in the summary', () => {
     const failed = { ...unavailable('claude'), windows: [{ label: 'weekly', kind: 'weekly' as const, usedPct: 99, resetsAt: '2026-09-13T11:00:00Z' }] };
     expect(summaryOf([failed])).toBe('all windows below 80% · next reset: none');

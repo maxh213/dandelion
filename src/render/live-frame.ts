@@ -123,7 +123,8 @@ function fleetLine(usages: ProviderUsage[], now: string, absoluteZone: string | 
 
 function summaryLine(view: LiveView, usages: ProviderUsage[], now: string): string {
   const width = widthOf(view);
-  return cutCells(`${fleetLine(usages, now, absoluteZoneOf(view), width)}${sortSuffix(view.sort ?? 'dashboard')}`, width);
+  const suffix = sortSuffix(view.sort ?? 'dashboard');
+  return cutCells(`${fleetLine(usages, now, absoluteZoneOf(view), width - cellCount(suffix))}${suffix}`, width);
 }
 
 function absoluteZoneOf(view: LiveView): string | undefined {
