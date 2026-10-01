@@ -888,6 +888,22 @@ describe('notificationEvents', () => {
     expect(texts([week(91)], [week(40)])).toEqual([]);
   });
 
+  it('reports a recovery only when no rolling window of the account still trips', () => {
+    const agy = (claudeGpt: number, gemini: number): ProviderUsage => ({
+      id: 'agy',
+      status: 'ok',
+      windows: [
+        { label: 'Claude+GPT · 5h', kind: 'rolling', usedPct: claudeGpt },
+        { label: 'Gemini · 5h', kind: 'rolling', usedPct: gemini },
+      ],
+    } as ProviderUsage);
+    expect(notificationEvents(agy(95, 92), agy(95, 85), NOW, () => MIDNIGHT)).toEqual([]);
+    expect(notificationEvents(agy(95, 92), agy(40, 85), NOW, () => MIDNIGHT).map((each) => each.text)).toEqual([
+      'agy Claude+GPT · 5h recovered at 40%',
+      'agy Gemini · 5h recovered at 85%',
+    ]);
+  });
+
   it('reports a weekly window that newly evaporates with the time left', () => {
     const tonight = '2026-09-13T20:00:00.000Z';
     expect(texts([week(2, tonight)], [week(50, tonight)])).toEqual(['claude weekly is evaporating, resets in 10h0m']);

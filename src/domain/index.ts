@@ -249,8 +249,16 @@ function thresholdEvents(pair: WindowPair): Notification[] {
   return crossed(pair, HOT_PCT) ? notification(pair, 'hot', text) : [];
 }
 
-function recoveryEvents(pair: WindowPair): Notification[] {
-  const recovered = pair.current.kind === 'rolling' && trips(pair.previous.usedPct) && !trips(pair.current.usedPct);
+function isTripped(usage: ProviderUsage): boolean {
+  return usage.windows.some((window) => window.kind === 'rolling' && trips(window.usedPct));
+}
+
+function droppedBelowTrip(pair: WindowPair): boolean {
+  return pair.current.kind === 'rolling' && trips(pair.previous.usedPct) && !trips(pair.current.usedPct);
+}
+
+function recoveryEvents(pair: WindowPair, accountRecovered: boolean): Notification[] {
+  const recovered = accountRecovered && droppedBelowTrip(pair);
   return recovered ? notification(pair, 'recovered', `${pair.id} ${pair.current.label} recovered at ${pair.current.usedPct}%`) : [];
 }
 
@@ -278,16 +286,17 @@ function nightOf(at: string, midnightAfter: MidnightAfter): Tonight {
   return { nowMs: Date.parse(at), midnightMs: Date.parse(midnightAfter(at)) };
 }
 
-function pairEvents(pair: WindowPair, nights: Nights, now: string): Notification[] {
-  return [...thresholdEvents(pair), ...recoveryEvents(pair), ...evaporationEvents(pair, nights, now), ...resetEvents(pair, now)];
+function pairEvents(pair: WindowPair, accountRecovered: boolean, nights: Nights, now: string): Notification[] {
+  return [...thresholdEvents(pair), ...recoveryEvents(pair, accountRecovered), ...evaporationEvents(pair, nights, now), ...resetEvents(pair, now)];
 }
 
 export function notificationEvents(previous: ProviderUsage, current: ProviderUsage, now: string, midnightAfter: MidnightAfter): Notification[] {
   if (previous.status !== 'ok' || current.status !== 'ok') return [];
   const nights = { before: nightOf(previous.fetchedAt, midnightAfter), tonight: nightOf(now, midnightAfter) };
+  const accountRecovered = isTripped(previous) && !isTripped(current);
   return current.windows.flatMap((window) => {
     const before = previous.windows.find((each) => each.label === window.label);
-    return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, nights, now);
+    return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, accountRecovered, nights, now);
   });
 }
 
