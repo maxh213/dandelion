@@ -476,10 +476,12 @@ describe('eligibility state', () => {
       },
       replace: (path, bytes) => {
         writes.push([path, bytes]);
-        return saves.shift() ?? true;
+        const saved = saves.shift() ?? true;
+        if (saved) text = bytes;
+        return saved;
       }
     };
-    return { file, reads, writes, saved: () => writes.map(([, bytes]) => JSON.parse(bytes)) };
+    return { file, reads, writes, set: (next: string) => { text = next; }, saved: () => writes.map(([, bytes]) => JSON.parse(bytes)) };
   }
 
   it.each<[string, Record<string, string | undefined>, string]>([
@@ -491,7 +493,7 @@ describe('eligibility state', () => {
   ])('resolves the state path: %s', (_case, env, path) => {
     const state = fileWith(undefined);
     openEligibility(env, '/home/u', state.file).toggle('claude');
-    expect(state.reads).toEqual([path]);
+    expect(state.reads).toEqual([path, path]);
     expect(state.writes.map(([written]) => written)).toEqual([path]);
   });
 
@@ -516,7 +518,7 @@ describe('eligibility state', () => {
     eligibility.toggle('agy');
     expect(state.saved().at(-1)).toEqual({ nope: 1, agy: true, kimi: false, claude: false });
     expect(eligibility.ineligible()).toEqual(['kimi', 'claude']);
-    expect(state.reads).toHaveLength(1);
+    expect(state.reads).toHaveLength(4);
   });
 
   it('keeps the state when a write fails, so the next write flips the old state once', () => {
@@ -527,6 +529,24 @@ describe('eligibility state', () => {
     expect(eligibility.toggle('claude')).toBe(true);
     expect(state.saved()).toEqual([{ agy: false, claude: false }, { agy: false, claude: false }]);
     expect(eligibility.ineligible()).toEqual(['agy', 'claude']);
+  });
+
+  it('keeps another dashboard\'s change when toggling', () => {
+    const state = fileWith(undefined);
+    const first = openEligibility({}, '/home/u', state.file);
+    const second = openEligibility({}, '/home/u', state.file);
+    first.toggle('grok');
+    second.toggle('kilo');
+    expect(state.saved().at(-1)).toEqual({ grok: false, kilo: false });
+    expect(second.ineligible()).toEqual(['grok', 'kilo']);
+  });
+
+  it('treats a file that went corrupt before the toggle as empty', () => {
+    const state = fileWith('{"agy": false}');
+    const eligibility = openEligibility({}, '/home/u', state.file);
+    state.set('{oops');
+    eligibility.toggle('claude');
+    expect(eligibility.ineligible()).toEqual(['claude']);
   });
 
   it('serializes as two-space JSON with a trailing newline', () => {
@@ -639,10 +659,12 @@ describe('hidden state', () => {
       },
       replace: (path, bytes) => {
         writes.push([path, bytes]);
-        return saves.shift() ?? true;
+        const saved = saves.shift() ?? true;
+        if (saved) text = bytes;
+        return saved;
       }
     };
-    return { file, reads, writes };
+    return { file, reads, writes, set: (next: string) => { text = next; } };
   }
 
   it.each<[string, Record<string, string | undefined>, string]>([
@@ -653,7 +675,7 @@ describe('hidden state', () => {
   ])('keeps hidden.json in %s', (_case, env, path) => {
     const state = fileWith(undefined);
     openHidden(env, '/home/u', state.file).toggle('claude');
-    expect(state.reads).toEqual([path]);
+    expect(state.reads).toEqual([path, path]);
     expect(state.writes.map(([written]) => written)).toEqual([path]);
   });
 
@@ -674,6 +696,24 @@ describe('hidden state', () => {
     const hidden = openHidden({}, '/home/u', state.file);
     expect([hidden.toggle('claude'), hidden.toggle('agy')]).toEqual([true, true]);
     expect(state.writes.map(([, bytes]) => bytes)).toEqual(['["agy","claude"]\n', '["claude"]\n']);
+    expect(hidden.ids()).toEqual(['claude']);
+  });
+
+  it('keeps another dashboard\'s hidden panel when toggling', () => {
+    const state = fileWith(undefined);
+    const first = openHidden({}, '/home/u', state.file);
+    const second = openHidden({}, '/home/u', state.file);
+    first.toggle('grok');
+    second.toggle('kilo');
+    expect(JSON.parse(state.writes.at(-1)?.[1] ?? '')).toEqual(['grok', 'kilo']);
+    expect(second.ids()).toEqual(['grok', 'kilo']);
+  });
+
+  it('treats a file that went missing or corrupt before the toggle as empty', () => {
+    const state = fileWith('["agy"]');
+    const hidden = openHidden({}, '/home/u', state.file);
+    state.set('{oops');
+    hidden.toggle('claude');
     expect(hidden.ids()).toEqual(['claude']);
   });
 

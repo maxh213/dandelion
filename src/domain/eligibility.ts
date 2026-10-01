@@ -49,7 +49,7 @@ export function openEligibility(env: Record<string, string | undefined>, homeDir
   return {
     ineligible: () => Object.keys(held.state).filter((id) => held.state[id] === false),
     toggle(id) {
-      const next = toggled(held.state, id);
+      const next = toggled(readState(file, path), id);
       if (!file.replace(path, serialized(next))) return false;
       held.state = next;
       return true;
@@ -128,7 +128,7 @@ export function openHidden(env: Record<string, string | undefined>, homeDir: str
   return {
     ids: () => held.ids,
     toggle(id) {
-      const next = withToggled(held.ids, id);
+      const next = withToggled(readIds(file, path), id);
       if (!file.replace(path, `${JSON.stringify(next)}\n`)) return false;
       held.ids = next;
       return true;

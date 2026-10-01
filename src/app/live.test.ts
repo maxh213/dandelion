@@ -68,8 +68,12 @@ function startSession(overrides: SessionOverrides = {}) {
   const probes = IDS.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), resume: vi.fn() });
   const screen = Object.assign(new EventEmitter(), { rows, write: (text: string) => writes.push(text) });
-  const replace = vi.fn<(path: string, text: string) => boolean>(() => true);
-  const eligibility = openEligibility({}, '/home/u', { read: () => JSON.stringify(state), replace });
+  const disk = { text: JSON.stringify(state) };
+  const replace = vi.fn<(path: string, text: string) => boolean>((_path, text) => {
+    disk.text = text;
+    return true;
+  });
+  const eligibility = openEligibility({}, '/home/u', { read: () => disk.text, replace });
   const historyReplace = vi.fn<(path: string, text: string) => boolean>(() => historyWrites);
   const history = openHistory({}, '/home/u', { read: () => historyText, replace: historyReplace });
   const snapshotReplace = vi.fn<(path: string, text: string) => boolean>(() => snapshotWrites);

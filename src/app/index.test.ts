@@ -2199,7 +2199,7 @@ describe('route eligibility state file', () => {
     await quit(again);
   });
 
-  it('rewrites the state read at start with unknown keys kept, overwriting edits made while running', async () => {
+  it('toggles on top of edits made to the state file while running', async () => {
     writeState('{"nope": 1, "agy": false}');
     const dashboard = await settledDashboard(routedRunner(), {});
     writeState('{"kimi": false}');
@@ -2208,7 +2208,7 @@ describe('route eligibility state file', () => {
     expect(headerOf(dashboard.lastFrame(), 'kimi')).toBe('kimi');
     dashboard.press('j');
     dashboard.press(' ');
-    expect(stateOf()).toEqual({ nope: 1, agy: false, claude: false });
+    expect(stateOf()).toEqual({ kimi: false, claude: false });
     await quit(dashboard);
   });
 
