@@ -66,6 +66,7 @@ type Session = LiveOptions & {
   order: number[];
   running?: boolean;
   rounds: number;
+  endedAt: number;
   quitting: boolean;
   suspended: boolean;
   selected: number;
@@ -152,7 +153,12 @@ function scheduleTick(session: Session): void {
   session.frameTimer = setTimeout(() => tick(session), delay);
 }
 
+function stale(session: Session): boolean {
+  return !session.running && Date.parse(session.clock()) - session.endedAt > session.refreshMs;
+}
+
 function tick(session: Session): void {
+  if (stale(session)) refresh(session);
   session.spinner += 1;
   draw(session);
   scheduleTick(session);
@@ -193,6 +199,7 @@ function settle(session: Session, index: number, usage: LiveSlot['usage']): void
 
 function endRound(session: Session): void {
   session.running = false;
+  session.endedAt = Date.parse(session.clock());
   session.inFlight.clear();
   session.settled = session.results.filter((usage) => usage !== undefined);
   session.history.record(session.settled, session.clock());
@@ -457,6 +464,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       sort: 'dashboard',
       order: options.probes.map((_, index) => index),
       rounds: 0,
+      endedAt: Number.NaN,
       selected: -1,
       graphing: false,
       notified: new Set(),

@@ -269,6 +269,51 @@ describe('live session', () => {
     await session.finished;
   });
 
+  it('starts a round at the next frame tick when the clock jumped past the refresh interval since the last round ended', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '60' } });
+    await session.settleRound(0);
+    vi.setSystemTime(new Date(Date.parse(START) + 7200000));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
+    expect(session.probes[0].calls[1].now).toBe('2026-09-13T12:00:00.100Z');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('leaves exactly one refresh timer after the catch-up round and counts the next interval from its end', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '60' } });
+    await session.settleRound(0);
+    vi.setSystemTime(new Date(Date.parse(START) + 7200000));
+    await vi.advanceTimersByTimeAsync(1000);
+    await session.settleRound(1);
+    expect(vi.getTimerCount()).toBe(2);
+    await vi.advanceTimersByTimeAsync(59999);
+    expect(session.probes[0].calls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(session.probes[0].calls).toHaveLength(3);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('starts no extra round when the clock advanced less than the refresh interval since the last round ended', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '3600' } });
+    await session.settleRound(0);
+    vi.setSystemTime(new Date(Date.parse(START) + 3598000));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
+    session.press('q');
+    await session.finished;
+  });
+
+  it('starts no second round while a round is still running even when the clock jumped', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '60' } });
+    vi.setSystemTime(new Date(Date.parse(START) + 7200000));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
+    session.press('q');
+    await session.finished;
+  });
+
   it('ends a round even when a probe rejects', async () => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
     session.probes[0].calls[0].reject(new Error('boom'));
