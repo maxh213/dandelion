@@ -89,9 +89,18 @@ describe('terminal renderer', () => {
 
   it('renders gauge', () => {
     expect(renderGauge(14.15, 20, true)).toBe('##############------');
-    expect(renderGauge(14.50, 20, true)).toBe('###############-----');
+    expect(renderGauge(14.50, 20, true)).toBe('##############------');
     expect(renderGauge(25, 20, true)).toBe('####################');
     expect(renderGauge(14.15, 20, false)).toBe('██████████████░░░░░░');
+  });
+
+  it('fills a gauge completely only when the amount reaches the reference', () => {
+    expect(renderGauge(98, 100, true)).toBe(`${'#'.repeat(19)}-`);
+    expect(renderGauge(100, 100, true)).toBe('#'.repeat(20));
+    expect(renderGauge(99.4, 100, true, 80)).toBe(`${'#'.repeat(79)}-`);
+    expect(renderGauge(0, 100, true)).toBe('-'.repeat(20));
+    expect(renderGauge(4, 100, true)).toBe('-'.repeat(20));
+    expect(renderGauge(5, 100, true)).toBe(`#${'-'.repeat(19)}`);
   });
 
   it('renders empty gauge', () => {
@@ -151,6 +160,12 @@ describe('terminal renderer', () => {
       const row = strip(balanceRow(kilo(14.15, 20), false));
       expect([...row]).toHaveLength(72);
       expect(row.trimEnd()).toBe(`${'balance $14.15'.padEnd(35)} ██████████████░░░░░░  71%`);
+    });
+
+    it('leaves a cell empty while the balance is below the reference', () => {
+      const row = strip(balanceRow(kilo(19.9, 20), false));
+      expect(row).toContain(`${'█'.repeat(19)}░`);
+      expect(row).not.toContain('█'.repeat(20));
     });
 
     it('colours the gauge by the spent share: calm when full, critical when nearly empty', () => {
@@ -237,7 +252,7 @@ describe('terminal renderer', () => {
     expect(renderPanelOk(usage, true, NOW, PLAIN).split('\n')).toEqual([
       '='.repeat(72),
       'claude',
-      'session                             #-------------------   3% ↻ 8h40m',
+      'session                             --------------------   3% ↻ 8h40m',
       'weekly                              #################-|-  86% ↻ 12h0m',
       'claude · personal · claude'
     ]);
@@ -435,7 +450,7 @@ describe('window rows', () => {
   it('wraps only the gauge and the percent in the style escape', () => {
     const calm = STYLE_TOKENS.calm;
     expect(renderWindowRow({ label: 'session', kind: 'rolling', usedPct: 3, resetsAt: '2026-09-13T18:40:00Z' }, false, NOW))
-      .toBe(`${'session'.padEnd(35)} ${calm}█${'░'.repeat(19)}${RESET} ${calm}  3%${RESET} ↻ 8h40m`);
+      .toBe(`${'session'.padEnd(35)} ${calm}${'░'.repeat(20)}${RESET} ${calm}  3%${RESET} ↻ 8h40m`);
   });
 
   it.each<[number, keyof typeof STYLE_TOKENS]>([
@@ -706,7 +721,7 @@ describe('live frame', () => {
       expect(rows).toHaveLength(7);
       expect(rows[0]).toBe('  claude            #################### 100% ↻ 8h40m');
       expect(rows[1]).toBe('  agy               ###############-----  75% ↻ 12h13m');
-      expect(rows[2]).toBe('  kimi              ############--------  59% ↻ 5d0h');
+      expect(rows[2]).toBe('  kimi              ###########---------  59% ↻ 5d0h');
     });
 
     it.each<[number, string]>([[89.5, ' 90%'], [99.6, '100%']])('prints the worst window at %d as %s', (usedPct, text) => {
@@ -715,7 +730,7 @@ describe('live frame', () => {
 
     it('omits the reset when no window has one and ignores other windows for the gauge', () => {
       const rows = compact([okUsage('x', [{ label: 'a', kind: 'other', usedPct: 99 }, { label: 'b', kind: 'weekly', usedPct: 20 }]), okUsage('y', [{ label: 'a', kind: 'other', usedPct: 99 }])]);
-      expect(rows).toEqual(['  x                 ####----------------  20%', '  y                 ####################  99%']);
+      expect(rows).toEqual(['  x                 ####----------------  20%', '  y                 ###################-  99%']);
     });
 
     it('skips resets already in the past when picking the soonest one', () => {
@@ -865,7 +880,7 @@ describe('live frame', () => {
     const CLAUDE_PANEL = [
       RULE,
       'claude',
-      'session                             #-------------------   3% ↻ 3d0h',
+      'session                             --------------------   3% ↻ 3d0h',
       'weekly                              ###########|#####---  86% ↻ 3d0h',
       '  → 100% in ~15h37m (before reset)',
       'weekly Fable                        ###########|######## 100% ↻ 3d0h',
@@ -876,7 +891,7 @@ describe('live frame', () => {
       'claude-work',
       'session                             --------------------   0% ↻ 3d0h',
       'weekly                              ##---------|--------  12% ↻ 3d0h',
-      'weekly Fable                        #####------|--------  23% ↻ 3d0h',
+      'weekly Fable                        ####-------|--------  23% ↻ 3d0h',
       'claude · work · claude-work · 0h0m ago'
     ];
     const AGY_PANEL = [

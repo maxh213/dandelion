@@ -231,7 +231,7 @@ function gaugeCells(filledCells: number, noColor: boolean, cells: number): strin
 }
 
 export function renderGauge(amount: number, reference: number, noColor: boolean, cells = GAUGE_CELLS): string {
-  const filledCells = Math.min(cells, Math.round((amount / reference) * cells));
+  const filledCells = Math.min(cells, Math.floor((amount * cells) / reference));
   return gaugeCells(filledCells, noColor, cells);
 }
 

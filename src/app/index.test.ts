@@ -227,7 +227,7 @@ describe('claude and agy windows', () => {
     const output = await runApp(routedRunner(), {}, NOW);
     expect(panelOf(output, 'claude')).toEqual([
       'claude',
-      `${'session'.padEnd(35)} ${'█'.repeat(1)}${'░'.repeat(19)}   3% ↻ 8h40m`,
+      `${'session'.padEnd(35)} ${'░'.repeat(20)}   3% ↻ 8h40m`,
       `${'weekly'.padEnd(35)} ${'█'.repeat(17)}░│░  86% ↻ 12h0m`,
       `${'weekly Fable'.padEnd(35)} ${'█'.repeat(18)}│█ 100% ↻ 12h0m`,
       'claude · personal · claude'
@@ -262,7 +262,7 @@ describe('claude and agy windows', () => {
     const lines = output.split('\n');
     const rowOf = (label: string) => lines.find((line) => line.startsWith(`${label.padEnd(35)} \x1b`));
     const [calm, hot, critical] = ['\x1b[32m', '\x1b[31m', '\x1b[35m'];
-    expect(rowOf('session')).toBe(`${'session'.padEnd(35)} ${calm}█${'░'.repeat(19)}\x1b[0m ${calm}  3%\x1b[0m ↻ 8h40m`);
+    expect(rowOf('session')).toBe(`${'session'.padEnd(35)} ${calm}${'░'.repeat(20)}\x1b[0m ${calm}  3%\x1b[0m ↻ 8h40m`);
     expect(rowOf('weekly')).toBe(`${'weekly'.padEnd(35)} ${hot}${'█'.repeat(17)}░\x1b[0m${DIM}│\x1b[0m${hot}░\x1b[0m ${hot} 86%\x1b[0m ↻ 12h0m`);
     expect(rowOf('weekly Fable')).toBe(`${'weekly Fable'.padEnd(35)} ${critical}${'█'.repeat(18)}\x1b[0m${DIM}│\x1b[0m${critical}█\x1b[0m ${critical}100%\x1b[0m ↻ 12h0m`);
   });
@@ -379,7 +379,7 @@ describe('claude-work panel', () => {
   const WORK_ROWS = [
     'session                             --------------------   0% ↻ 12h10m',
     'weekly                              ##-----------|------  12% ↻ 2d7h',
-    'weekly Fable                        #####--------|------  23% ↻ 2d7h'
+    'weekly Fable                        ####---------|------  23% ↻ 2d7h'
   ];
   const WORK_CAPTION = 'claude · work · claude-work';
   const PERSONAL_CAPTION = 'claude · personal · claude';
@@ -424,7 +424,7 @@ describe('claude-work panel', () => {
     const work = output.slice(output.indexOf('\nclaude-work\n'), output.indexOf(`${DIM}${WORK_CAPTION}\x1b[0m\n`));
     expect(work).toContain(`${CALM}${'░'.repeat(20)}\x1b[0m ${CALM}  0%\x1b[0m ↻ 12h10m`);
     expect(work).toContain(`${CALM}${'█'.repeat(2)}${'░'.repeat(11)}\x1b[0m${DIM}│\x1b[0m${CALM}${'░'.repeat(6)}\x1b[0m ${CALM} 12%\x1b[0m ↻ 2d7h`);
-    expect(work).toContain(`${CALM}${'█'.repeat(5)}${'░'.repeat(8)}\x1b[0m${DIM}│\x1b[0m${CALM}${'░'.repeat(6)}\x1b[0m ${CALM} 23%\x1b[0m ↻ 2d7h`);
+    expect(work).toContain(`${CALM}${'█'.repeat(4)}${'░'.repeat(9)}\x1b[0m${DIM}│\x1b[0m${CALM}${'░'.repeat(6)}\x1b[0m ${CALM} 23%\x1b[0m ↻ 2d7h`);
     expect(output).toContain(`\x1b[31m${'█'.repeat(17)}░\x1b[0m${DIM}│\x1b[0m\x1b[31m░\x1b[0m \x1b[31m 86%`);
     expect(output).toContain(`\x1b[35m${'█'.repeat(18)}\x1b[0m${DIM}│\x1b[0m\x1b[35m█\x1b[0m \x1b[35m100%`);
   });
@@ -462,7 +462,7 @@ describe('claude-work panel', () => {
   ])('keeps the personal panel when the work claude %s', async (_case, result, reason) => {
     const output = await runApp(routedRunner({ 'claude-work': result }), {}, NOW);
     expect(output).toContain(`${DIM}${RULE}\x1b[0m\n${DIM}claude-work\x1b[0m\n${DIM}${reason}\x1b[0m\n${DIM}${WORK_CAPTION}\x1b[0m\n`);
-    expect(plain(output)).toContain(`\nclaude\n${'session'.padEnd(35)} █`);
+    expect(plain(output)).toContain(`\nclaude\n${'session'.padEnd(35)} ░`);
     expect(panelOf(output, 'claude')).toHaveLength(5);
     expect(panelOf(output, 'claude').at(-1)).toBe(PERSONAL_CAPTION);
   });
@@ -504,7 +504,7 @@ describe('kimi panel', () => {
     expect(lines.slice(kimi - 1, kimi + 6)).toEqual([
       '='.repeat(72),
       'kimi',
-      'weekly                              #####|######--------  59% ↻ 5d0h',
+      'weekly                              #####|#####---------  59% ↻ 5d0h',
       '  → 100% in ~1d9h (before reset)',
       '5h                                  |#######------------  42% ↻ 5h0m',
       'kimi code · kimi',
@@ -521,7 +521,7 @@ describe('kimi panel', () => {
     const output = await runApp(routedRunner(), {}, NOW);
     const WARM = '\x1b[33m';
     expect(output).toContain(
-      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(5)}\x1b[0m${DIM}│\x1b[0m${WARM}${'█'.repeat(6)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${DIM}  → 100% in ~1d9h (before reset)\x1b[0m\n${'5h'.padEnd(35)} ${DIM}│\x1b[0m${CALM}${'█'.repeat(7)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 5h0m\n${DIM}kimi code · kimi\x1b[0m\n`
+      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(5)}\x1b[0m${DIM}│\x1b[0m${WARM}${'█'.repeat(5)}${'░'.repeat(9)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${DIM}  → 100% in ~1d9h (before reset)\x1b[0m\n${'5h'.padEnd(35)} ${DIM}│\x1b[0m${CALM}${'█'.repeat(7)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 5h0m\n${DIM}kimi code · kimi\x1b[0m\n`
     );
   });
 
@@ -690,7 +690,7 @@ describe('grok panel', () => {
 
   it.each<[string, string]>([
     ['{"config":{"creditUsagePercent":75}}', 'credits                             ###############-----  75%|grok · grok'],
-    ['{"config":{"creditUsagePercent":33.5},"subscriptionTier":""}', 'credits                             #######-------------  34%|grok · grok'],
+    ['{"config":{"creditUsagePercent":33.5},"subscriptionTier":""}', 'credits                             ######--------------  34%|grok · grok'],
     ['{"config":{"creditUsagePercent":0},"subscriptionTier":7}', 'credits                             --------------------   0%|grok · grok'],
     ['{"config":{"creditUsagePercent":130,"currentPeriod":{"end":"soon"}},"subscriptionTier":"SuperGrok"}', 'credits                             #################### 130%|SuperGrok · grok'],
     ['{"config":{"creditUsagePercent":75,"currentPeriod":null}}', 'credits                             ###############-----  75%|grok · grok']
@@ -895,7 +895,7 @@ describe('codex panel', () => {
   });
 
   it.each<[unknown, string]>([
-    [{ primary: { usedPercent: 33.5, windowDurationMins: 300 }, secondary: null }, '5h                                  #######-------------  34%'],
+    [{ primary: { usedPercent: 33.5, windowDurationMins: 300 }, secondary: null }, '5h                                  ######--------------  34%'],
     [{ primary: null, secondary: { usedPercent: 130, windowDurationMins: 10080, resetsAt: 'soon' } }, 'weekly                              #################### 130%'],
     [{ primary: { usedPercent: 0, windowDurationMins: 1440, resetsAt: null } }, '1d                                  --------------------   0%'],
     [{ primary: { usedPercent: 10, windowDurationMins: 90 }, secondary: { usedPercent: 'x' } }, '90m                                 ##------------------  10%'],
@@ -1171,7 +1171,7 @@ describe('cursor panel', () => {
     ['{"billingCycleEnd":"1790786706000","planUsage":{"totalPercentUsed":31.09,"apiPercentUsed":15.81}}', [ROWS[0], ROWS[2]]],
     ['{"planUsage":{"totalPercentUsed":0,"autoPercentUsed":"32","apiPercentUsed":-1}}', ['total                               --------------------   0%']],
     ['{"billingCycleEnd":1790786706000,"planUsage":{"totalPercentUsed":130}}', ['total                               #################### 130%']],
-    ['{"billingCycleEnd":"soon","planUsage":{"autoPercentUsed":32.5}}', ['auto                                #######-------------  33%']],
+    ['{"billingCycleEnd":"soon","planUsage":{"autoPercentUsed":32.5}}', ['auto                                ######--------------  33%']],
     ['{"billingCycleEnd":"1e12","planUsage":{"totalPercentUsed":0}}', ['total                               --------------------   0%']],
     ['{"billingCycleEnd":" 1790786706000","planUsage":{"totalPercentUsed":0}}', ['total                               --------------------   0%']]
   ])('renders the usage body %s', async (body, rows) => {
@@ -1506,9 +1506,9 @@ describe('wiring', () => {
     expect(output).toContain('\x1b[90mapi balance · kilo\x1b[0m');
   });
 
-  it('rounds gauge fill half-up', async () => {
+  it('rounds gauge fill down', async () => {
     const output = await runApp(profileRunner('Balance: $14.50'), {}, NOW);
-    expect(output).toContain(`${'balance $14.50'.padEnd(35)} \x1b[32m███████████████░░░░░\x1b[0m \x1b[32m 73%\x1b[0m`);
+    expect(output).toContain(`${'balance $14.50'.padEnd(35)} \x1b[32m██████████████░░░░░░\x1b[0m \x1b[32m 73%\x1b[0m`);
   });
 
   it('fills the gauge when balance exceeds reference', async () => {
