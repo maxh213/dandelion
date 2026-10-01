@@ -210,7 +210,7 @@ function reorder(session: Session): void {
 }
 
 function settle(session: Session, index: number, usage: LiveSlot['usage']): void {
-  announce(session, session.results[index], usage);
+  announce(session, session.lastGood[index], usage);
   session.results[index] = usage;
   if (usage?.status === 'ok') session.lastGood[index] = usage;
   session.inFlight.delete(index);

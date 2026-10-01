@@ -1466,10 +1466,14 @@ function weekly(usedPct: number, resetsAt = '2026-09-18T10:00:00.000Z'): Usage['
 }
 
 async function roundsOf(env: Record<string, string | undefined>, windows: Usage['windows'][number][]) {
+  return usageRoundsOf(env, windows.map((window) => windowUsage('claude', window)));
+}
+
+async function usageRoundsOf(env: Record<string, string | undefined>, usages: Usage[]) {
   const notify = vi.fn();
   const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1', ...env }, notifier: { notify } });
-  for (const [round, window] of windows.entries()) {
-    await session.settleRound(round, { claude: windowUsage('claude', window) });
+  for (const [round, usage] of usages.entries()) {
+    await session.settleRound(round, { claude: usage });
     await vi.advanceTimersByTimeAsync(1000);
   }
   session.press('q');
@@ -1489,6 +1493,21 @@ describe('notifications', () => {
 
   it.each([[undefined], ['']])('never calls the notifier when DANDELION_NOTIFY is %j', async (value) => {
     expect(await roundsOf({ DANDELION_NOTIFY: value }, [weekly(79), weekly(96)])).toEqual([]);
+  });
+
+  const failed = (status: 'error' | 'unavailable'): Usage => ({ id: 'claude', displayName: 'claude', windows: [], fetchedAt: START, status, reason: 'down' });
+  const ok = (usedPct: number): Usage => windowUsage('claude', weekly(usedPct));
+
+  it.each(['error', 'unavailable'] as const)('notifies once for 80%% when a %s round sits between 70%% and 85%%', async (status) => {
+    expect(await usageRoundsOf({ DANDELION_NOTIFY: '1' }, [ok(70), failed(status), ok(85), ok(86)])).toEqual(['claude weekly at 85%']);
+  });
+
+  it('notifies at 80% and at 95% once each when failed rounds separate 70%, 85% and 96%', async () => {
+    expect(await usageRoundsOf({ DANDELION_NOTIFY: '1' }, [ok(70), failed('error'), ok(85), failed('unavailable'), ok(96), ok(97)])).toEqual(['claude weekly at 85%', 'claude weekly at 96%']);
+  });
+
+  it('treats the first ok result after a failed first round as a baseline only', async () => {
+    expect(await usageRoundsOf({ DANDELION_NOTIFY: '1' }, [failed('error'), ok(85), ok(86)])).toEqual([]);
   });
 
   it('notifies once at 80% and once more at 95%', async () => {
