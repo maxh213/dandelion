@@ -1231,7 +1231,7 @@ describe('route boxes', () => {
     const shown = session.lastFrame().split('\n');
     expect(shown.slice(0, 6)).toEqual(plain.slice(0, 6));
     expect(shown.slice(6, 8)).toEqual([expect.stringMatching(/^headroom: /), expect.stringContaining('unavailable: ')]);
-    expect(shown.length).toBe(plain.length + 2);
+    expect(shown.length).toBe(plain.length + 3);
     session.press('w');
     expect(session.lastFrame().split('\n')).toEqual(plain);
     expect(session.viewSaved()).toEqual([]);
@@ -1246,11 +1246,8 @@ describe('route boxes', () => {
     const request = { now: START, zone: 'UTC', why: true };
     const usages = IDS.map((id) => usageOf(id, START));
     const [route, high] = (['headroom', 'high'] as const).map((mode) => renderRoute(LINES, usages, [], { ...request, mode }).out.split('\n').slice(1, -1));
-    const shown = session.lastFrame().split('\n').slice(6, 6 + route.length);
-    const stem = (text: string) => text.trimEnd().replace(/…$/, '');
-    route.forEach((line, row) => expect(line.startsWith(stem(shown[row].slice(0, 35)))).toBe(true));
-    expect(high[0].startsWith(stem(shown[0].slice(37)))).toBe(true);
-    expect(shown[0]).toMatch(/^headroom: .+ {2}rank 1 /);
+    const expected = [...route, ...high].map((line) => ([...line].length > 72 ? `${[...line].slice(0, 71).join('').trimEnd()}…` : line));
+    expect(session.lastFrame().split('\n').slice(6, 6 + expected.length)).toEqual(expected);
     session.press('q');
     await session.finished;
     const broken = startSession({ routes: { fault: { path: '/r.json', problem: 'bad' } } });

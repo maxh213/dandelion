@@ -1147,21 +1147,19 @@ describe('route boxes', () => {
     expect(renderLiveFrame(boxView(ROUTED, { why: [[], []] }), true, NOW)).toBe(plain);
   });
 
-  it('prints each mode\'s why lines under its own box, cut to the box width, the rest of the frame unchanged', () => {
+  it('stacks the route lines then the route --high lines under the boxes at the full frame width, the rest unchanged', () => {
     const plain = renderLiveFrame(boxView(ROUTED), true, NOW).split('\n');
     const lines = renderLiveFrame(boxView(ROUTED, { why: WHY }), true, NOW).split('\n');
     expect(lines.slice(0, 6)).toEqual(plain.slice(0, 6));
-    expect(lines.slice(6, 8)).toEqual([
-      `${'headroom: claude-work binding 77%…'.padEnd(35)}  rank 1 fable on claude-work: gatin…`,
-      'unavailable: claude-deepseek, juni…'
-    ]);
-    expect(lines.slice(8)).toEqual(plain.slice(6));
+    expect(lines.slice(6, 9)).toEqual([WHY[0][0], WHY[0][1], WHY[1][0]]);
+    expect(lines.slice(9)).toEqual(plain.slice(6));
   });
 
-  it('pads a shorter right column and dims every explanation row in colour without breaking escapes', () => {
-    const lines = renderLiveFrame(boxView(ROUTED, { why: [['a'], ['b', 'c']], columns: 60 }), false, NOW).split('\n');
-    expect(lines[6]).toBe(`${DIM}${'a'.padEnd(29)}  b${RESET}`);
-    expect(lines[7]).toBe(`${DIM}${' '.repeat(31)}c${RESET}`);
+  it('cuts a long explanation line to the frame width and dims every row in colour without breaking escapes', () => {
+    const long = 'x'.repeat(100);
+    const lines = renderLiveFrame(boxView(ROUTED, { why: [['a'], [long]], columns: 60 }), false, NOW).split('\n');
+    expect(lines[6]).toBe(`${DIM}a${RESET}`);
+    expect(lines[7]).toBe(`${DIM}${'x'.repeat(59)}…${RESET}`);
     expect(lines.every((line) => [...line.replace(ANSI_CODE, '')].length <= 60)).toBe(true);
   });
 
@@ -1172,7 +1170,7 @@ describe('route boxes', () => {
     const withWhy = renderLiveFrame(boxView(ROUTED, { slots, rows, why: WHY }), true, NOW).split('\n');
     expect(without).toHaveLength(rows);
     expect(withWhy).toHaveLength(rows);
-    expect(withWhy.slice(8)).toEqual(without.slice(6, rows - 2));
+    expect(withWhy.slice(9)).toEqual(without.slice(6, rows - 3));
   });
 
   it('draws the settled answers as two 35-cell boxes with a 2-cell gap under NO_COLOR', () => {

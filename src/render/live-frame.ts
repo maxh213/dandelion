@@ -272,13 +272,9 @@ function renderBox(title: string, answer: BoxAnswer, noColor: boolean, width: nu
   return [top, modelBoxRow(model, noColor), withSides(account, noColor), bottom];
 }
 
-function explanationRows(view: LiveView, widths: [number, number], noColor: boolean): string[] {
-  const [left, right] = view.why ?? [[], []];
-  const count = Math.max(left.length, right.length);
-  return Array.from({ length: count }, (_, row) => {
-    const cells = [left[row] ?? '', right[row] ?? ''].map((text, side) => padCells(cutCells(text, widths[side]), widths[side]));
-    return dim(cells.join(BOX_GAP).trimEnd(), noColor);
-  });
+function explanationRows(view: LiveView, noColor: boolean): string[] {
+  const [route, high] = view.why ?? [[], []];
+  return [...route, ...high].map((text) => dim(cutCells(text, widthOf(view)), noColor));
 }
 
 function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
@@ -287,7 +283,7 @@ function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
   const rightWidth = widthOf(view) - BOX_GAP.length - leftWidth;
   const left = renderBox(ROUTE_TITLE, route, noColor, leftWidth);
   const right = renderBox(HIGH_TITLE, high, noColor, rightWidth);
-  return [...left.map((line, row) => `${line}${BOX_GAP}${right[row]}`), ...explanationRows(view, [leftWidth, rightWidth], noColor)];
+  return [...left.map((line, row) => `${line}${BOX_GAP}${right[row]}`), ...explanationRows(view, noColor)];
 }
 
 function rowBudget(rows = FALLBACK_ROWS): number {
