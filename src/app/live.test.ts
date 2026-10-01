@@ -1533,14 +1533,18 @@ describe('re-probe after a reset', () => {
   it('re-probes only that provider 60s after its reset, keeping rows and a spinner, then recomputes', async () => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '3600' } });
     await session.settleRound(0, { claude: tripped('claude', START) });
+    const avoiding = boxRowsOf(session.lastFrame());
+    expect(avoiding.join('\n')).not.toContain('claude');
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 59 * 1000);
     expect(counts(session)).toEqual(IDS.map(() => 1));
     await vi.advanceTimersByTimeAsync(1100);
     expect(counts(session)).toEqual([2, ...IDS.slice(1).map(() => 1)]);
     expect(session.lastFrame()).toMatch(/claude [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
     expect(session.lastFrame()).toContain('95%');
+    expect(boxRowsOf(session.lastFrame())).toEqual(avoiding);
     session.probes[0].calls[1].resolve(tripped('claude', session.probes[0].calls[1].now, 3));
     await vi.advanceTimersByTimeAsync(0);
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-a high', 'claude', 'model-h1 max', 'claude'));
     expect(session.lastFrame()).toContain('3%');
     expect(session.lastFrame()).not.toContain('95%');
     session.press('q');
