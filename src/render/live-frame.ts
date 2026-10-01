@@ -6,11 +6,13 @@ import {
   highRouteLine,
   nextLocalMidnight,
   routeLine,
+  sortSuffix,
   summariseFleet,
   type HistorySample,
   type ProviderUsage,
   type RouteLines,
-  type Routes
+  type Routes,
+  type SortOrder
 } from '../domain/index.ts';
 import {
   WIDTH,
@@ -32,7 +34,7 @@ import {
 
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
-const HIDE_HELP = 'h hide · H show hidden · R refresh panel';
+const HIDE_HELP = 'h hide · H show hidden · R refresh panel · s sort';
 const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back';
 const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
 const BOX_GAP = '  ';
@@ -56,6 +58,8 @@ export type LiveView = {
   refreshing: boolean;
   footer: boolean;
   absoluteResets?: boolean;
+  order?: number[];
+  sort?: SortOrder;
   ineligible: string[];
   hidden?: string[];
   showHidden?: boolean;
@@ -102,10 +106,15 @@ function resetSegment(head: string, next: { id: string; label: string; resetsAt:
   return `${prefix}${cutCells(next.label, width - cellCount(prefix) - cellCount(suffix))}${suffix}`;
 }
 
-function summaryLine(usages: ProviderUsage[], now: string, absoluteZone: string | undefined, width: number): string {
+function fleetLine(usages: ProviderUsage[], now: string, absoluteZone: string | undefined, width: number): string {
   const fleet = summariseFleet(usages, now);
   const head = `${hotSegment(fleet.hot, fleet.windows)} · next reset: `;
   return fleet.next === undefined ? `${head}none` : resetSegment(head, fleet.next, now, absoluteZone, width);
+}
+
+function summaryLine(view: LiveView, usages: ProviderUsage[], now: string): string {
+  const width = widthOf(view);
+  return cutCells(`${fleetLine(usages, now, absoluteZoneOf(view), width)}${sortSuffix(view.sort ?? 'dashboard')}`, width);
 }
 
 function absoluteZoneOf(view: LiveView): string | undefined {
@@ -251,7 +260,7 @@ function rowBudget(rows = FALLBACK_ROWS): number {
 }
 
 function summaryOrFlash(view: LiveView, usages: ProviderUsage[], now: string): string {
-  return view.flash?.index === ROUTE_FLASH ? view.flash.message : summaryLine(usages, now, absoluteZoneOf(view), widthOf(view));
+  return view.flash?.index === ROUTE_FLASH ? view.flash.message : summaryLine(view, usages, now);
 }
 
 function liveChrome(view: LiveView, usages: ProviderUsage[], noColor: boolean, now: string): string[] {
@@ -263,7 +272,7 @@ function liveFooter(noColor: boolean): string[] {
 }
 
 function shownIndexes(view: LiveView): number[] {
-  const indexes = view.slots.map((_, index) => index);
+  const indexes = view.order ?? view.slots.map((_, index) => index);
   return view.showHidden === true ? indexes : indexes.filter((index) => !isHidden(view, view.slots[index]));
 }
 

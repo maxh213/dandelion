@@ -209,3 +209,43 @@ export function notificationEvents(previous: ProviderUsage, current: ProviderUsa
     return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, now, midnight);
   });
 }
+
+export type SortOrder = 'dashboard' | 'headroom' | 'reset';
+
+const NEXT_ORDER: Record<SortOrder, SortOrder> = { dashboard: 'headroom', headroom: 'reset', reset: 'dashboard' };
+
+export function nextSortOrder(order: SortOrder): SortOrder {
+  return NEXT_ORDER[order];
+}
+
+function headroomOf(usage: ProviderUsage): number | undefined {
+  return usage.windows.length === 0 ? undefined : FULL_PCT - Math.max(...usage.windows.map((window) => window.usedPct));
+}
+
+function soonestOf(usage: ProviderUsage, now: string): number | undefined {
+  const future = usage.windows.map((window) => Date.parse(String(window.resetsAt))).filter((at) => at > Date.parse(now));
+  return future.length === 0 ? undefined : Math.min(...future);
+}
+
+function keyOf(usage: ProviderUsage | undefined, order: SortOrder, now: string): number | undefined {
+  if (usage === undefined) return undefined;
+  const headroom = headroomOf(usage);
+  return order === 'headroom' ? (headroom === undefined ? undefined : -headroom) : soonestOf(usage, now);
+}
+
+function keyedFirst(keys: (number | undefined)[]): number[] {
+  const indexes = keys.map((_, index) => index);
+  const keyed = indexes.filter((index) => keys[index] !== undefined);
+  const rest = indexes.filter((index) => !keyed.includes(index));
+  keyed.sort((a, b) => Number(keys[a]) - Number(keys[b]) || a - b);
+  return [...keyed, ...rest];
+}
+
+export function orderPanels(usages: (ProviderUsage | undefined)[], order: SortOrder, now: string): number[] {
+  if (order === 'dashboard') return usages.map((_, index) => index);
+  return keyedFirst(usages.map((usage) => keyOf(usage, order, now)));
+}
+
+export function sortSuffix(order: SortOrder): string {
+  return order === 'dashboard' ? '' : ` · sort: ${order}`;
+}

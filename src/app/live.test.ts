@@ -417,6 +417,52 @@ describe('live session', () => {
     await session.finished;
   });
 
+  it('cycles the panel order with s and keeps the selection on the same provider', async () => {
+    const session = startSession();
+    const at = (hours: number) => new Date(Date.parse(START) + hours * 3600000).toISOString();
+    const withWindow = (id: string, usedPct: number, resetsAt: string): Usage => ({ ...usageOf(id, START), windows: [{ label: 'weekly', kind: 'weekly', usedPct, resetsAt }] });
+    await session.settleRound(0, { claude: withWindow('claude', 90, at(5)), agy: withWindow('agy', 20, at(9)), kimi: withWindow('kimi', 50, at(2)), kilo: NO_WINDOWS });
+    const headers = () => session.lastFrame().split('\n').filter((line) => IDS.includes(line.replace('▸ ', '').replace(/ .*/, '')) && !line.startsWith(' ')).map((line) => line.replace('▸ ', ''));
+    ['j', 'j', 'j', 'j'].forEach((key) => session.press(key));
+    expect(markedHeaders(session.lastFrame())).toEqual(['▸ grok']);
+    expect(headers().slice(0, 3)).toEqual(['claude', 'agy', 'kimi']);
+    expect(session.lastFrame().split('\n')[1]).not.toContain('sort:');
+    session.press('s');
+    expect(headers().slice(0, 3)).toEqual(['grok', 'codex', 'cursor']);
+    expect(session.lastFrame().split('\n')[1]).toMatch(/ · sort: headroom$/);
+    expect(markedHeaders(session.lastFrame())).toEqual(['▸ grok']);
+    session.press('s');
+    expect(headers().slice(0, 3)).toEqual(['kimi', 'claude', 'agy']);
+    expect(session.lastFrame().split('\n')[1]).toMatch(/ · sort: reset$/);
+    expect(markedHeaders(session.lastFrame())).toEqual(['▸ grok']);
+    session.press(' ');
+    expect(session.saved()).toEqual([{ grok: false }]);
+    session.press('s');
+    expect(headers().map((id) => id.replace(/ +routing off/, ''))).toEqual(IDS);
+    expect(session.lastFrame().split('\n')[1]).not.toContain('sort:');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('keeps pending panels last and walks the sorted order with the arrow keys', async () => {
+    const session = startSession();
+    session.press('s');
+    session.probes[3].calls[0].resolve({ ...usageOf('grok', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 10 }] });
+    await vi.advanceTimersByTimeAsync(0);
+    const headers = () => session.lastFrame().split('\n').filter((line) => IDS.includes(line.replace('▸ ', ''))).map((line) => line.replace('▸ ', ''));
+    expect(headers()).toEqual(['grok', 'claude', 'agy', 'kimi', 'codex', 'cursor', 'kilo']);
+    session.press('j');
+    session.press('j');
+    expect(markedHeaders(session.lastFrame())).toEqual(['▸ claude']);
+    session.press('k');
+    expect(markedHeaders(session.lastFrame())).toEqual(['▸ grok']);
+    session.press('h');
+    session.press('s');
+    expect(markedHeaders(session.lastFrame())).toEqual(['▸ claude']);
+    session.press('q');
+    await session.finished;
+  });
+
   it('fits every frame to the screen’s rows and redraws the same view when they change', async () => {
     const session = startSession({ rows: 12 });
     expect(session.lastFrame().split('\n')).toHaveLength(12);
@@ -481,7 +527,7 @@ describe('live session', () => {
     expect(claude[7]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel · s sort', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
     session.press('q');
     await session.finished;
   });

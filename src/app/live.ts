@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, isRoutable, nextLocalMidnight, notificationEvents, renderLiveFrame, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
+import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type Eligibility, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -55,6 +55,8 @@ type Session = LiveOptions & {
   footer: boolean;
   showHidden: boolean;
   absoluteResets: boolean;
+  sort: SortOrder;
+  order: number[];
   running?: boolean;
   rounds: number;
   quitting: boolean;
@@ -107,6 +109,8 @@ function viewOf(session: Session): LiveView {
     refreshing: session.running === true && session.rounds > 1,
     footer: session.footer,
     absoluteResets: session.absoluteResets,
+    order: session.order,
+    sort: session.sort,
     ineligible: session.eligibility.ineligible(),
     hidden: session.hidden.ids(),
     showHidden: session.showHidden,
@@ -165,10 +169,15 @@ function announce(session: Session, previous: LiveSlot['usage'], current: LiveSl
   for (const { key, text } of eventsOf(session, previous, current)) if (fresh(session, key)) session.notifier.notify(text);
 }
 
+function reorder(session: Session): void {
+  session.order = orderPanels(session.results, session.sort, session.clock());
+}
+
 function settle(session: Session, index: number, usage: LiveSlot['usage']): void {
   announce(session, session.results[index], usage);
   session.results[index] = usage;
   session.inFlight.delete(index);
+  reorder(session);
   draw(session);
 }
 
@@ -230,7 +239,7 @@ function isShown(session: Session, index: number): boolean {
 }
 
 function shownIndexes(session: Session): number[] {
-  return session.probes.map((_, index) => index).filter((index) => isShown(session, index));
+  return session.order.filter((index) => isShown(session, index));
 }
 
 function toggleResetTimes(session: Session): void {
@@ -238,14 +247,21 @@ function toggleResetTimes(session: Session): void {
   draw(session);
 }
 
+function cycleSort(session: Session): void {
+  session.sort = nextSortOrder(session.sort);
+  reorder(session);
+  draw(session);
+}
+
 function moveDown(session: Session): void {
-  session.selected = shownIndexes(session).find((index) => index > session.selected) ?? session.selected;
+  const shown = shownIndexes(session);
+  session.selected = shown[shown.indexOf(session.selected) + 1] ?? session.selected;
   draw(session);
 }
 
 function moveUp(session: Session): void {
-  const before = shownIndexes(session).filter((index) => index < session.selected);
-  session.selected = session.selected < 0 ? (shownIndexes(session).at(-1) ?? -1) : (before.at(-1) ?? session.selected);
+  const shown = shownIndexes(session);
+  session.selected = session.selected < 0 ? (shown.at(-1) ?? -1) : (shown[shown.indexOf(session.selected) - 1] ?? session.selected);
   draw(session);
 }
 
@@ -276,14 +292,15 @@ function toggleSelected(session: Session): void {
   if (usage !== undefined) toggleSettled(session, session.selected, usage);
 }
 
-function neighbour(shown: number[], from: number): number {
-  return shown.find((index) => index > from) ?? shown.at(-1) ?? -1;
+function neighbour(session: Session, shown: number[], from: number): number {
+  const at = session.order.indexOf(from);
+  return shown.find((index) => session.order.indexOf(index) >= at) ?? shown.at(-1) ?? -1;
 }
 
 function reselect(session: Session): void {
   const shown = shownIndexes(session);
   if (session.selected < 0 || shown.includes(session.selected)) return;
-  session.selected = neighbour(shown, session.selected);
+  session.selected = neighbour(session, shown, session.selected);
 }
 
 function toggleHidden(session: Session): void {
@@ -359,6 +376,7 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['r', refresh],
   ['R', refreshPanel],
   ['\r', refreshPanel],
+  ['s', cycleSort],
   ['t', toggleResetTimes],
   ['c', copyRoute],
   ['C', copyHigh],
@@ -397,6 +415,8 @@ export function startLive(options: LiveOptions): Promise<void> {
       footer: false,
       showHidden: false,
       absoluteResets: false,
+      sort: 'dashboard',
+      order: options.probes.map((_, index) => index),
       rounds: 0,
       selected: -1,
       graphing: false,

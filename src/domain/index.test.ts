@@ -3,15 +3,18 @@ import {
   HIGH_CHAIN,
   formatCountdown,
   highRouteLine,
+  nextSortOrder,
   nextLocalMidnight,
   notificationEvents,
   openEligibility,
   openHidden,
   openHistory,
   openRoutes,
+  orderPanels,
   projectFull,
   routeDecision,
   routeLine,
+  sortSuffix,
   summariseFleet,
   validInstant,
   type ProviderUsage,
@@ -849,5 +852,40 @@ describe('projectFull', () => {
     expect(projectFull(weekly(80, '2026-09-15T10:00:00.000Z'), NOW)).toBe('2026-09-14T16:00:00.000Z');
     expect(projectFull(weekly(50, '2026-09-15T10:00:00.000Z'), NOW)).toBeUndefined();
     expect(projectFull({ ...weekly(80, '2026-09-15T10:00:00.000Z'), kind: 'other', label: 'WEEK' }, NOW)).toBe('2026-09-14T16:00:00.000Z');
+  });
+});
+
+const ORDER_NOW = '2026-09-13T10:00:00.000Z';
+
+function orderUsage(windows: { usedPct: number; resetsAt?: string }[]): ProviderUsage {
+  return { id: 'x', displayName: 'x', windows: windows.map((window) => ({ label: 'w', kind: 'weekly', ...window })), fetchedAt: ORDER_NOW, status: 'ok' };
+}
+
+describe('orderPanels', () => {
+  it('keeps dashboard order', () => {
+    expect(orderPanels([orderUsage([{ usedPct: 90 }]), orderUsage([{ usedPct: 10 }]), undefined], 'dashboard', ORDER_NOW)).toEqual([0, 1, 2]);
+  });
+
+  it('puts the most headroom first, by the highest window, ties in dashboard order', () => {
+    const usages = [orderUsage([{ usedPct: 50 }]), orderUsage([]), orderUsage([{ usedPct: 10 }, { usedPct: 70 }]), undefined, orderUsage([{ usedPct: 50 }]), orderUsage([{ usedPct: 5 }])];
+    expect(orderPanels(usages, 'headroom', ORDER_NOW)).toEqual([5, 0, 4, 2, 1, 3]);
+  });
+
+  it('puts the earliest future reset first and ignores past or missing resets', () => {
+    const usages = [
+      orderUsage([{ usedPct: 1, resetsAt: '2026-09-15T10:00:00.000Z' }]),
+      orderUsage([{ usedPct: 1, resetsAt: '2026-09-13T09:00:00.000Z' }]),
+      orderUsage([{ usedPct: 1, resetsAt: '2026-09-13T12:00:00.000Z' }, { usedPct: 1, resetsAt: '2026-09-20T10:00:00.000Z' }]),
+      orderUsage([{ usedPct: 1 }]),
+      orderUsage([{ usedPct: 1, resetsAt: '2026-09-15T10:00:00.000Z' }])
+    ];
+    expect(orderPanels(usages, 'reset', ORDER_NOW)).toEqual([2, 0, 4, 1, 3]);
+  });
+
+  it('cycles dashboard, headroom, reset and labels the non-default ones', () => {
+    expect(nextSortOrder('dashboard')).toBe('headroom');
+    expect(nextSortOrder('headroom')).toBe('reset');
+    expect(nextSortOrder('reset')).toBe('dashboard');
+    expect([sortSuffix('dashboard'), sortSuffix('headroom'), sortSuffix('reset')]).toEqual(['', ' · sort: headroom', ' · sort: reset']);
   });
 });
