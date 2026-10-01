@@ -90,10 +90,35 @@ describe('probeCli', () => {
     ['missing', 'claude', 90000, 'claude CLI not found in PATH'],
     ['timeout', 'claude', 90000, 'Command timed out after 90s'],
     ['timeout', 'agy', 60000, 'Command timed out after 60s'],
-    ['exit', 'agy', 60000, 'Command failed or timed out']
+    ['exit', 'agy', 60000, 'Command exited with an error']
   ])('explains a %s failure', async (failure, id, timeoutMs, reason) => {
     const res = await probeCli(ioWith({ stdout: 'weekly', stderr: '', failure }), probeWith({ id, timeoutMs }), 'now');
     expect(res).toMatchObject({ status: 'unavailable', reason, windows: [] });
+  });
+
+  it.each<[string, string, string]>([
+    ['first non-empty line', '\n  Error: not logged in. Run claude login\nmore', 'Command exited with an error: Error: not logged in. Run claude login'],
+    ['whitespace only', ' \n\t\r\n ', 'Command exited with an error'],
+    ['ansi only line skipped', '\x1b[31m\x1b[0m\nboom', 'Command exited with an error: boom'],
+    ['ansi and control', '\x1b[1;31mfail\x1b[0m\x07 \x1b]0;title\x07now\x00!\x1b', 'Command exited with an error: fail now!'],
+    ['carriage return', 'progress\rsecond', 'Command exited with an error: progress'],
+    ['long secret', `token ${'a1_-'.repeat(8)} bad`, 'Command exited with an error: token … bad'],
+    ['short word kept', `${'a'.repeat(31)} ok`, `Command exited with an error: ${'a'.repeat(31)} ok`],
+    ['bearer token', 'Authorization: Bearer abc.def-1 failed', 'Command exited with an error: Authorization: … failed']
+  ])('shows the CLI error line for stderr: %s', async (_case, stderr, reason) => {
+    const res = await probeCli(ioWith({ stdout: '', stderr, failure: 'exit' }), probe, 'now');
+    expect(res).toMatchObject({ status: 'unavailable', reason });
+  });
+
+  it('cuts a long error line to the panel width', async () => {
+    const res = await probeCli(ioWith({ stdout: '', stderr: `${'word '.repeat(40)}`, failure: 'exit' }), probe, 'now');
+    expect(res.status === 'unavailable' && [...res.reason]).toHaveLength(72);
+    expect(res).toMatchObject({ reason: expect.stringMatching(/…$/) });
+  });
+
+  it('leaves a stderr-free timeout reason alone', async () => {
+    const res = await probeCli(ioWith({ stdout: '', stderr: 'Error: x', failure: 'timeout' }), probe, 'now');
+    expect(res).toMatchObject({ reason: 'Command timed out after 60s' });
   });
 
   it('is unavailable with the plan label when the command fails', async () => {

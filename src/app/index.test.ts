@@ -277,7 +277,7 @@ describe('claude and agy windows', () => {
   it.each<[string, CommandRunnerResult, string]>([
     ['missing', { stdout: '', stderr: '', failure: 'missing' }, 'claude CLI not found in PATH'],
     ['hanging', { stdout: '', stderr: '', failure: 'timeout' }, 'Command timed out after 90s'],
-    ['failing', { stdout: '', stderr: '', failure: 'exit' }, 'Command failed or timed out'],
+    ['failing', { stdout: '', stderr: '', failure: 'exit' }, 'Command exited with an error'],
     ['week-less', { stdout: 'Current session: 3% used', stderr: '' }, 'Could not parse usage from output'],
     ['all-models-less', { stdout: 'Current week (Fable): 100% used', stderr: '' }, 'Could not parse usage from output']
   ])('renders a dim unavailable panel for a %s claude', async (_case, result, reason) => {
@@ -290,7 +290,7 @@ describe('claude and agy windows', () => {
   it.each<[string, CommandRunnerResult, string]>([
     ['missing', { stdout: '', stderr: '', failure: 'missing' }, 'agy CLI not found in PATH'],
     ['hanging', { stdout: '', stderr: '', failure: 'timeout' }, 'Command timed out after 60s'],
-    ['failing', { stdout: '', stderr: '', failure: 'exit' }, 'Command failed or timed out'],
+    ['failing', { stdout: '', stderr: '', failure: 'exit' }, 'Command exited with an error'],
     ['silent', { stdout: '', stderr: '' }, 'Could not parse usage from output'],
     ['greeting', { stdout: 'hello world', stderr: '' }, 'Could not parse usage from output']
   ])('renders a dim unavailable panel for a %s agy', async (_case, result, reason) => {
@@ -454,7 +454,7 @@ describe('claude-work panel', () => {
   });
 
   it.each<[string, CommandRunnerResult, string]>([
-    ['exits with code 1', { stdout: '', stderr: '', failure: 'exit' }, 'Command failed or timed out'],
+    ['exits with code 1', { stdout: '', stderr: '', failure: 'exit' }, 'Command exited with an error'],
     ['hangs', { stdout: '', stderr: '', failure: 'timeout' }, 'Command timed out after 90s'],
     ['prints only a session line', { stdout: 'Current session: 0% used', stderr: '' }, 'Could not parse usage from output']
   ])('keeps the personal panel when the work claude %s', async (_case, result, reason) => {
@@ -467,7 +467,7 @@ describe('claude-work panel', () => {
 
   it('keeps the work panel when the personal claude exits with code 1', async () => {
     const output = await runApp(routedRunner({ claude: { stdout: '', stderr: '', failure: 'exit' } }), { NO_COLOR: '1' }, NOW);
-    expect(panelOf(output, 'claude')).toEqual(['claude', 'Command failed or timed out', PERSONAL_CAPTION]);
+    expect(panelOf(output, 'claude')).toEqual(['claude', 'Command exited with an error', PERSONAL_CAPTION]);
     expect(panelOf(output, 'claude-work')).toEqual(['claude-work', ...WORK_ROWS, WORK_CAPTION]);
   });
 
@@ -1516,7 +1516,7 @@ describe('wiring', () => {
   it('renders a dim unavailable panel when kilo exits with an error', async () => {
     const runner = mockRunner({ stdout: '', stderr: '', failure: 'exit' });
     const output = await runApp(runner, {}, NOW);
-    expect(output).toContain('Command failed or timed out');
+    expect(output).toContain('Command exited with an error');
   });
 
   it('probes claude, agy, codex and kilo with their commands and timeouts', async () => {

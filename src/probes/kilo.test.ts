@@ -60,7 +60,7 @@ describe('probeKilo', () => {
   it.each<[string, CommandRunnerResult, string]>([
     ['missing CLI', { stdout: '', stderr: '', failure: 'missing' }, 'kilo CLI not found in PATH'],
     ['timeout', { stdout: '', stderr: '', failure: 'timeout' }, 'Command timed out after 20s'],
-    ['error code', { stdout: 'Balance: $14.15', stderr: '', failure: 'exit' }, 'Command failed or timed out'],
+    ['error code', { stdout: 'Balance: $14.15', stderr: '', failure: 'exit' }, 'Command exited with an error'],
     ['unparseable output', { stdout: 'Name: Max', stderr: '' }, 'Could not parse balance from output']
   ])('handles %s', async (_case, result, reason) => {
     const res = await probeKilo(mockRunner(result), 'now', {});

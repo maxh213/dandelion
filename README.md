@@ -6,7 +6,7 @@ Called dandelion because dandelion seeds can lay dormant for a period of time be
 
 ## Providers
 
-Panels always appear in this order. A provider whose CLI is missing, fails, times out or prints unexpected output renders as a dim panel with the reason.
+Panels always appear in this order. A provider whose CLI is missing, fails, times out or prints unexpected output renders as a dim panel with the reason; when claude, agy or kilo exits with an error, the reason is `Command exited with an error: ` and the first line the CLI wrote to stderr (stripped of control characters, with long secrets replaced by `…`).
 
 - `claude` (claude · personal) - runs `claude -p "/usage"` (90s timeout) and shows the session, weekly and per-model weekly windows with a reset countdown.
 - `claude-work` (claude · work) - runs the same command with `CLAUDE_CONFIG_DIR` set to the work config dir and shows the same windows for the work account. Without that dir it is unavailable and never runs claude.

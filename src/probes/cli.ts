@@ -36,14 +36,35 @@ function assertNever(value: never): never {
   throw new Error(`Unexpected run failure: ${String(value)}`);
 }
 
-function runFailureReason(command: string, timeoutMs: number, failure: RunFailure): string {
+const REASON_CELLS = 72;
+const EXIT_REASON = 'Command exited with an error';
+const ESC = String.fromCharCode(27);
+const ANSI = new RegExp(`${ESC}(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\p{Cc}]*|.)`, 'gu');
+const CONTROL = /\p{Cc}/gu;
+const SECRET = /Bearer\s+[\w.~+/=-]+|[A-Za-z0-9_-]{32,}/gi;
+
+function cleanLine(line: string): string {
+  return line.replace(ANSI, '').replace(CONTROL, '').replace(SECRET, '…').trim();
+}
+
+function cutReason(text: string): string {
+  const cells = [...text];
+  return cells.length > REASON_CELLS ? `${cells.slice(0, REASON_CELLS - 1).join('').trimEnd()}…` : text;
+}
+
+function exitReason(stderr: string): string {
+  const line = stderr.split(/\r\n|\n|\r/).map(cleanLine).find((text) => text !== '');
+  return line === undefined ? EXIT_REASON : cutReason(`${EXIT_REASON}: ${line}`);
+}
+
+function runFailureReason(command: string, timeoutMs: number, failure: RunFailure, stderr: string): string {
   switch (failure) {
     case 'missing':
       return `${command} CLI not found in PATH`;
     case 'timeout':
       return `Command timed out after ${timeoutMs / 1000}s`;
     case 'exit':
-      return 'Command failed or timed out';
+      return exitReason(stderr);
     default:
       return assertNever(failure);
   }
@@ -63,7 +84,7 @@ async function runProbe(runner: CommandRunner, probe: CliProbe, now: string): Pr
   const usage = { id: probe.id, displayName: probe.id, planLabel: probe.planLabel, windows: [], fetchedAt: now };
 
   if (result.failure) {
-    return { ...usage, status: 'unavailable', reason: runFailureReason(command, probe.timeoutMs, result.failure) };
+    return { ...usage, status: 'unavailable', reason: runFailureReason(command, probe.timeoutMs, result.failure, result.stderr) };
   }
 
   const reading = probe.read(result.stdout, now);
