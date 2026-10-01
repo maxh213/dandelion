@@ -157,6 +157,7 @@ function viewOf(session: Session): LiveView {
     flash: session.flash,
     rows: session.screen.rows,
     columns: session.screen.columns,
+    history: session.history,
     graph: session.graphing ? graphOf(session) : undefined
   };
 }

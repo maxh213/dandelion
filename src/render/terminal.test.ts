@@ -1724,3 +1724,91 @@ describe('narrow terminals', () => {
     expect(cellCount(line ?? '')).toBeLessThanOrEqual(11);
   });
 });
+
+describe('usage sparkline', () => {
+  const hoursAgo = (hours: number): string => new Date(Date.parse(NOW) - hours * 3600_000).toISOString();
+  const sample = (slot: number, usedPct: number, hours: number, label = 'weekly'): HistorySample => ({ id: 'claude', slot, label, usedPct, at: hoursAgo(hours) });
+  const usage: ProviderUsage = {
+    id: 'claude',
+    displayName: 'claude',
+    windows: [
+      { label: 'weekly', kind: 'weekly', usedPct: 80, resetsAt: '2026-09-15T10:00:00.000Z' },
+      { label: 'weekly', kind: 'weekly', usedPct: 5, resetsAt: '2026-09-15T10:00:00.000Z' }
+    ],
+    fetchedAt: NOW,
+    status: 'ok'
+  };
+  const rows = (samples: HistorySample[], noColor: boolean, columns?: number, zone?: string): string[] => {
+    const view: LiveView = { slots: [{ id: 'claude', usage }], spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: LINES }, columns, history: { samples: () => samples }, absoluteResets: zone !== undefined, rows: 40 };
+    return renderLiveFrame(view, noColor, NOW).split('\n').filter((line) => line.includes(' ↻ '));
+  };
+  const plain = (line: string): string => line.replace(ANSI_CODE, '');
+  const rising = [sample(0, 10, 20), sample(0, 40, 10), sample(0, 80, 1)];
+
+  it('renders eight cells that rise left to right between the percent and the reset', () => {
+    const [row] = rows(rising, false);
+    const spark = plain(row).match(/% ([▁-█ ]{8}) ↻/)?.[1] ?? '';
+    expect(cellCount(spark)).toBe(8);
+    const levels = [...spark].filter((char) => char !== ' ').map((char) => '▁▂▃▄▅▆▇█'.indexOf(char));
+    expect(levels).toEqual([1, 3, 6]);
+    expect(row).toContain('\x1b[90m');
+    expect(cellCount(plain(row))).toBeLessThanOrEqual(72);
+  });
+
+  it('maps 0% to the lowest and 100% to the highest block and keeps the newest sample per bucket', () => {
+    const [row] = rows([sample(0, 55, 23.9), sample(0, 0, 23.5), sample(0, 100, 0)], false);
+    expect(plain(row)).toMatch(/% ▁ {6}█ ↻/);
+  });
+
+  it('shows nothing, and the unchanged row, with fewer than two samples in the last 24h', () => {
+    const base = rows([], false);
+    expect(rows([sample(0, 40, 2)], false)).toEqual(base);
+    expect(rows([sample(0, 40, 2), sample(0, 50, 30), sample(0, 60, 25)], false)).toEqual(base);
+    expect(plain(base[0])).toMatch(/% ↻/);
+  });
+
+  it('gives windows that share a label at different positions their own sparklines', () => {
+    const samples = [sample(0, 10, 20), sample(0, 90, 2), sample(1, 90, 20), sample(1, 10, 2)];
+    const [first, second] = rows(samples, false).map(plain);
+    expect(first).toContain('▂');
+    expect(first.indexOf('▂')).toBeLessThan(first.indexOf('▇'));
+    expect(second.indexOf('▇')).toBeLessThan(second.indexOf('▂'));
+  });
+
+  it('only joins samples whose label matches the window', () => {
+    expect(rows([sample(0, 10, 20, 'other'), sample(0, 90, 2, 'other')], false)).toEqual(rows([], false));
+  });
+
+  it('uses only ASCII characters under NO_COLOR', () => {
+    const [row] = rows([sample(0, 0, 20), sample(0, 30, 14), sample(0, 60, 8), sample(0, 80, 4), sample(0, 100, 1)], true);
+    expect(row).not.toMatch(/[^\x20-\x7e↻]/u);
+    expect(row).toMatch(/% [ _.\-=#]{8} ↻/);
+    expect(row).not.toContain('\x1b');
+    expect(row).toContain('_');
+    expect(row).toContain('#');
+  });
+
+  it('is the first thing dropped as the terminal narrows, before the countdown is cut', () => {
+    const wide = rows(rising, true, 72);
+    const narrow = rows(rising, true, 60);
+    expect(wide[0]).toMatch(/% [ _.\-=#]{8} ↻/);
+    expect(narrow).toEqual(rows([], true, 60));
+    expect(narrow[0]).toMatch(/↻ \d+d\d+h$/);
+    [72, 70, 66, 64, 60, 50].forEach((columns) => {
+      rows(rising, true, columns).forEach((line) => expect(cellCount(line)).toBeLessThanOrEqual(columns));
+      rows(rising, true, columns).forEach((line) => expect(line).toMatch(/↻ \d+d\d+h$/));
+    });
+  });
+
+  it('keeps the sparkline in the absolute-time layout without overflowing', () => {
+    const [row] = rows(rising, true, 80, 'UTC');
+    expect(row).toMatch(/% [ _.\-=#]{8} ↻ /);
+    expect(cellCount(row)).toBeLessThanOrEqual(80);
+  });
+
+  it('leaves the compact view and plain panels unchanged', () => {
+    const marks: PanelMarks = { selected: false, ineligible: false };
+    const ok = usage as Extract<ProviderUsage, { status: 'ok' }>;
+    expect(renderPanelOk(ok, true, NOW, { ...marks, samples: [] })).toBe(renderPanelOk(ok, true, NOW, marks));
+  });
+});

@@ -1,4 +1,4 @@
-import { elapsedFraction, formatCountdown, formatResetAt, isStale, printable, projectFull, usageClass, type Balance, type ClaudeStatus, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { elapsedFraction, formatCountdown, formatResetAt, isStale, printable, projectFull, usageClass, type Balance, type ClaudeStatus, type HistorySample, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -17,8 +17,14 @@ const ROUTING_OFF = 'routing off';
 const HIDDEN = 'hidden';
 const MARKER = '▸ ';
 const COMPACT_LEAD_CELLS = 16;
+const SPARK_BUCKETS = 8;
+const SPARK_SPAN_MS = 24 * 60 * 60 * 1000;
+const SPARK_BUCKET_MS = SPARK_SPAN_MS / SPARK_BUCKETS;
+const SPARK_MIN_SAMPLES = 2;
+const SPARK_BLOCKS = [...'▁▂▃▄▅▆▇█'];
+const SPARK_ASCII = [...'_.-=#'];
 
-export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number; status?: ClaudeStatus };
+export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number; status?: ClaudeStatus; samples?: HistorySample[] };
 
 export type Layout = { width: number; label: number; gauge: number };
 
@@ -281,20 +287,49 @@ function paintSlice(chars: string[], paint: (text: string) => string): string {
   return chars.length === 0 ? '' : paint(chars.join(''));
 }
 
-function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, mark: (text: string) => string, absoluteZone: string | undefined, layout: Layout): string {
-  const gauge = paceGauge(window, noColor, now, paint, mark, layout.gauge);
+function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, mark: (text: string) => string, absoluteZone: string | undefined, layout: Layout, spark = ''): string {
+  const gauge = paceGauge(window, noColor, now, paint, mark, layout.gauge - cellCount(spark));
   const percent = paint(`${window.usedPct}%`.padStart(PERCENT_CELLS));
   const label = fitLabel(window.label, absoluteZone === undefined ? layout.label : layout.label - (LABEL_CELLS - ABSOLUTE_LABEL_CELLS));
-  return `${label} ${gauge} ${percent}${countdown(window.resetsAt, now, absoluteZone)}`;
+  return `${label} ${gauge} ${percent}${spark}${countdown(window.resetsAt, now, absoluteZone)}`;
 }
 
-export function renderWindowRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone?: string, width?: number): string {
+export function renderWindowRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone?: string, width?: number, spark?: string): string {
   const style = STYLE_TOKENS[usageClass(window.usedPct)];
-  return rowWith(window, noColor, now, (text) => styled(text, style, noColor), (text) => dim(text, noColor), absoluteZone, layoutOf(width));
+  return rowWith(window, noColor, now, (text) => styled(text, style, noColor), (text) => dim(text, noColor), absoluteZone, layoutOf(width), spark);
 }
 
-function pacedRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone: string | undefined, width?: number): string {
-  const row = renderWindowRow(window, noColor, now, absoluteZone, width);
+function sparkLevel(usedPct: number, glyphs: string[]): string {
+  return glyphs[Math.round((Math.min(100, Math.max(0, usedPct)) / 100) * (glyphs.length - 1))];
+}
+
+function sparkBucket(sample: HistorySample, from: number): number {
+  return Math.min(SPARK_BUCKETS - 1, Math.floor((Date.parse(sample.at) - from) / SPARK_BUCKET_MS));
+}
+
+function recentSamples(samples: HistorySample[], window: UsageWindow, slot: number, now: string): HistorySample[] {
+  const to = Date.parse(now);
+  const own = samples.filter((sample) => sample.slot === slot && sample.label === window.label);
+  return own.filter((sample) => Date.parse(sample.at) >= to - SPARK_SPAN_MS && Date.parse(sample.at) <= to).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
+function sparkline(samples: HistorySample[], now: string, noColor: boolean): string {
+  const from = Date.parse(now) - SPARK_SPAN_MS;
+  const cells = Array.from({ length: SPARK_BUCKETS }, () => ' ');
+  samples.forEach((sample) => {
+    cells[sparkBucket(sample, from)] = sparkLevel(sample.usedPct, noColor ? SPARK_ASCII : SPARK_BLOCKS);
+  });
+  return ` ${dim(cells.join(''), noColor)}`;
+}
+
+function sparkFor(window: UsageWindow, slot: number, noColor: boolean, now: string, marks: PanelMarks): string | undefined {
+  const recent = recentSamples(marks.samples ?? [], window, slot, now);
+  const roomy = layoutOf(marks.width).gauge - SPARK_BUCKETS - 1 >= MIN_GAUGE_CELLS;
+  return recent.length >= SPARK_MIN_SAMPLES && roomy ? sparkline(recent, now, noColor) : undefined;
+}
+
+function pacedRow(window: UsageWindow, slot: number, noColor: boolean, now: string, marks: PanelMarks): string {
+  const row = renderWindowRow(window, noColor, now, marks.absoluteZone, marks.width, sparkFor(window, slot, noColor, now, marks));
   const full = projectFull(window, now);
   return full === undefined ? row : `${row}\n${dim(`  → 100% in ~${formatCountdown(full, now)} (before reset)`, noColor)}`;
 }
@@ -346,7 +381,7 @@ function captionLine(usage: ProviderUsage, marks: PanelMarks): string {
 type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
 type FailedUsage = Exclude<ProviderUsage, OkUsage>;
 
-function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow) => string, paint: (text: string, usedPct: number) => string, layout: Layout): string[] {
+function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow, slot: number) => string, paint: (text: string, usedPct: number) => string, layout: Layout): string[] {
   if (usage.windows.length === 0) return [usage.note ?? balanceLine(usage.balance, noColor, paint, layout)];
   return usage.windows.map(row);
 }
@@ -379,7 +414,7 @@ function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, marks: 
     markedRule(marks, noColor),
     headerLine(usage.displayName, marks, (text) => dim(text, noColor)),
     ...statusRows(marks, noColor),
-    ...panelBody(usage, noColor, (window) => pacedRow(window, noColor, now, marks.absoluteZone, marks.width), usageStyle(noColor), layoutOf(marks.width)),
+    ...panelBody(usage, noColor, (window, slot) => pacedRow(window, slot, noColor, now, marks), usageStyle(noColor), layoutOf(marks.width)),
     ...snapshotLines(usage, now).map((line) => dim(line, noColor)),
     dim(captionLine(usage, marks), noColor)
   ].join('\n');

@@ -9,6 +9,7 @@ import {
   sortSuffix,
   summariseFleet,
   type ClaudeStatus,
+  type History,
   type HistorySample,
   type ProviderUsage,
   type RouteLines,
@@ -77,6 +78,7 @@ export type LiveView = {
   rows?: number;
   columns?: number;
   status?: ClaudeStatus;
+  history?: Pick<History, 'samples'>;
   graph?: { id: string; samples: HistorySample[]; usage: ProviderUsage | undefined };
 };
 
@@ -144,9 +146,13 @@ function isHidden(view: LiveView, slot: LiveSlot): boolean {
   return view.hidden?.includes(slot.id) === true;
 }
 
+function samplesOf(view: LiveView, slot: LiveSlot): HistorySample[] | undefined {
+  return view.history?.samples(slot.id);
+}
+
 function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   const caption = view.flash?.index === index ? view.flash.message : undefined;
-  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view), status: STATUS_IDS.has(slot.id) ? view.status : undefined };
+  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view), status: STATUS_IDS.has(slot.id) ? view.status : undefined, samples: samplesOf(view, slot) };
 }
 
 function settledMarks(slot: LiveSlot, usage: ProviderUsage, spinner: number, now: string, marks: PanelMarks): PanelMarks {
