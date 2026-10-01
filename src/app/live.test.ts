@@ -2139,8 +2139,14 @@ describe('external eligibility changes', () => {
     session.disk.text = '{"claude": false}';
     session.press('r');
     await session.settleRound(1);
-    expect(session.lastFrame()).toMatch(/claude +#*-*.*routing off/);
+    expect(session.lastFrame()).toMatch(/^claude +.*routing off/m);
     expect(session.lastFrame()).not.toMatch(/claude-work.*routing off/);
+    expect(routeBox(session)).toContain('model-a high');
+    session.disk.text = '{"claude": false, "claude-work": false}';
+    session.press('r');
+    await session.settleRound(2);
+    expect(routeBox(session)).not.toContain('model-a high');
+    expect(session.lastFrame()).toMatch(/^claude-work +.*routing off/m);
     session.press('q');
     await session.finished;
   });
@@ -2161,6 +2167,13 @@ describe('external eligibility changes', () => {
     const session = await claudeSession();
     session.disk.text = '{"claude": false}';
     session.press('c');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.clipboard.copy).toHaveBeenLastCalledWith(expect.stringContaining('claude-work'));
+    session.disk.text = '{"claude-work": false}';
+    session.press('L');
+    await vi.advanceTimersByTimeAsync(0);
+    session.disk.text = '{"claude": false}';
+    session.press('C');
     await vi.advanceTimersByTimeAsync(0);
     expect(session.clipboard.copy).toHaveBeenLastCalledWith(expect.stringContaining('claude-work'));
     session.disk.text = '{"claude-work": false}';
@@ -2190,11 +2203,14 @@ describe('external eligibility changes', () => {
 
   it('does not read the state file on plain frame redraws', async () => {
     const session = await claudeSession();
+    session.press('r');
     const reads = session.stateReads.mock.calls.length;
+    const framesBefore = session.frames().length;
     await vi.advanceTimersByTimeAsync(1000);
     session.press('?');
     session.press('?');
     session.press('j');
+    expect(session.frames().length).toBeGreaterThan(framesBefore + 5);
     expect(session.stateReads.mock.calls.length).toBe(reads);
     session.press('q');
     await session.finished;
