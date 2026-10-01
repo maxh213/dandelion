@@ -7,6 +7,7 @@ import {
   renderPanelOk,
   renderPanelUnavailable,
   renderDashboard,
+  viewportLines,
   renderWindowRow,
   styleToken,
   STYLE_TOKENS,
@@ -750,23 +751,41 @@ describe('live frame', () => {
       expect(frameOf({ selected: undefined })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL]);
     });
 
-    it('scrolls the region so the selected panel’s header is its first line', () => {
-      expect(frameOf({ selected: 9 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ kilo', `${'balance $14.15'.padEnd(35)} ##############------  71%`.padEnd(72), 'api balance · kilo · 0h0m ago']);
+    it('scrolls only as far as needed to keep the whole selected panel in view', () => {
+      expect(frameOf({ selected: 9 })).toEqual([
+        BANNER,
+        SUMMARY,
+        ...BOX_BLOCK,
+        'no hermes auth — run hermes portal login',
+        'hermes · hermes · 0h0m ago',
+        RULE,
+        '▸ kilo',
+        `${'balance $14.15'.padEnd(35)} ##############------  71%`.padEnd(72),
+        'api balance · kilo · 0h0m ago'
+      ]);
       expect(frameOf({ selected: 6 })).toEqual([
         BANNER,
         SUMMARY,
         ...BOX_BLOCK,
+        RULE,
         '▸ cursor',
         'total                               ################----  80% ↻ 3d0h',
         'auto                                ################----  80% ↻ 3d0h',
         'api                                 ################----  80% ↻ 3d0h',
-        'Ultra · cursor · 0h0m ago',
-        RULE
+        'Ultra · cursor · 0h0m ago'
       ]);
     });
 
     it('walks back to the first panel with the boxes still in the chrome', () => {
-      expect(frameOf({ selected: 0 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2), RULE]);
+      expect(frameOf({ selected: 0 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, RULE, '▸ claude', ...CLAUDE_PANEL.slice(2)]);
+    });
+
+    it.each([0, 4, 9])('shows every panel from the first one when they all fit and %i is selected', (selected) => {
+      const frame = frameOf({ selected, rows: 200 });
+      const ids = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+      expect(frame.slice(6, 8)).toEqual([RULE, selected === 0 ? '▸ claude' : 'claude']);
+      expect(frame.filter((line) => ids.includes(line.replace(/^▸ /, '').split(' ')[0]) && !line.startsWith('=') && !line.includes('·'))).toHaveLength(10);
+      expect(frame.filter((line) => line.startsWith('▸ '))).toEqual([`▸ ${ids[selected]}`]);
     });
 
     it('keeps the selected header visible when that panel is taller than the region', () => {
@@ -791,7 +810,8 @@ describe('live frame', () => {
       expect(grown.slice(0, 12)).toEqual(frameOf());
       expect(grown.at(-1)).toBe('grok');
       expect(frameOf({ rows: 10 })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, ...CLAUDE_PANEL.slice(0, 4)]);
-      expect(frameOf({ rows: 30, selected: 9 })).toEqual(frameOf({ selected: 9 }));
+      expect(frameOf({ rows: 30, selected: 9 })).toHaveLength(30);
+      expect(frameOf({ rows: 30, selected: 9 }).slice(-4)).toEqual([RULE, ...frameOf({ selected: 9 }).slice(-3)]);
     });
 
     it('never clips the once dashboard and draws no boxes there', () => {
@@ -822,13 +842,14 @@ describe('panel marks', () => {
     routes: { lines: LINES },
     ...extra
   });
+  const SELECTED_RULE = `${BOLD}${'━'.repeat(72)}${RESET}`;
   const panelOf = (view: LiveView, noColor = false) => renderLiveFrame(view, noColor, NOW).split('\n').slice(6).join('\n');
 
   it.each<[string, ProviderUsage | undefined, number | undefined, string]>([
     ['unavailable, not selected', unavailableClaude, undefined, `${DIM}${'━'.repeat(72)}${RESET}\n${DIM}claude${' '.repeat(55)}routing off${RESET}\n${DIM}${REASON}${RESET}\n${DIM}${CAPTION}${RESET}`],
-    ['unavailable, selected', unavailableClaude, 0, `${DIM}▸ claude${' '.repeat(53)}routing off${RESET}\n${DIM}${REASON}${RESET}\n${DIM}${CAPTION}${RESET}`],
+    ['unavailable, selected', unavailableClaude, 0, `${SELECTED_RULE}\n${DIM}▸ claude${' '.repeat(53)}routing off${RESET}\n${DIM}${REASON}${RESET}\n${DIM}${CAPTION}${RESET}`],
     ['pending, not selected', undefined, undefined, `${DIM}${'━'.repeat(72)}${RESET}\n${DIM}claude${' '.repeat(55)}routing off${RESET}\n${DIM}⠋ probing…${RESET}`],
-    ['pending, selected', undefined, 0, `${DIM}▸ claude${' '.repeat(53)}routing off${RESET}\n${DIM}⠋ probing…${RESET}`]
+    ['pending, selected', undefined, 0, `${SELECTED_RULE}\n${DIM}▸ claude${' '.repeat(53)}routing off${RESET}\n${DIM}⠋ probing…${RESET}`]
   ])('keeps the tag inside the dim span of an all-dim panel: %s', (_case, usage, selected, bytes) => {
     expect(panelOf(liveView(usage, { selected }))).toBe(bytes);
   });
@@ -837,15 +858,15 @@ describe('panel marks', () => {
     const row = renderWindowRow(WEEKLY, false, NOW);
     expect(renderPanelOk(freshClaude, false, NOW, { selected: true, ineligible: true }).split('\n')[0]).toBe(`${BOLD}${'━'.repeat(72)}${RESET}`);
     expect(panelOf(liveView(freshClaude, { selected: 0 }))).toBe(
-      [`▸ claude${' '.repeat(53)}${DIM}routing off${RESET}`, row, `${DIM}${CAPTION}${RESET}`].join('\n')
+      [SELECTED_RULE, `▸ claude${' '.repeat(53)}${DIM}routing off${RESET}`, row, `${DIM}${CAPTION}${RESET}`].join('\n')
     );
-    expect(panelOf(liveView(freshClaude, { ineligible: [], selected: 0 }))).toBe(`▸ claude\n${row}\n${DIM}${CAPTION}${RESET}`);
+    expect(panelOf(liveView(freshClaude, { ineligible: [], selected: 0 }))).toBe(`${SELECTED_RULE}\n▸ claude\n${row}\n${DIM}${CAPTION}${RESET}`);
     expect(panelOf(liveView(freshClaude, { ineligible: ['claude-work'] }))).toBe(renderPanelOk(freshClaude, false, NOW, { ...PLAIN, age: ' · 0h0m ago' }));
   });
 
   it('keeps the plain rule and ends the tag at column 72 under NO_COLOR', () => {
     const row = renderWindowRow(WEEKLY, true, NOW);
-    expect(panelOf(liveView(freshClaude, { selected: 0 }), true).split('\n')).toEqual([`▸ claude${' '.repeat(53)}routing off`, row, CAPTION]);
+    expect(panelOf(liveView(freshClaude, { selected: 0 }), true).split('\n')).toEqual(['='.repeat(72), `▸ claude${' '.repeat(53)}routing off`, row, CAPTION]);
     const stale = renderPanelOk({ ...freshClaude, snapshotAt: '2026-09-10T00:00:00.000Z' }, true, NOW, { selected: true, ineligible: true });
     expect(stale.split('\n').slice(0, 2)).toEqual(['='.repeat(72), `▸ claude${' '.repeat(53)}routing off`]);
     expect(panelOf(liveView(unavailableClaude), true).split('\n')[1]).toHaveLength(72);
@@ -866,7 +887,7 @@ describe('panel marks', () => {
     expect(header({ spinner: 13 }, true)).toEqual(['='.repeat(72), 'claude ⠸', renderWindowRow(WEEKLY, true, NOW), 'claude · personal · claude · 0h0m ago']);
     expect(header({ spinner: 13 }, false)[1]).toBe('claude');
     expect(header({ spinner: 13 })[1]).toBe('claude');
-    expect(header({ selected: 0 }, true)[0]).toBe('▸ claude ⠋');
+    expect(header({ selected: 0 }, true)[1]).toBe('▸ claude ⠋');
     expect(header({ ineligible: ['claude'] }, true)[1]).toBe(`claude ⠋${' '.repeat(53)}routing off`);
     expect(panelOf({ ...liveView(freshClaude, { ineligible: [] }), slots: [slot(true)] }).split('\n')[1]).toBe('claude ⠋');
     expect(panelOf({ ...liveView(unavailableClaude), slots: [{ id: 'claude', usage: unavailableClaude, probing: true }], ineligible: [] }).split('\n')[1]).toBe(`${DIM}claude ⠋${RESET}`);
@@ -1136,7 +1157,8 @@ describe('route boxes', () => {
   it('never marks a box line as selected', () => {
     const lines = renderLiveFrame(boxView(ROUTED, { selected: 0, slots: [{ id: 'claude', usage: ROUTED[0] }] }), true, NOW).split('\n');
     expect(lines.slice(2, 6).join('\n')).not.toContain('▸');
-    expect(lines[6]).toBe('▸ claude');
+    expect(lines[6]).toBe('='.repeat(72));
+    expect(lines[7]).toBe('▸ claude');
   });
 
   it('never draws the boxes in the once dashboard', () => {
@@ -1310,5 +1332,39 @@ describe('usage graph', () => {
     ['waiting for a round', graphUsage([{ label: 'w', kind: 'weekly', usedPct: 1 }]), 'no history yet · samples are recorded after each refresh round']
   ])('gives the empty graph a reason when the provider is %s', (_name, usage, reason) => {
     expect(renderHistoryView({ ...graphView([]), graph: { id: 'claude', samples: [], usage } }, true).split('\n')).toEqual(['claude · usage over time', reason, 'v usage dropped (reset) · esc/q/g back']);
+  });
+});
+
+const PANELS = ['a1\na2\na3', 'b1\nb2\nb3', 'c1\nc2\nc3', 'd1\nd2\nd3'];
+
+describe('viewportLines', () => {
+  it('shows every line from the top when they fit, whatever is selected', () => {
+    const all = PANELS.flatMap((panel) => panel.split('\n'));
+    expect(viewportLines(PANELS, 3, 12)).toEqual(all);
+    expect(viewportLines(PANELS, 3, 20)).toEqual(all);
+    expect(viewportLines(PANELS, 0, 12)).toEqual(all);
+  });
+
+  it('cuts from the top without a selection', () => {
+    expect(viewportLines(PANELS, undefined, 5)).toEqual(['a1', 'a2', 'a3', 'b1', 'b2']);
+    expect(viewportLines(PANELS, -1, 5)).toEqual(['a1', 'a2', 'a3', 'b1', 'b2']);
+    expect(viewportLines(PANELS, 4, 5)).toEqual(['a1', 'a2', 'a3', 'b1', 'b2']);
+  });
+
+  it('keeps the first panel at the top while the selected one still fits below it', () => {
+    expect(viewportLines(PANELS, 0, 6)).toEqual(['a1', 'a2', 'a3', 'b1', 'b2', 'b3']);
+    expect(viewportLines(PANELS, 1, 6)).toEqual(['a1', 'a2', 'a3', 'b1', 'b2', 'b3']);
+  });
+
+  it('scrolls down just far enough to show the whole selected panel', () => {
+    expect(viewportLines(PANELS, 2, 6)).toEqual(['b1', 'b2', 'b3', 'c1', 'c2', 'c3']);
+    expect(viewportLines(PANELS, 3, 5)).toEqual(['c2', 'c3', 'd1', 'd2', 'd3']);
+    expect(viewportLines(PANELS, 3, 3)).toEqual(['d1', 'd2', 'd3']);
+  });
+
+  it('starts at the header when the selected panel is taller than the region', () => {
+    expect(viewportLines(PANELS, 1, 2)).toEqual(['b2', 'b3']);
+    expect(viewportLines(PANELS, 2, 1)).toEqual(['c2']);
+    expect(viewportLines(PANELS, 0, 0)).toEqual([]);
   });
 });

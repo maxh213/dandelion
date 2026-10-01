@@ -310,3 +310,25 @@ export function fitToWidth(line: string, width: number): string {
   const kept = tokens.filter((token) => isEscape(token) || cells++ < width);
   return `${kept.join('')}${RESET}`;
 }
+
+function panelLines(panels: string[]): string[][] {
+  return panels.map((panel) => panel.split('\n'));
+}
+
+function lineCount(blocks: string[][]): number {
+  return blocks.reduce((sum, block) => sum + block.length, 0);
+}
+
+function topFor(blocks: string[][], selected: number, height: number): number {
+  const start = lineCount(blocks.slice(0, selected));
+  const size = blocks[selected].length;
+  return size > height ? start + 1 : Math.max(0, start + size - height);
+}
+
+export function viewportLines(panels: string[], selected: number | undefined, height: number): string[] {
+  const blocks = panelLines(panels);
+  const lines = blocks.flat();
+  const hasSelection = selected !== undefined && selected >= 0 && selected < blocks.length;
+  const top = hasSelection ? topFor(blocks, selected, height) : 0;
+  return lines.slice(top, top + height);
+}

@@ -470,16 +470,18 @@ describe('live session', () => {
     const kilo = session.lastFrame().split('\n');
     expect(kilo.length).toBeLessThanOrEqual(12);
     expect(kilo[2]?.startsWith('+- route')).toBe(true);
-    expect(kilo[6]).toBe('▸ kilo');
+    expect(kilo[kilo.indexOf('▸ kilo') - 1]).toBe(kilo[6 + kilo.slice(6).findIndex((line) => line.startsWith('='))]);
+    expect(kilo.at(-3)).toBe('▸ kilo');
     expect(kilo).not.toContain('claude');
     IDS.slice(1).forEach(() => session.press('k'));
     const claude = session.lastFrame().split('\n');
     expect(claude.length).toBeLessThanOrEqual(12);
     expect(claude[2]?.startsWith('+- route')).toBe(true);
-    expect(claude[6]).toBe('▸ claude');
+    expect(claude[6]?.startsWith('=')).toBe(true);
+    expect(claude[7]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 9), 'h hide · H show hidden · R refresh panel', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
     session.press('q');
     await session.finished;
   });
@@ -908,6 +910,8 @@ describe('route boxes', () => {
     const HIDDEN_TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 6)}hidden`;
     const headers = (frame: string) => frame.split('\n').filter((line) => IDS.includes(line.replace(/^▸ /, '').split(' ')[0]) && !line.startsWith('='));
 
+    const selectedHeader = (frame: string) => headers(frame).find((line) => line.startsWith('▸ '));
+
     async function settled(overrides: SessionOverrides = {}) {
       const session = startSession(overrides);
       await session.settleRound(0);
@@ -926,7 +930,7 @@ describe('route boxes', () => {
       session.press('h');
       expect(session.hiddenReplace.mock.calls[0][0]).toBe('/s/hidden.json');
       expect(session.hiddenSaved()).toEqual([['agy']]);
-      expect(headers(session.lastFrame())).toEqual(['▸ kimi', 'grok', 'codex', 'cursor', 'kilo']);
+      expect(headers(session.lastFrame())).toEqual(['claude', '▸ kimi', 'grok', 'codex', 'cursor', 'kilo']);
       expect(session.lastFrame().split('\n').at(-1)).toBe(NOTE(1));
       session.press('k');
       expect(headers(session.lastFrame())).toEqual(['▸ claude', 'kimi', 'grok', 'codex', 'cursor', 'kilo']);
@@ -1000,12 +1004,12 @@ describe('route boxes', () => {
       expect(session.lastFrame()).not.toContain('H to show');
       session.press('j');
       session.press('j');
-      expect(headers(session.lastFrame())[0]).toBe(HIDDEN_TAG('▸ agy'));
+      expect(selectedHeader(session.lastFrame())).toBe(HIDDEN_TAG('▸ agy'));
       session.press('h');
       expect(session.hiddenSaved().at(-1)).toEqual(['kilo']);
-      expect(headers(session.lastFrame())[0]).toBe('▸ agy');
+      expect(selectedHeader(session.lastFrame())).toBe('▸ agy');
       session.press('H');
-      expect(headers(session.lastFrame())).toEqual(['▸ agy', 'kimi', 'grok', 'codex', 'cursor']);
+      expect(headers(session.lastFrame())).toEqual(['claude', '▸ agy', 'kimi', 'grok', 'codex', 'cursor']);
       expect(session.lastFrame().split('\n').at(-1)).toBe(NOTE(1));
       await end(session);
     });
@@ -1023,9 +1027,9 @@ describe('route boxes', () => {
       session.press('j');
       session.press('j');
       session.press('j');
-      expect(headers(session.lastFrame())[0]).toBe(HIDDEN_TAG('▸ kimi'));
+      expect(selectedHeader(session.lastFrame())).toBe(HIDDEN_TAG('▸ kimi'));
       session.press('H');
-      expect(headers(session.lastFrame())).toEqual(['▸ grok', 'codex', 'cursor', 'kilo']);
+      expect(headers(session.lastFrame())).toEqual(['claude', 'agy', '▸ grok', 'codex', 'cursor', 'kilo']);
       await end(session);
     });
 
@@ -1033,17 +1037,17 @@ describe('route boxes', () => {
       const session = await settled({ hiddenText: '["agy","kimi"]' });
       session.press('j');
       session.press('\x1b[B');
-      expect(headers(session.lastFrame())[0]).toBe('▸ grok');
+      expect(selectedHeader(session.lastFrame())).toBe('▸ grok');
       session.press('\x1b[A');
       expect(headers(session.lastFrame())).toEqual(['▸ claude', 'grok', 'codex', 'cursor', 'kilo']);
       session.press('k');
-      expect(headers(session.lastFrame())[0]).toBe('▸ claude');
+      expect(selectedHeader(session.lastFrame())).toBe('▸ claude');
       session.press('j');
       session.press('j');
       session.press('j');
       session.press('j');
       session.press('j');
-      expect(headers(session.lastFrame())).toEqual(['▸ kilo']);
+      expect(selectedHeader(session.lastFrame())).toBe('▸ kilo');
       await end(session);
     });
 

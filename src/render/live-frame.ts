@@ -26,6 +26,7 @@ import {
   renderPanel,
   repeatChar,
   splitBanner,
+  viewportLines,
   type PanelMarks
 } from './terminal.ts';
 
@@ -249,23 +250,6 @@ function rowBudget(rows = FALLBACK_ROWS): number {
   return Number.isInteger(rows) && rows > 0 ? rows : FALLBACK_ROWS;
 }
 
-function panelLines(panels: string[]): string[] {
-  return panels.flatMap((panel) => panel.split('\n'));
-}
-
-function fromSelectedHeader(panels: string[], selected: number): string[] {
-  return panelLines(panels.slice(selected)).slice(1);
-}
-
-function hasSelection(selected = -1): selected is number {
-  return selected >= 0;
-}
-
-function regionLines(panels: string[], selected: number | undefined, height: number): string[] {
-  const lines = hasSelection(selected) ? fromSelectedHeader(panels, selected) : panelLines(panels);
-  return lines.slice(0, height);
-}
-
 function summaryOrFlash(view: LiveView, usages: ProviderUsage[], now: string): string {
   return view.flash?.index === ROUTE_FLASH ? view.flash.message : summaryLine(usages, now, absoluteZoneOf(view), widthOf(view));
 }
@@ -468,6 +452,6 @@ function composeFrame(view: LiveView, noColor: boolean, now: string): string {
   const chrome = liveChrome(view, settledUsages(view.slots), noColor, now);
   const footer = view.footer ? liveFooter(noColor) : [];
   const shown = shownIndexes(view);
-  const region = regionLines(livePanels(view, shown, noColor, now), shown.indexOf(view.selected ?? -1), regionHeight(rows, chrome, footer));
+  const region = viewportLines(livePanels(view, shown, noColor, now), shown.indexOf(view.selected ?? -1), regionHeight(rows, chrome, footer));
   return [...chrome, ...region, ...footer].slice(0, rows).join('\n');
 }
