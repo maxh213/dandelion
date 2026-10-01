@@ -58,10 +58,37 @@ async function live(io: ProbeIo, proc: Proc): Promise<void> {
   proc.exit(0);
 }
 
-const SUBCOMMANDS = new Map([['route', route], ['run', run]]);
+const USAGE = [
+  'Usage: dandelion [command]',
+  '',
+  '  dandelion               live dashboard (re-probes every DANDELION_REFRESH_SECONDS)',
+  '  dandelion --once        run every probe once, print the dashboard and exit',
+  '  dandelion route         print the subscription to use right now',
+  '  dandelion route --high  print the strongest model that still has quota',
+  '  dandelion --help        print this usage',
+  '',
+  'See README.md for keys, environment variables and the other commands.',
+  ''
+].join('\n');
+
+async function help(_io: ProbeIo, proc: Proc): Promise<void> {
+  proc.stdout.write(USAGE);
+}
+
+async function unknown(_io: ProbeIo, proc: Proc): Promise<void> {
+  proc.stderr.write(`dandelion: unknown command ${proc.argv[2]}\n${USAGE}`);
+  proc.exit(2);
+}
+
+const SUBCOMMANDS = new Map([['route', route], ['run', run], ['help', help], ['--help', help], ['-h', help]]);
+
+function isUnknownCommand(argv: string[]): boolean {
+  return argv.length > 2 && !argv[2].startsWith('-');
+}
 
 function modeOf(proc: Proc): (io: ProbeIo, proc: Proc) => Promise<void> {
   if (proc.argv.includes('--json')) return json;
+  if (isUnknownCommand(proc.argv)) return unknown;
   return isLive(proc) ? live : (io, p) => main(io, p.env, p, new Date().toISOString());
 }
 

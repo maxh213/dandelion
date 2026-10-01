@@ -309,6 +309,28 @@ describe('main', () => {
     expect(vi.mocked(runRoute).mock.calls[0][2].mode).toBe(mode);
   });
 
+  it.each<[string]>([['--help'], ['-h'], ['help']])('runIfMain %s prints the usage to stdout, exits 0 and runs no probe', async (arg) => {
+    const run = vi.fn(async () => ({ stdout: '', stderr: '' }));
+    const io: ProbeIo = { ...routeIo, runner: { run } };
+    const { proc, output, errors } = procOf(['node', MAIN, arg, 'extra'], true, true);
+    await runIfMain(MAIN_URL, MAIN, io, proc);
+    expect(output()).toMatch(/^Usage: dandelion \[command\]\n[\s\S]*dandelion route --high[\s\S]*README\.md[\s\S]*\n$/);
+    expect(errors()).toBe('');
+    expect(proc.exit).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it.each<[string[]]>([[['rout']], [['routes']], [['rout', '--once']], [['x']]])('runIfMain %j reports an unknown command on stderr, exits 2 and runs no probe', async (args) => {
+    const run = vi.fn(async () => ({ stdout: '', stderr: '' }));
+    const io: ProbeIo = { ...routeIo, runner: { run } };
+    const { proc, output, errors } = procOf(['node', MAIN, ...args], true, true);
+    await runIfMain(MAIN_URL, MAIN, io, proc);
+    expect(errors()).toMatch(new RegExp(`^dandelion: unknown command ${args[0]}\\nUsage: dandelion \\[command\\]\\n[\\s\\S]*README\\.md[\\s\\S]*\\n$`));
+    expect(output()).toBe('');
+    expect(proc.exit).toHaveBeenCalledExactlyOnceWith(2);
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it.each<[string[]]>([[['--json']], [['--once', '--json']], [['--json', '--once']], [['x', '--json']]])('runIfMain %j prints one JSON line on two terminals without live mode and exits 0', async (args) => {
     const { proc, output, errors, keyboard } = procOf(['node', MAIN, ...args], true, true);
     const before = new Date().toISOString();
@@ -378,7 +400,7 @@ describe('main', () => {
     expect(proc.exit).toHaveBeenCalledWith(1);
   });
 
-  it.each([[['--once', 'route']], [['routes']], [['--once', 'route', '--high']]])('runIfMain keeps the dashboard for %j', async (args) => {
+  it.each([[['--once', 'route']], [['--once', 'route', '--high']]])('runIfMain keeps the dashboard for %j', async (args) => {
     vi.mocked(runRoute).mockClear();
     const { proc, output } = procOf(['node', MAIN, ...args], true, false);
     await runIfMain(MAIN_URL, MAIN, profileIo, proc);
