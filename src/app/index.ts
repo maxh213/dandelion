@@ -17,6 +17,7 @@ import {
   type LaunchedProcess,
   type Launcher,
   type ProbeIo,
+  type ProviderProbe,
   type RpcChild,
   type RpcSpawner,
   type RunFailure
@@ -232,8 +233,24 @@ export function isEntryFile(moduleUrl: string, argv1: string): boolean {
   return realPath(argv1) === realPath(fileURLToPath(moduleUrl));
 }
 
+function disabledIds(env: Record<string, string | undefined>): string[] {
+  const value = 'DANDELION_DISABLE' in env ? env['DANDELION_DISABLE'] : undefined;
+  return (value ?? '').split(',').map((id) => id.trim()).filter((id) => id !== '');
+}
+
+function enabledProbes(io: ProbeIo, env: Record<string, string | undefined>): ProviderProbe[] {
+  const disabled = new Set(disabledIds(env));
+  return providerProbes(io, env).filter(({ id }) => !disabled.has(id));
+}
+
+export function disableWarning(io: ProbeIo, env: Record<string, string | undefined>): string {
+  const known = new Set(providerProbes(io, env).map(({ id }) => id));
+  const unknown = new Set(disabledIds(env).filter((id) => !known.has(id)));
+  return [...unknown].map((id) => `dandelion: DANDELION_DISABLE: unknown provider ${id}\n`).join('');
+}
+
 function probeOnce(io: ProbeIo, env: Record<string, string | undefined>, now: string) {
-  return Promise.all(providerProbes(io, env).map(({ probe }) => probe(now)));
+  return Promise.all(enabledProbes(io, env).map(({ probe }) => probe(now)));
 }
 
 function readText(path: string): string {
@@ -305,7 +322,7 @@ export type CachedRouteRequest = RouteRequest & { maxAge?: number };
 
 function recentUsages(io: ProbeIo, env: Record<string, string | undefined>, request: { now: string; maxAge?: number }): ProviderUsage[] | undefined {
   if (request.maxAge === undefined) return undefined;
-  const ids = providerProbes(io, env).map(({ id }) => id);
+  const ids = enabledProbes(io, env).map(({ id }) => id);
   return snapshotOf(io, env).fresh(ids, request.now, request.maxAge);
 }
 
@@ -393,7 +410,7 @@ export function runLive(
 ): Promise<number> {
   registry.closed = false;
   return startLive({
-    probes: providerProbes(io, env),
+    probes: enabledProbes(io, env),
     env,
     launchOf: (routeLine) => launchOf(routeLine, [], env, io.reader.homeDir()),
     keyboard,

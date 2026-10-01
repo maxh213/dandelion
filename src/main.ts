@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isEntryFile, processZone, routesWarning, runApp, runJson, runLine, isMaxAge, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
+import { disableWarning, isEntryFile, processZone, routesWarning, runApp, runJson, runLine, isMaxAge, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -121,6 +121,7 @@ function modeOf(proc: Proc): (io: ProbeIo, proc: Proc) => Promise<void> {
 
 export function runIfMain(metaUrl: string, argv1: string, io: ProbeIo, proc: Proc): Promise<void> {
   if (!isEntryFile(metaUrl, argv1)) return Promise.resolve();
+  proc.stderr.write(disableWarning(io, proc.env));
   return (SUBCOMMANDS.get(proc.argv[2]) ?? modeOf(proc))(io, proc);
 }
 

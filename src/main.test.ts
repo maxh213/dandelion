@@ -206,6 +206,12 @@ describe('main', () => {
     expect(output.endsWith('\n')).toBe(true);
   });
 
+  it('runIfMain prints the DANDELION_DISABLE warning once on stderr and routes as usual', async () => {
+    const { proc, errors } = procOf(['node', MAIN, 'route'], true, true, { DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_DISABLE: ' kimi , nosuch' });
+    await runIfMain(MAIN_URL, MAIN, profileIo, proc);
+    expect(errors()).toBe('dandelion: DANDELION_DISABLE: unknown provider nosuch\n');
+  });
+
   it('runIfMain writes to stdout when invoked as the entry file', async () => {
     const { proc, output } = procOf(['node', MAIN], true, undefined);
     await runIfMain(MAIN_URL, MAIN, profileIo, proc);
