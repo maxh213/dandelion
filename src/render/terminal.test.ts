@@ -669,43 +669,55 @@ describe('live frame', () => {
     it('shows one line per provider with the worst window and the soonest reset', () => {
       const rows = compact(background());
       expect(rows).toHaveLength(7);
-      expect(rows[0]).toBe('  claude        #################### 100% ↻ 8h40m');
-      expect(rows[1]).toBe('  agy           ###############-----  75% ↻ 12h13m');
-      expect(rows[2]).toBe('  kimi          ############--------  59% ↻ 5d0h');
+      expect(rows[0]).toBe('  claude            #################### 100% ↻ 8h40m');
+      expect(rows[1]).toBe('  agy               ###############-----  75% ↻ 12h13m');
+      expect(rows[2]).toBe('  kimi              ############--------  59% ↻ 5d0h');
     });
 
     it('omits the reset when no window has one and ignores other windows for the gauge', () => {
       const rows = compact([okUsage('x', [{ label: 'a', kind: 'other', usedPct: 99 }, { label: 'b', kind: 'weekly', usedPct: 20 }]), okUsage('y', [{ label: 'a', kind: 'other', usedPct: 99 }])]);
-      expect(rows).toEqual(['  x             ####----------------  20%', '  y             ####################  99%']);
+      expect(rows).toEqual(['  x                 ####----------------  20%', '  y                 ####################  99%']);
     });
 
     it('skips resets already in the past when picking the soonest one', () => {
       const past = '2026-09-13T09:55:00.000Z';
       const later = '2026-09-13T12:00:00.000Z';
       const windows = [{ label: 'a', kind: 'rolling' as const, usedPct: 50, resetsAt: past }, { label: 'b', kind: 'weekly' as const, usedPct: 20, resetsAt: later }];
-      expect(compact([okUsage('x', windows)])[0]).toBe('  x             ##########----------  50% ↻ 2h0m');
-      expect(compact([okUsage('x', windows)], { absoluteResets: true, zone: 'UTC' })[0]).toMatch(/^ {2}x {13}#{10}-{10} {2}50% ↻ .*12:00/);
+      expect(compact([okUsage('x', windows)])[0]).toBe('  x                 ##########----------  50% ↻ 2h0m');
+      expect(compact([okUsage('x', windows)], { absoluteResets: true, zone: 'UTC' })[0]).toMatch(/^ {2}x {17}#{10}-{10} {2}50% ↻ .*12:00/);
     });
 
     it('shows no reset when every reset has already passed', () => {
       const windows = [{ label: 'a', kind: 'rolling' as const, usedPct: 50, resetsAt: '2026-09-13T09:55:00.000Z' }];
-      expect(compact([okUsage('x', windows)])[0]).toBe('  x             ##########----------  50%');
+      expect(compact([okUsage('x', windows)])[0]).toBe('  x                 ##########----------  50%');
     });
 
     it('shows the note, the balance or the reason dim and cut to the width', () => {
       const long = { ...unavailable('hermes'), reason: 'r'.repeat(100) } as ProviderUsage;
       const rows = compact([okUsage('codex', [], { note: 'api-key billing · no usage windows' }), background()[6], long, okUsage('junie', [])]);
-      expect(rows[0]).toBe('  codex         api-key billing · no usage windows');
-      expect(rows[1]).toBe('  kilo          balance $14.15');
-      expect(rows[2]).toBe(`  hermes        ${'r'.repeat(54)}…`);
-      expect(rows[3]).toBe('  junie         ');
+      expect(rows[0]).toBe('  codex             api-key billing · no usage windows');
+      expect(rows[1]).toBe('  kilo              balance $14.15');
+      expect(rows[2]).toBe(`  hermes            ${'r'.repeat(50)}…`);
+      expect(rows[3]).toBe('  junie             ');
       expect(sizes(rows).every((size) => size <= 72)).toBe(true);
     });
 
     it('marks the selection, routing off and the spinner and shows the pending spinner', () => {
       const rows = compact([background()[0], unavailable('junie'), undefined], { selected: 0, ineligible: ['claude'], slots: [{ id: 'claude', usage: background()[0], probing: true }, { id: 'junie', usage: unavailable('junie') }, { id: 'p2', usage: undefined }], spinner: 1 });
-      expect(rows[0]).toBe(`▸ claude ⠙      #################### 100% ↻ 8h40m            routing off`);
-      expect(rows[2]).toBe('  p2            ⠙ probing…');
+      expect(rows[0]).toBe(`▸ claude ⠙          #################### 100% ↻ 8h40m        routing off`);
+      expect(rows[2]).toBe('  p2                ⠙ probing…');
+    });
+
+    it('starts every gauge in the same column for the longest provider id, selected, plain and probing', () => {
+      const windows = [{ label: 'a', kind: 'weekly' as const, usedPct: 50 }];
+      const gaugeColumn = (id: string, extra: Partial<LiveView>): number => {
+        const rows = compact([okUsage(id, windows)], { slots: [{ id, usage: okUsage(id, windows), probing: extra.spinner !== undefined }], ...extra });
+        return rows[0].indexOf('#');
+      };
+      const columns = [{}, { selected: 0 }, { selected: 0, spinner: 1 }, { spinner: 1 }].flatMap((extra) => ['claude', 'claude-deepseek'].map((id) => gaugeColumn(id, extra)));
+      expect(new Set(columns)).toEqual(new Set([20]));
+      const note = compact([unavailable('claude-deepseek')], { selected: 0, spinner: 1, slots: [{ id: 'claude-deepseek', usage: unavailable('claude-deepseek'), probing: true }] })[0];
+      expect(note.slice(0, 20)).toBe('▸ claude-deepseek ⠙ ');
     });
 
     it('keeps long rows within the width when flags and absolute times combine', () => {
@@ -715,7 +727,7 @@ describe('live frame', () => {
     });
 
     it('shows a flash in place of the row and paints bold and coloured with colour on', () => {
-      expect(compact(background(), { flash: { index: 0, message: 'routing state not saved' } })[0]).toBe('  claude        routing state not saved');
+      expect(compact(background(), { flash: { index: 0, message: 'routing state not saved' } })[0]).toBe('  claude            routing state not saved');
       const [selected, plain] = compact(background(), { selected: 0 }, false);
       expect(selected).toContain('\x1b[1m\x1b[35m');
       expect(selected.startsWith('\x1b[1m▸ claude')).toBe(true);
@@ -724,8 +736,8 @@ describe('live frame', () => {
     });
 
     it('dims unavailable rows and bolds a selected one', () => {
-      expect(compact([unavailable('junie')], {}, false)[0]).toBe('\x1b[90m  junie         junie CLI not found in PATH\x1b[0m');
-      expect(compact([unavailable('junie')], { selected: 0 }, false)[0]).toBe('\x1b[1m\x1b[90m▸ junie         junie CLI not found in PATH\x1b[0m');
+      expect(compact([unavailable('junie')], {}, false)[0]).toBe('\x1b[90m  junie             junie CLI not found in PATH\x1b[0m');
+      expect(compact([unavailable('junie')], { selected: 0 }, false)[0]).toBe('\x1b[1m\x1b[90m▸ junie             junie CLI not found in PATH\x1b[0m');
     });
 
     it('fits ten providers with the banner, summary and route boxes in 24 rows', () => {
