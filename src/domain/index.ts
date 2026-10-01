@@ -259,3 +259,20 @@ export function orderPanels(usages: (ProviderUsage | undefined)[], order: SortOr
 export function sortSuffix(order: SortOrder): string {
   return order === 'dashboard' ? '' : ` · sort: ${order}`;
 }
+
+const REPROBE_GRACE_MS = MS_PER_MINUTE;
+
+export function passedResets(usage: ProviderUsage | undefined, now: string): string[] {
+  if (usage?.status !== 'ok') return [];
+  const resets = usage.windows.flatMap((window) => (window.resetsAt === undefined ? [] : [window.resetsAt]));
+  return resets.filter((resetsAt) => Date.parse(now) - Date.parse(resetsAt) >= REPROBE_GRACE_MS);
+}
+
+export function resetKey(index: number, resetsAt: string): string {
+  return `${index}|${resetsAt}`;
+}
+
+export function dueReprobes(usages: (ProviderUsage | undefined)[], now: string, handled: ReadonlySet<string>): number[] {
+  const due = (usage: ProviderUsage | undefined, index: number) => passedResets(usage, now).some((resetsAt) => !handled.has(resetKey(index, resetsAt)));
+  return usages.flatMap((usage, index) => (due(usage, index) ? [index] : []));
+}

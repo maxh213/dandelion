@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
+import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -72,6 +72,7 @@ type Session = LiveOptions & {
   selected: number;
   graphing: boolean;
   notified: Set<string>;
+  reprobed: Set<string>;
   flash?: Flash;
   frameTimer?: Timer;
   refreshTimer?: Timer;
@@ -160,6 +161,7 @@ function stale(session: Session): boolean {
 function tick(session: Session): void {
   if (stale(session)) refresh(session);
   session.spinner += 1;
+  reprobeAfterReset(session);
   draw(session);
   scheduleTick(session);
 }
@@ -236,14 +238,26 @@ function panelBusy(session: Session, index: number): boolean {
   return session.running === true || session.quitting || session.inFlight.has(index);
 }
 
-function refreshPanel(session: Session): void {
-  const index = session.selected;
+function refreshAt(session: Session, index: number): void {
   if (index < 0 || panelBusy(session, index)) return;
   session.generations[index] += 1;
   const generation = session.generations[index];
   session.inFlight.add(index);
   void session.probes[index].probe(session.clock()).then((usage) => settlePanel(session, index, generation, usage));
   draw(session);
+}
+
+function refreshPanel(session: Session): void {
+  refreshAt(session, session.selected);
+}
+
+function reprobeAfterReset(session: Session): void {
+  const now = session.clock();
+  for (const index of dueReprobes(session.results, now, session.reprobed)) {
+    if (panelBusy(session, index)) continue;
+    for (const resetsAt of passedResets(session.results[index], now)) session.reprobed.add(resetKey(index, resetsAt));
+    refreshAt(session, index);
+  }
 }
 
 function toggleFooter(session: Session): void {
@@ -468,6 +482,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       selected: -1,
       graphing: false,
       notified: new Set(),
+      reprobed: new Set(),
       quitting: false,
       suspended: false,
       done

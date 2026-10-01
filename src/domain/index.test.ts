@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   HIGH_CHAIN,
+  dueReprobes,
   formatCountdown,
   highRouteLine,
   nextSortOrder,
@@ -11,6 +12,8 @@ import {
   openHistory,
   openRoutes,
   orderPanels,
+  passedResets,
+  resetKey,
   projectFull,
   routeDecision,
   routeLine,
@@ -887,5 +890,33 @@ describe('orderPanels', () => {
     expect(nextSortOrder('headroom')).toBe('reset');
     expect(nextSortOrder('reset')).toBe('dashboard');
     expect([sortSuffix('dashboard'), sortSuffix('headroom'), sortSuffix('reset')]).toEqual(['', ' · sort: headroom', ' · sort: reset']);
+  });
+});
+
+describe('dueReprobes', () => {
+  const NOW = '2026-09-13T10:00:00.000Z';
+  const PAST = '2026-09-13T09:59:00.000Z';
+  const okWith = (...resets: (string | undefined)[]): ProviderUsage => ({
+    id: 'claude',
+    displayName: 'claude',
+    windows: resets.map((resetsAt) => ({ label: 'w', kind: 'weekly', usedPct: 50, resetsAt })),
+    fetchedAt: NOW,
+    status: 'ok'
+  });
+  const failed: ProviderUsage = { id: 'agy', displayName: 'agy', windows: [], fetchedAt: NOW, status: 'error', reason: 'down' };
+
+  it('returns providers with a reset passed by at least 60s', () => {
+    expect(dueReprobes([okWith(PAST)], NOW, new Set())).toEqual([0]);
+    expect(dueReprobes([okWith('2026-09-13T09:59:00.001Z')], NOW, new Set())).toEqual([]);
+    expect(passedResets(okWith(PAST, '2026-09-14T00:00:00.000Z', undefined), NOW)).toEqual([PAST]);
+  });
+
+  it('ignores future resets, missing resets, unsettled and non-ok providers', () => {
+    expect(dueReprobes([okWith('2026-09-14T00:00:00.000Z'), okWith(undefined), undefined, failed], NOW, new Set())).toEqual([]);
+  });
+
+  it('skips a handled key but not another reset value or another provider', () => {
+    const handled = new Set([resetKey(0, PAST)]);
+    expect(dueReprobes([okWith(PAST), okWith(PAST), okWith(PAST, '2026-09-13T09:00:00.000Z')], NOW, handled)).toEqual([1, 2]);
   });
 });

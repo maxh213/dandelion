@@ -1514,3 +1514,76 @@ describe('fix key', () => {
     });
   });
 });
+
+describe('re-probe after a reset', () => {
+  const RESET = '2026-09-13T10:05:00.000Z';
+  const tripped = (id: string, fetchedAt: string, usedPct = 95): Usage => ({ ...usageOf(id, fetchedAt), windows: [{ label: '5h', kind: 'rolling', usedPct, resetsAt: RESET }] });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date(START));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const counts = (session: ReturnType<typeof startSession>) => session.probes.map(({ calls }) => calls.length);
+
+  it('re-probes only that provider 60s after its reset, keeping rows and a spinner, then recomputes', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '3600' } });
+    await session.settleRound(0, { claude: tripped('claude', START) });
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 59 * 1000);
+    expect(counts(session)).toEqual(IDS.map(() => 1));
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(counts(session)).toEqual([2, ...IDS.slice(1).map(() => 1)]);
+    expect(session.lastFrame()).toMatch(/claude [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
+    expect(session.lastFrame()).toContain('95%');
+    session.probes[0].calls[1].resolve(tripped('claude', session.probes[0].calls[1].now, 3));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.lastFrame()).toContain('3%');
+    expect(session.lastFrame()).not.toContain('95%');
+    session.press('q');
+    await session.finished;
+  });
+
+  it('re-probes at most once per passed reset value', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '3600' } });
+    await session.settleRound(0, { claude: tripped('claude', START) });
+    await vi.advanceTimersByTimeAsync(7 * 60 * 1000);
+    session.probes[0].calls[1].resolve(tripped('claude', session.probes[0].calls[1].now));
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+    expect(session.probes[0].calls).toHaveLength(2);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('waits for a running round and does not re-probe a panel already probing', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '3600' } });
+    await session.settleRound(0, { claude: tripped('claude', START) });
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    session.press('r');
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+    expect(counts(session)).toEqual(IDS.map(() => 2));
+    session.probes.forEach(({ probe, calls }) => calls[1].resolve(probe.id === 'claude' ? tripped('claude', calls[1].now) : usageOf(probe.id, calls[1].now)));
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(counts(session)).toEqual([3, ...IDS.slice(1).map(() => 2)]);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('does not re-probe while the panel is probing on its own', async () => {
+    const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '3600' } });
+    await session.settleRound(0, { claude: tripped('claude', START) });
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 - 1000);
+    session.press('j');
+    session.press('R');
+    await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+    expect(session.probes[0].calls).toHaveLength(2);
+    session.probes[0].calls[1].resolve({ ...tripped('claude', session.probes[0].calls[1].now, 5), windows: [{ label: '5h', kind: 'rolling', usedPct: 5, resetsAt: '2026-09-13T15:00:00.000Z' }] });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(session.probes[0].calls).toHaveLength(2);
+    session.press('q');
+    await session.finished;
+  });
+});
