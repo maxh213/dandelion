@@ -2083,6 +2083,60 @@ describe('route eligibility state file', () => {
       expect(cached.out).not.toBe(plain.out);
     });
 
+    describe('--json --max-age', () => {
+      const jsonRequest = (extra: { maxAge?: number; now?: string } = {}) => ({ now: NOW, zone: 'UTC', ...extra });
+      const idle = (id: string) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 0 }], fetchedAt: NOW });
+
+      function write(text: string): void {
+        mkdirSync(join(scratch, 'state'), { recursive: true });
+        writeFileSync(snapshotPath(), text);
+      }
+
+      it('prints what probing would from a recent snapshot, probes nothing and stamps the current time', async () => {
+        const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, ...(await liveSnapshot()) };
+        const probed = await runJson(probing(), env, jsonRequest());
+        const io = failing();
+        const cached = await runJson(io, env, jsonRequest({ now: '2026-09-13T10:04:59.000Z', maxAge: 600 }));
+        const withoutClockFields = (out: string) => out.replace(/"generatedAt":"[^"]*"|,"projectedFullAt":"[^"]*"/g, '');
+        expect(cached.err).toBe(probed.err);
+        expect(withoutClockFields(cached.out)).toBe(withoutClockFields(probed.out));
+        expect(JSON.parse(cached.out).generatedAt).toBe('2026-09-13T10:04:59.000Z');
+        expect(calls(io)).toBe(0);
+      });
+
+      it('keeps each entry its own fetchedAt and computes the routes from the current state file', async () => {
+        write(JSON.stringify(IDS.map(idle)));
+        writeFileSync(statePath, '{"claude": false}');
+        const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: statePath };
+        const { out } = await runJson(failing(), env, jsonRequest({ now: '2026-09-13T10:00:30.000Z', maxAge: 60 }));
+        const parsed = JSON.parse(out);
+        expect(parsed.generatedAt).toBe('2026-09-13T10:00:30.000Z');
+        expect(parsed.providers.map((entry: { fetchedAt: string }) => entry.fetchedAt)).toEqual(IDS.map(() => NOW));
+        expect(parsed.providers.find((entry: { id: string }) => entry.id === 'claude').eligible).toBe(false);
+        expect(parsed.route).not.toBe('model-a max claude');
+      });
+
+      it('is not read without --max-age', async () => {
+        write(JSON.stringify(IDS.map(idle)));
+        const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: statePath };
+        expect(JSON.parse((await runJson(routedRunner(), env, jsonRequest())).out).route).toBe('model-a max claude');
+        await expect(runJson(failing(), env, jsonRequest())).rejects.toThrow('probed');
+      });
+
+      it.each([
+        ['missing', undefined],
+        ['corrupt', '{nope'],
+        ['missing a provider', JSON.stringify(IDS.slice(1).map(idle))],
+        ['holding an old entry', JSON.stringify(IDS.map(idle))]
+      ])('probes as plain --json when the snapshot is %s', async (name, text) => {
+        if (text !== undefined) write(text);
+        const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: statePath };
+        const now = name === 'holding an old entry' ? '2026-09-13T10:01:01.000Z' : NOW;
+        const plain = await runJson(routedRunner(), env, jsonRequest({ now }));
+        expect(await runJson(routedRunner(), env, jsonRequest({ now, maxAge: 60 }))).toEqual(plain);
+      });
+    });
+
     describe('probes exactly as without the flag when the snapshot', () => {
       const idle = (id: string) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 0 }], fetchedAt: NOW });
 

@@ -292,25 +292,25 @@ export async function runApp(io: ProbeIo, env: Record<string, string | undefined
 
 export type CachedRouteRequest = RouteRequest & { maxAge?: number };
 
-function recentUsages(io: ProbeIo, env: Record<string, string | undefined>, request: CachedRouteRequest): ProviderUsage[] | undefined {
+function recentUsages(io: ProbeIo, env: Record<string, string | undefined>, request: { now: string; maxAge?: number }): ProviderUsage[] | undefined {
   if (request.maxAge === undefined) return undefined;
   const ids = providerProbes(io, env).map(({ id }) => id);
   return snapshotOf(io, env).fresh(ids, request.now, request.maxAge);
 }
 
-async function routeUsages(io: ProbeIo, env: Record<string, string | undefined>, request: CachedRouteRequest): Promise<ProviderUsage[]> {
+async function cachedUsages(io: ProbeIo, env: Record<string, string | undefined>, request: { now: string; maxAge?: number }): Promise<ProviderUsage[]> {
   return recentUsages(io, env, request) ?? (await probeOnce(io, env, request.now));
 }
 
 export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, request: CachedRouteRequest): Promise<RouteOutput> {
   const { lines, fault } = routesOf(env);
   if (fault !== undefined) return renderRoutesFault(fault);
-  return renderRoute(lines, await routeUsages(io, env, request), eligibilityOf(io, env).ineligible(), request);
+  return renderRoute(lines, await cachedUsages(io, env, request), eligibilityOf(io, env).ineligible(), request);
 }
 
-export async function runJson(io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest): Promise<JsonOutput> {
+export async function runJson(io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest & { maxAge?: number }): Promise<JsonOutput> {
   const routes = routesOf(env);
-  const usages = await probeOnce(io, env, request.now);
+  const usages = await cachedUsages(io, env, request);
   const err = routes.fault === undefined ? '' : renderRoutesFault(routes.fault).err;
   return { out: `${renderSnapshot(routes, usages, eligibilityOf(io, env).ineligible(), request)}\n`, err };
 }

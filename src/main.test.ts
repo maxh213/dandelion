@@ -22,11 +22,11 @@ vi.mock('./app/index.ts', async (importOriginal) => {
     reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
     spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
   };
-  return { ...original, realIo: stubIo, runRoute: vi.fn(original.runRoute) };
+  return { ...original, realIo: stubIo, runRoute: vi.fn(original.runRoute), runJson: vi.fn(original.runJson) };
 });
 
 const { main, runIfMain } = await import('./main.ts');
-const { runRoute, realRunSpawner } = await import('./app/index.ts');
+const { runJson, runRoute, realRunSpawner } = await import('./app/index.ts');
 const { highRouteLine, routeLine } = await import('./domain/index.ts');
 
 const routeIo: ProbeIo = {
@@ -386,6 +386,20 @@ describe('main', () => {
     expect(errors()).toBe('');
     expect(keyboard.setRawMode).not.toHaveBeenCalled();
     expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it.each<[string[], number | undefined]>([
+    [['--json', '--max-age', '30'], 30],
+    [['--max-age', '5', '--json'], 5],
+    [['--json'], undefined],
+    [['--json', '--max-age'], undefined],
+    [['--json', '--max-age', '0'], undefined],
+    [['--json', '--max-age', '-5'], undefined],
+    [['--json', '--max-age', '1.5'], undefined]
+  ])('runIfMain %j passes max age %s to --json', async (args, maxAge) => {
+    vi.mocked(runJson).mockClear();
+    await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, ...args], false, false).proc);
+    expect(vi.mocked(runJson).mock.calls[0][2].maxAge).toBe(maxAge);
   });
 
   it('runIfMain --json with a bad routes file nulls the routes, warns on stderr and does not exit', async () => {

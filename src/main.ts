@@ -40,7 +40,7 @@ async function route(io: ProbeIo, proc: Proc): Promise<void> {
 }
 
 async function json(io: ProbeIo, proc: Proc): Promise<void> {
-  const { out, err } = await runJson(io, proc.env, { now: new Date().toISOString(), zone: processZone() });
+  const { out, err } = await runJson(io, proc.env, { now: new Date().toISOString(), zone: processZone(), maxAge: maxAgeOf(proc.argv.slice(2)) });
   proc.stdout.write(out);
   proc.stderr.write(err);
 }
