@@ -50,9 +50,10 @@ import { extraArgs, launchOf, type RunSpawner } from './launch.ts';
 import { startLive, type Keyboard, type Notifier, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
-export type { RouteMode, RouteOutput, RouteRequest } from '../render/index.ts';
+export type { RouteMode, RouteOutput } from '../render/index.ts';
 export type { Keyboard, Screen } from './live.ts';
 export type { RunSpawner } from './launch.ts';
+export { isMaxAge } from './launch.ts';
 
 export type JsonOutput = { out: string; err: string };
 
@@ -339,7 +340,7 @@ function missingCommand(command: string): RunOutput {
   return { err: `dandelion: ${command}: command not found\n`, code: 127 };
 }
 
-export async function runRun(io: ProbeIo, env: Record<string, string | undefined>, request: RouteRequest, args: string[], spawner: RunSpawner): Promise<RunOutput> {
+export async function runRun(io: ProbeIo, env: Record<string, string | undefined>, request: CachedRouteRequest, args: string[], spawner: RunSpawner): Promise<RunOutput> {
   const routed = await runRoute(io, env, request);
   if (routed.code !== 0) return { err: routed.code === 1 ? 'none\n' : routed.err, code: routed.code };
   const launch = launchOf(routed.out.trimEnd(), extraArgs(args), env, io.reader.homeDir());

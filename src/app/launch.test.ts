@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extraArgs, launchOf } from './launch.ts';
+import { extraArgs, isMaxAge, launchOf } from './launch.ts';
 
 describe('launchOf', () => {
   it('omits the effort flag when a claude line has no effort', () => {
@@ -29,5 +29,17 @@ describe('extraArgs', () => {
   it('drops --high before -- and keeps everything after it', () => {
     expect(extraArgs(['a', '--high', '--', '--high', 'b'])).toEqual(['a', '--high', 'b']);
     expect(extraArgs(['--high', 'a'])).toEqual(['a']);
+  });
+
+  it('drops --max-age and a valid value before -- only', () => {
+    expect(extraArgs(['--max-age', '600', 'a', '--', '--max-age', '600'])).toEqual(['a', '--max-age', '600']);
+    expect(extraArgs(['a', '--max-age', '0', '--max-age'])).toEqual(['a', '0']);
+    expect(extraArgs(['--max-age', '--high', 'a'])).toEqual(['--high', 'a'].filter((arg) => arg !== '--high'));
+  });
+});
+
+describe('isMaxAge', () => {
+  it.each([['1', true], ['600', true], ['0', false], ['-5', false], ['1.5', false], ['abc', false], [undefined, false]])('%s is %s', (value, expected) => {
+    expect(isMaxAge(value)).toBe(expected);
   });
 });

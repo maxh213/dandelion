@@ -22,11 +22,11 @@ vi.mock('./app/index.ts', async (importOriginal) => {
     reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
     spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
   };
-  return { ...original, realIo: stubIo, runRoute: vi.fn(original.runRoute), runJson: vi.fn(original.runJson) };
+  return { ...original, realIo: stubIo, runRoute: vi.fn(original.runRoute), runJson: vi.fn(original.runJson), runRun: vi.fn(original.runRun) };
 });
 
 const { main, runIfMain } = await import('./main.ts');
-const { runJson, runRoute, realRunSpawner } = await import('./app/index.ts');
+const { runJson, runRoute, runRun, realRunSpawner } = await import('./app/index.ts');
 const { highRouteLine, routeLine } = await import('./domain/index.ts');
 
 const routeIo: ProbeIo = {
@@ -443,7 +443,9 @@ describe('main', () => {
   it.each<[string[], string[]]>([
     [['run'], ['--model', 'model-a', '--effort', 'high']],
     [['run', '--high', 'x'], ['--model', 'model-h1', '--effort', 'max', 'x']],
-    [['run', '--', '--high'], ['--model', 'model-a', '--effort', 'high', '--high']]
+    [['run', '--', '--high'], ['--model', 'model-a', '--effort', 'high', '--high']],
+    [['run', '--max-age', '600', 'x'], ['--model', 'model-a', '--effort', 'high', 'x']],
+    [['run', '--', '--max-age', '600'], ['--model', 'model-a', '--effort', 'high', '--max-age', '600']]
   ])('runIfMain %j launches the routed CLI and exits with its code', async (args, expected) => {
     const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(4);
     const { proc, output, errors } = procOf(['node', MAIN, ...args], true, true);
@@ -451,6 +453,20 @@ describe('main', () => {
     expect(spawn.mock.calls[0][0].args).toEqual(expected);
     expect(proc.exit).toHaveBeenCalledWith(4);
     expect([output(), errors()]).toEqual(['', '']);
+    spawn.mockRestore();
+  });
+
+  it.each<[string[], number | undefined]>([
+    [['run', '--max-age', '30'], 30],
+    [['run', '--high', '--max-age', '5'], 5],
+    [['run'], undefined],
+    [['run', '--max-age', '0'], undefined],
+    [['run', '--', '--max-age', '30'], undefined]
+  ])('runIfMain %j passes max age %s to the route resolution', async (args, maxAge) => {
+    vi.mocked(runRun).mockClear();
+    const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(0);
+    await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, ...args], true, true).proc);
+    expect(vi.mocked(runRun).mock.calls[0][2].maxAge).toBe(maxAge);
     spawn.mockRestore();
   });
 

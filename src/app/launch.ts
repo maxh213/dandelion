@@ -41,8 +41,18 @@ export function launchOf(routeLine: string, extra: string[], env: Env, homeDir: 
   return { command: target.command, args: [...flagsOf(target, model, rest[0]), ...extra], env: accountEnv(account, env, homeDir) };
 }
 
+const POSITIVE_INTEGER = /^[1-9]\d*$/;
+
+export function isMaxAge(value: string | undefined): boolean {
+  return POSITIVE_INTEGER.test(String(value));
+}
+
+function withoutMaxAge(args: string[]): string[] {
+  return args.filter((arg, index) => arg !== '--max-age' && !(args[index - 1] === '--max-age' && isMaxAge(arg)));
+}
+
 export function extraArgs(args: string[]): string[] {
   const split = args.indexOf('--');
-  const before = (split === -1 ? args : args.slice(0, split)).filter((arg) => arg !== '--high');
+  const before = withoutMaxAge(split === -1 ? args : args.slice(0, split)).filter((arg) => arg !== '--high');
   return split === -1 ? before : [...before, ...args.slice(split + 1)];
 }

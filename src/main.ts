@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isEntryFile, processZone, routesWarning, runApp, runJson, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
+import { isEntryFile, processZone, routesWarning, runApp, runJson, isMaxAge, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -25,11 +25,9 @@ function routeModeOf(argv: string[]): RouteMode {
   return argv.slice(3).includes('--high') ? 'high' : 'headroom';
 }
 
-const POSITIVE_INTEGER = /^[1-9]\d*$/;
-
 function maxAgeOf(args: string[]): number | undefined {
   const value = args[args.indexOf('--max-age') + 1];
-  return args.includes('--max-age') && POSITIVE_INTEGER.test(String(value)) ? Number(value) : undefined;
+  return args.includes('--max-age') && isMaxAge(value) ? Number(value) : undefined;
 }
 
 async function route(io: ProbeIo, proc: Proc): Promise<void> {
@@ -46,14 +44,20 @@ async function json(io: ProbeIo, proc: Proc): Promise<void> {
 }
 
 async function run(io: ProbeIo, proc: Proc): Promise<void> {
-  const { err, code } = await runRun(io, proc.env, { mode: runModeOf(proc.argv.slice(3)), now: new Date().toISOString(), zone: processZone() }, proc.argv.slice(3), realRunSpawner);
+  const args = proc.argv.slice(3);
+  const own = runOwnArgs(args);
+  const { err, code } = await runRun(io, proc.env, { mode: runModeOf(own), now: new Date().toISOString(), zone: processZone(), maxAge: maxAgeOf(own) }, args, realRunSpawner);
   proc.stderr.write(err);
   proc.exit(code);
 }
 
-function runModeOf(args: string[]): RouteMode {
+function runOwnArgs(args: string[]): string[] {
   const split = args.indexOf('--');
-  return (split === -1 ? args : args.slice(0, split)).includes('--high') ? 'high' : 'headroom';
+  return split === -1 ? args : args.slice(0, split);
+}
+
+function runModeOf(args: string[]): RouteMode {
+  return args.includes('--high') ? 'high' : 'headroom';
 }
 
 function isLive(proc: Proc): boolean {

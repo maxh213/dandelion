@@ -2150,6 +2150,34 @@ describe('route eligibility state file', () => {
       });
     });
 
+    describe('run --max-age', () => {
+      const runSpawner = () => {
+        const spawn = vi.fn<RunSpawner['spawn']>(async () => 0);
+        return { spawn, spawner: { spawn } };
+      };
+
+      it.each<['headroom' | 'high', string[], Parameters<RunSpawner['spawn']>[0]]>([
+        ['headroom', ['--max-age', '600'], { command: 'claude', args: ['--model', 'model-a', '--effort', 'max'], env: {} }],
+        ['high', ['--high', '--max-age', '600'], { command: 'claude', args: ['--model', 'model-h1', '--effort', 'max'], env: { CLAUDE_CONFIG_DIR: '/cfg/work' } }]
+      ])('launches the %s route from a fresh snapshot without probing', async (mode, args, expected) => {
+        const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_CLAUDE_WORK_CONFIG_DIR: '/cfg/work', ...(await liveSnapshot()) };
+        const io = failing();
+        const { spawn, spawner } = runSpawner();
+        expect(await runRun(io, env, requestOf(mode, { maxAge: 600 }), args, spawner)).toEqual({ err: '', code: 0 });
+        expect(calls(io)).toBe(0);
+        expect(spawn.mock.calls[0][0]).toEqual(expected);
+      });
+
+      it('probes and launches as plain run does without the flag and with a stale snapshot', async () => {
+        const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, ...(await liveSnapshot()) };
+        const plain = runSpawner();
+        await runRun(probing(), env, requestOf('headroom'), [], plain.spawner);
+        const stale = runSpawner();
+        await runRun(probing(), env, requestOf('headroom', { maxAge: 60, now: '2026-09-13T10:10:00.000Z' }), ['--max-age', '60'], stale.spawner);
+        expect(stale.spawn.mock.calls).toEqual(plain.spawn.mock.calls);
+      });
+    });
+
     describe('probes exactly as without the flag when the snapshot', () => {
       const idle = (id: string) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 0 }], fetchedAt: NOW });
 
