@@ -850,6 +850,23 @@ describe('notificationEvents', () => {
     expect(texts([week(50)], [week(51)])).toEqual([]);
   });
 
+  it('reports a weekly window that reset with less usage', () => {
+    const past = '2026-09-13T09:00:00.000Z';
+    expect(texts([week(70, past)], [week(3)])).toEqual(['claude weekly reset: 3% used']);
+    expect(notificationEvents(usageOf([week(70, past)]), usageOf([week(3)]), NOW, MIDNIGHT)[0].key).toContain('2026-09-18T10:00:00.000Z|reset');
+    expect(texts([week(70, NOW)], [week(3)])).toEqual(['claude weekly reset: 3% used']);
+  });
+
+  it('does not report a reset without a past resetsAt, a drop or a weekly window', () => {
+    const past = '2026-09-13T09:00:00.000Z';
+    const rolling = (usedPct: number, resetsAt?: string): UsageWindow => ({ label: '5h', kind: 'rolling', usedPct, resetsAt });
+    expect(texts([week(70)], [week(3)])).toEqual([]);
+    expect(texts([{ ...week(70), resetsAt: undefined }], [week(3)])).toEqual([]);
+    expect(texts([week(70, past)], [week(70)])).toEqual([]);
+    expect(texts([week(70, past)], [week(71)])).toEqual([]);
+    expect(texts([rolling(70, past)], [rolling(3)])).toEqual([]);
+  });
+
   it('reports nothing unless both results are ok', () => {
     expect(notificationEvents(usageOf([week(10)], 'error'), usageOf([week(99)]), NOW, MIDNIGHT)).toEqual([]);
     expect(notificationEvents(usageOf([week(10)]), usageOf([week(99)], 'error'), NOW, MIDNIGHT)).toEqual([]);

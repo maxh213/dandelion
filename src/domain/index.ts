@@ -242,9 +242,19 @@ function evaporationEvents(pair: WindowPair, tonight: Tonight, now: string): Not
   return notification(pair, 'evaporating', `${pair.id} ${pair.current.label} is evaporating, resets in ${left}`);
 }
 
+function resetPassed(window: UsageWindow, now: string): boolean {
+  return window.resetsAt !== undefined && Date.parse(window.resetsAt) <= Date.parse(now);
+}
+
+function resetEvents(pair: WindowPair, now: string): Notification[] {
+  const { previous, current } = pair;
+  const reset = current.kind === 'weekly' && resetPassed(previous, now) && current.usedPct < previous.usedPct;
+  return reset ? notification(pair, 'reset', `${pair.id} ${current.label} reset: ${current.usedPct}% used`) : [];
+}
+
 function pairEvents(pair: WindowPair, now: string, midnight: string): Notification[] {
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
-  return [...thresholdEvents(pair), ...recoveryEvents(pair), ...evaporationEvents(pair, tonight, now)];
+  return [...thresholdEvents(pair), ...recoveryEvents(pair), ...evaporationEvents(pair, tonight, now), ...resetEvents(pair, now)];
 }
 
 export function notificationEvents(previous: ProviderUsage, current: ProviderUsage, now: string, midnight: string): Notification[] {

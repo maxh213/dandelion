@@ -1358,6 +1358,12 @@ describe('notifications', () => {
     const tonight = '2026-09-13T20:00:00.000Z';
     expect(await roundsOf({ DANDELION_NOTIFY: '1' }, [weekly(2, tonight), weekly(50, tonight), weekly(51, tonight)])).toEqual(['claude weekly is evaporating, resets in 9h59m']);
   });
+
+  it('notifies a weekly reset once even when later rounds repeat the values', async () => {
+    const past = '2026-09-13T09:59:30.000Z';
+    const next = '2026-09-25T10:00:00.000Z';
+    expect(await roundsOf({ DANDELION_NOTIFY: '1' }, [weekly(70, past), weekly(3, next), weekly(3, next), weekly(4, next)])).toEqual(['claude weekly reset: 3% used']);
+  });
 });
 
 describe('fix key', () => {
