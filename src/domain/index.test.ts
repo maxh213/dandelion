@@ -813,6 +813,48 @@ describe('usage history', () => {
   });
 });
 
+describe('usage history shared by two dashboards', () => {
+  function shared(initial = '[]', replaceOk = () => true) {
+    const disk = { text: initial };
+    const file = { read: () => disk.text, replace: (_path: string, text: string) => (replaceOk() ? ((disk.text = text), true) : false) };
+    return { disk, a: openHistory({}, '/home/u', file), b: openHistory({}, '/home/u', file) };
+  }
+  const round = (n: number) => `2026-09-30T0${n}:00:00.000Z`;
+
+  it('keeps the samples of every round written by either process', () => {
+    const { disk, a, b } = shared();
+    a.record([OK], round(1));
+    b.record([OK], round(2));
+    a.record([OK], round(3));
+    const ats = (JSON.parse(disk.text) as { at: string }[]).map((sample) => sample.at);
+    expect(ats).toEqual([round(1), round(1), round(2), round(2), round(3), round(3)]);
+    expect(a.samples('claude')).toHaveLength(6);
+    expect(b.samples('claude')).toHaveLength(4);
+  });
+
+  it('does not duplicate samples recorded twice', () => {
+    const { disk, a, b } = shared();
+    a.record([OK], round(1));
+    a.record([OK], round(1));
+    b.record([OK], round(1));
+    expect(JSON.parse(disk.text)).toHaveLength(2);
+  });
+
+  it('falls back to its own samples when the file turns corrupt', () => {
+    const { disk, a } = shared();
+    a.record([OK], round(1));
+    disk.text = '{oops';
+    expect(a.record([OK], round(2))).toBe(true);
+    expect(JSON.parse(disk.text)).toHaveLength(4);
+  });
+
+  it('reports false and keeps its samples when the replace fails', () => {
+    const { a } = shared('[]', () => false);
+    expect(a.record([OK], round(1))).toBe(false);
+    expect(a.samples('claude')).toEqual([]);
+  });
+});
+
 describe('notificationEvents', () => {
   const NOW = '2026-09-13T10:00:00.000Z';
   const MIDNIGHT = '2026-09-13T23:00:00.000Z';

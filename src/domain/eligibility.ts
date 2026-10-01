@@ -109,12 +109,12 @@ function isSample(value: unknown): value is HistorySample {
   return isPlainObject(value) && SAMPLE_CHECKS.every((check) => check(value as Partial<HistorySample>));
 }
 
-function readSamples(file: StateFile, path: string): HistorySample[] {
+function readSamples(file: StateFile, path: string): HistorySample[] | undefined {
   try {
     const value: unknown = JSON.parse(file.read(path));
-    return Array.isArray(value) ? value.filter(isSample) : [];
+    return Array.isArray(value) ? value.filter(isSample) : undefined;
   } catch {
-    return [];
+    return undefined;
   }
 }
 
@@ -194,13 +194,29 @@ function pruned(samples: HistorySample[], now: string): HistorySample[] {
   return thinned(samples.filter((sample) => Date.parse(sample.at) >= oldest), now).slice(-MAX_SAMPLES);
 }
 
+function sampleKey(sample: HistorySample): string {
+  return `${sample.id}|${sample.slot}|${sample.label}|${sample.at}`;
+}
+
+function merged(disk: HistorySample[] | undefined, held: HistorySample[], added: HistorySample[]): HistorySample[] {
+  const base = disk ?? [];
+  const keys = new Set(base.map(sampleKey));
+  const extra = [...held, ...added].filter((sample) => {
+    const key = sampleKey(sample);
+    if (keys.has(key)) return false;
+    keys.add(key);
+    return true;
+  });
+  return [...base, ...extra];
+}
+
 export function openHistory(env: Record<string, string | undefined>, homeDir: string, file: StateFile): History {
   const path = historyPath(env, homeDir);
-  const held = { samples: readSamples(file, path) };
+  const held = { samples: readSamples(file, path) ?? [] };
   return {
     samples: (id) => held.samples.filter((sample) => sample.id === id),
     record(usages, now) {
-      const next = pruned([...held.samples, ...usages.flatMap((usage) => sampled(usage, now))], now);
+      const next = pruned(merged(readSamples(file, path), held.samples, usages.flatMap((usage) => sampled(usage, now))), now);
       if (!file.replace(path, JSON.stringify(next))) return false;
       held.samples = next;
       return true;
