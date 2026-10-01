@@ -40,7 +40,7 @@ import {
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
 const HIDE_HELP = 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch';
-const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back · v compact';
+const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back · v compact · w why';
 const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
 const BOX_GAP = '  ';
 const BOX_CHROME_CELLS = 4;
@@ -67,6 +67,7 @@ export type LiveView = {
   order?: number[];
   sort?: SortOrder;
   compact?: boolean;
+  why?: [string[], string[]];
   ineligible: string[];
   hidden?: string[];
   showHidden?: boolean;
@@ -271,12 +272,22 @@ function renderBox(title: string, answer: BoxAnswer, noColor: boolean, width: nu
   return [top, modelBoxRow(model, noColor), withSides(account, noColor), bottom];
 }
 
+function explanationRows(view: LiveView, widths: [number, number], noColor: boolean): string[] {
+  const [left, right] = view.why ?? [[], []];
+  const count = Math.max(left.length, right.length);
+  return Array.from({ length: count }, (_, row) => {
+    const cells = [left[row] ?? '', right[row] ?? ''].map((text, side) => padCells(cutCells(text, widths[side]), widths[side]));
+    return dim(cells.join(BOX_GAP).trimEnd(), noColor);
+  });
+}
+
 function routeBoxes(view: LiveView, noColor: boolean, now: string): string[] {
   const [route, high] = boxAnswers(view, now);
   const leftWidth = Math.floor((widthOf(view) - BOX_GAP.length) / 2);
+  const rightWidth = widthOf(view) - BOX_GAP.length - leftWidth;
   const left = renderBox(ROUTE_TITLE, route, noColor, leftWidth);
-  const right = renderBox(HIGH_TITLE, high, noColor, widthOf(view) - BOX_GAP.length - leftWidth);
-  return left.map((line, row) => `${line}${BOX_GAP}${right[row]}`);
+  const right = renderBox(HIGH_TITLE, high, noColor, rightWidth);
+  return [...left.map((line, row) => `${line}${BOX_GAP}${right[row]}`), ...explanationRows(view, [leftWidth, rightWidth], noColor)];
 }
 
 function rowBudget(rows = FALLBACK_ROWS): number {

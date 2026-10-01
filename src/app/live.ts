@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, notifyThresholds, orderPanels, renderLiveFrame, type SortOrder, type ClaudeStatus, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes, type Snapshot, type View } from '../render/index.ts';
+import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, notifyThresholds, orderPanels, renderLiveFrame, renderRoute, type SortOrder, type ClaudeStatus, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes, type Snapshot, type View } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -83,6 +83,7 @@ type Session = LiveOptions & {
   sort: SortOrder;
   order: number[];
   compact: boolean;
+  why: boolean;
   running?: boolean;
   rounds: number;
   endedAt: number;
@@ -137,6 +138,18 @@ function graphOf(session: Session): NonNullable<LiveView['graph']> {
   return { id, samples: session.history.samples(id), usage: session.results[session.selected] };
 }
 
+function whyLines(session: Session, settled: SettledRound, lines: NonNullable<Routes['lines']>): [string[], string[]] {
+  const request = { now: session.clock(), zone: session.zone, why: true };
+  const [route, high] = (['headroom', 'high'] as const).map((mode) => renderRoute(lines, settled, session.eligibility.ineligible(), { ...request, mode }).out.split('\n').slice(1, -1));
+  return [route, high];
+}
+
+function whyOf(session: Session): [string[], string[]] | undefined {
+  const { lines, fault } = session.routes;
+  if (!session.why || session.settled === undefined || fault !== undefined) return undefined;
+  return whyLines(session, session.settled, lines);
+}
+
 function viewOf(session: Session): LiveView {
   return {
     slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index], probing: session.inFlight.has(index), lastGood: session.lastGood[index] })),
@@ -147,6 +160,7 @@ function viewOf(session: Session): LiveView {
     order: session.order,
     sort: session.sort,
     compact: session.compact,
+    why: whyOf(session),
     ineligible: session.eligibility.ineligible(),
     hidden: session.hidden.ids(),
     showHidden: session.showHidden,
@@ -337,6 +351,11 @@ function cycleSort(session: Session): void {
 
 function toggleCompact(session: Session): void {
   session.compact = !session.compact;
+  draw(session);
+}
+
+function toggleWhy(session: Session): void {
+  session.why = !session.why;
   draw(session);
 }
 
@@ -546,6 +565,7 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['s', cycleSort],
   ['t', toggleResetTimes],
   ['v', toggleCompact],
+  ['w', toggleWhy],
   ['c', copyRoute],
   ['C', copyHigh],
   ['l', launchRoute],
@@ -597,6 +617,7 @@ export function startLive(options: LiveOptions): Promise<number> {
       ...options.view.initial(),
       order: options.probes.map((_, index) => index),
       compact: false,
+      why: false,
       rounds: 0,
       endedAt: Number.NaN,
       selected: -1,

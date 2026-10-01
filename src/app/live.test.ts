@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
-import { openEligibility, openHidden, openHistory, openUsageSnapshot, openView, type ClaudeStatus, type Routes } from '../render/index.ts';
+import { openEligibility, openHidden, openHistory, openUsageSnapshot, openView, renderRoute, type ClaudeStatus, type Routes } from '../render/index.ts';
 import { launchOf } from './launch.ts';
 import { startLive, type CopyResult } from './live.ts';
 
@@ -809,7 +809,7 @@ describe('live session', () => {
     expect(claude[7]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch', 'g usage graph of the selected panel · esc/q/g back · v compact', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch', 'g usage graph of the selected panel · esc/q/g back · v compact · w why', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
     session.press('q');
     await session.finished;
   });
@@ -1216,6 +1216,75 @@ describe('route boxes', () => {
     session.press(' ');
     expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-a high', 'claude', 'model-h1 max', 'claude'));
     expect(session.saved().at(-1)).toEqual({ claude: true });
+    session.press('q');
+    await session.finished;
+  });
+
+  it('toggles the route --why lines under the boxes with w and keeps them out of view.json', async () => {
+    const session = startSession();
+    session.press('w');
+    expect(session.lastFrame().split('\n')[6]).not.toContain('headroom');
+    session.press('w');
+    await session.settleRound(0);
+    const plain = session.lastFrame().split('\n');
+    session.press('w');
+    const shown = session.lastFrame().split('\n');
+    expect(shown.slice(0, 6)).toEqual(plain.slice(0, 6));
+    expect(shown.slice(6, 8)).toEqual([expect.stringMatching(/^headroom: /), expect.stringContaining('unavailable: ')]);
+    expect(shown.length).toBe(plain.length + 2);
+    session.press('w');
+    expect(session.lastFrame().split('\n')).toEqual(plain);
+    expect(session.viewSaved()).toEqual([]);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('shows exactly the lines route --why and route --high --why print, and none with a bad routes file', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press('w');
+    const request = { now: START, zone: 'UTC', why: true };
+    const usages = IDS.map((id) => usageOf(id, START));
+    const [route, high] = (['headroom', 'high'] as const).map((mode) => renderRoute(LINES, usages, [], { ...request, mode }).out.split('\n').slice(1, -1));
+    const shown = session.lastFrame().split('\n').slice(6, 6 + route.length);
+    const stem = (text: string) => text.trimEnd().replace(/…$/, '');
+    route.forEach((line, row) => expect(line.startsWith(stem(shown[row].slice(0, 35)))).toBe(true));
+    expect(high[0].startsWith(stem(shown[0].slice(37)))).toBe(true);
+    expect(shown[0]).toMatch(/^headroom: .+ {2}rank 1 /);
+    session.press('q');
+    await session.finished;
+    const broken = startSession({ routes: { fault: { path: '/r.json', problem: 'bad' } } });
+    await broken.settleRound(0);
+    const before = broken.lastFrame();
+    broken.press('w');
+    expect(broken.lastFrame()).toBe(before);
+    broken.press('q');
+    await broken.finished;
+  });
+
+  it('recomputes the why lines when space toggles routing and when a single panel settles', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press('w');
+    const before = session.lastFrame().split('\n')[6];
+    session.press('j');
+    session.press(' ');
+    const after = session.lastFrame().split('\n');
+    expect(after[6]).not.toBe(before);
+    expect(after.slice(6, 9).join('\n')).toContain('ineligible: claude');
+    session.press('R');
+    session.probes[0].calls[1].resolve(usageOf('claude', START));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.lastFrame().split('\n')[6]).toBe(after[6]);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('keeps the frame within the terminal rows with the why lines shown', async () => {
+    const session = startSession({ rows: 14 });
+    await session.settleRound(0);
+    session.press('w');
+    expect(session.lastFrame().split('\n').length).toBeLessThanOrEqual(14);
     session.press('q');
     await session.finished;
   });

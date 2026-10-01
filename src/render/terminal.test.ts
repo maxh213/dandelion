@@ -676,7 +676,7 @@ describe('live frame', () => {
     expect(lines[0]).toBe(`\x1b[1mDANDELION${' '.repeat(25)}${RESET}\x1b[90mrefreshing…${RESET}\x1b[1m · data 0h1m old · 10:01:05${RESET}`);
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
     expect(lines.at(-1)).toBe(`\x1b[90m↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?${RESET}`);
-    expect(lines.at(-2)).toBe(`\x1b[90mg usage graph of the selected panel · esc/q/g back · v compact${RESET}`);
+    expect(lines.at(-2)).toBe(`\x1b[90mg usage graph of the selected panel · esc/q/g back · v compact · w why${RESET}`);
     expect(lines.slice(6, -3).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n').replace(PLAN_CAPTION, '$1 · 0h1m ago'));
   });
 
@@ -968,7 +968,7 @@ describe('live frame', () => {
     });
 
     it('keeps the help footer as the last line of the frame', () => {
-      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -3), 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch', 'g usage graph of the selected panel · esc/q/g back · v compact', FOOTER]);
+      expect(frameOf({ selected: 0, footer: true })).toEqual([BANNER, SUMMARY, ...BOX_BLOCK, '▸ claude', ...CLAUDE_PANEL.slice(2, -3), 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch', 'g usage graph of the selected panel · esc/q/g back · v compact · w why', FOOTER]);
     });
 
     it.each<[number, string[]]>([
@@ -1138,6 +1138,42 @@ describe('route boxes', () => {
     ok('grok', [{ label: 'credits', kind: 'weekly', usedPct: 90, resetsAt: LATER }]),
     ok('cursor', [{ label: 'total', kind: 'weekly', usedPct: 80, resetsAt: LATER }])
   ];
+
+  const WHY: [string[], string[]] = [['headroom: claude-work binding 77% left (claude 0%, agy 50%)', 'unavailable: claude-deepseek, junie, hermes'], ['rank 1 fable on claude-work: gating 23% used']];
+
+  it('draws nothing under the boxes without why lines', () => {
+    const plain = renderLiveFrame(boxView(ROUTED), true, NOW);
+    expect(renderLiveFrame(boxView(ROUTED, { why: undefined }), true, NOW)).toBe(plain);
+    expect(renderLiveFrame(boxView(ROUTED, { why: [[], []] }), true, NOW)).toBe(plain);
+  });
+
+  it('prints each mode\'s why lines under its own box, cut to the box width, the rest of the frame unchanged', () => {
+    const plain = renderLiveFrame(boxView(ROUTED), true, NOW).split('\n');
+    const lines = renderLiveFrame(boxView(ROUTED, { why: WHY }), true, NOW).split('\n');
+    expect(lines.slice(0, 6)).toEqual(plain.slice(0, 6));
+    expect(lines.slice(6, 8)).toEqual([
+      `${'headroom: claude-work binding 77%…'.padEnd(35)}  rank 1 fable on claude-work: gatin…`,
+      'unavailable: claude-deepseek, juni…'
+    ]);
+    expect(lines.slice(8)).toEqual(plain.slice(6));
+  });
+
+  it('pads a shorter right column and dims every explanation row in colour without breaking escapes', () => {
+    const lines = renderLiveFrame(boxView(ROUTED, { why: [['a'], ['b', 'c']], columns: 60 }), false, NOW).split('\n');
+    expect(lines[6]).toBe(`${DIM}${'a'.padEnd(29)}  b${RESET}`);
+    expect(lines[7]).toBe(`${DIM}${' '.repeat(31)}c${RESET}`);
+    expect(lines.every((line) => [...line.replace(ANSI_CODE, '')].length <= 60)).toBe(true);
+  });
+
+  it('shrinks the provider list by the explanation rows so the frame still fits the terminal rows', () => {
+    const slots = ROUTED.map((usage) => ({ id: usage.id, usage }));
+    const rows = 20;
+    const without = renderLiveFrame(boxView(ROUTED, { slots, rows }), true, NOW).split('\n');
+    const withWhy = renderLiveFrame(boxView(ROUTED, { slots, rows, why: WHY }), true, NOW).split('\n');
+    expect(without).toHaveLength(rows);
+    expect(withWhy).toHaveLength(rows);
+    expect(withWhy.slice(8)).toEqual(without.slice(6, rows - 2));
+  });
 
   it('draws the settled answers as two 35-cell boxes with a 2-cell gap under NO_COLOR', () => {
     const lines = boxLines(boxView(ROUTED), true, NOW);
