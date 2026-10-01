@@ -313,8 +313,8 @@ export function routesWarning(env: Record<string, string | undefined>): string {
   return fault === undefined ? '' : renderRoutesFault(fault).err;
 }
 
-export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string): Promise<string> {
-  const usages = await probeOnce(io, env, now);
+export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string, maxAge?: number): Promise<string> {
+  const usages = await cachedUsages(io, env, { now, maxAge });
   const noColor = env['NO_COLOR'] !== undefined;
   return renderDashboard(usages, noColor, now, eligibilityOf(io, env).ineligible(), processZone());
 }

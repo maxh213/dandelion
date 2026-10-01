@@ -353,6 +353,59 @@ describe('main', () => {
     expect(vi.mocked(runRoute).mock.calls[0][2].maxAge).toBe(maxAge);
   });
 
+  describe('the one-shot dashboard with --max-age', () => {
+    const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+
+    function snapshotEnv(): { dir: string; env: Record<string, string>; fetchedAt: string } {
+      const dir = mkdtempSync(join(tmpdir(), 'dandelion-once-'));
+      const fetchedAt = new Date().toISOString();
+      mkdirSync(join(dir, 'state'));
+      const entries = IDS.map((id) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 42 }], fetchedAt }));
+      writeFileSync(join(dir, 'state', 'snapshot.json'), JSON.stringify(entries));
+      return { dir, fetchedAt, env: { DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') } };
+    }
+
+    const probed = vi.fn();
+    const watched: ProbeIo = { ...routeIo, runner: { run: async (...call) => { probed(); return routeIo.runner.run(...call); } } };
+
+    it.each<[string[], boolean, boolean, boolean]>([
+      [['--once', '--max-age', '600'], true, true, false],
+      [['--max-age', '600'], false, true, false],
+      [['--max-age', '600'], true, false, false],
+      [['--once', '--max-age', '0'], true, true, true],
+      [['--once', '--max-age', '1.5'], true, true, true],
+      [['--once', '--max-age'], true, true, true],
+      [['--once'], true, true, true]
+    ])('runIfMain %j (stdin tty %s, stdout tty %s) probes: %s', async (args, stdinTTY, stdoutTTY, probes) => {
+      const { dir, env } = snapshotEnv();
+      probed.mockClear();
+      try {
+        const { proc, output } = procOf(['node', MAIN, ...args], stdinTTY, stdoutTTY, env);
+        await runIfMain(MAIN_URL, MAIN, watched, proc);
+        expect(output()).toContain('DANDELION');
+        expect(output()).not.toContain(ENTER_ALTERNATE);
+        expect(probed.mock.calls.length > 0).toBe(probes);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('ignores --max-age in the live dashboard', async () => {
+      const { dir, env } = snapshotEnv();
+      probed.mockClear();
+      try {
+        const { proc, keyboard, output } = procOf(['node', MAIN, '--max-age', '600'], true, true, env);
+        const running = runIfMain(MAIN_URL, MAIN, watched, proc);
+        await vi.waitFor(() => expect(output()).toContain(ENTER_ALTERNATE));
+        keyboard.emit('data', 'q');
+        await running;
+        expect(probed.mock.calls.length > 0).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   it('runIfMain route never asks for the explanation without --why', async () => {
     vi.mocked(runRoute).mockClear();
     await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, 'route', '--Why'], false, false).proc);
@@ -378,7 +431,7 @@ describe('main', () => {
       texts.push(output());
     }
     expect(new Set(texts).size).toBe(1);
-    for (const command of ['dandelion run', 'dandelion run --high', 'dandelion --json', 'dandelion --line', 'dandelion --waybar', 'dandelion route --why', 'dandelion route --max-age <seconds>']) {
+    for (const command of ['dandelion run', 'dandelion run --high', 'dandelion --json', 'dandelion --line', 'dandelion --waybar', 'dandelion route --why', 'dandelion route --max-age <seconds>', 'dandelion --once --max-age <seconds>']) {
       expect(texts[0]).toMatch(new RegExp(`^  ${command.replace(/[-<>]/g, '\\$&')} +\\S`, 'm'));
     }
   });
@@ -1048,7 +1101,7 @@ describe('main', () => {
     const readme = readFileSync('README.md', 'utf-8');
     const commands = readme.split('## Run Commands')[1]?.split('## ')[0] ?? '';
     expect(commands).toMatch(/^- `npm start` - .*live dashboard.*`r` refresh.*`q` quit.*`\?` help/m);
-    expect(commands).toMatch(/^- `npm start -- --once` - Run the dashboard once and exit$/m);
+    expect(commands).toMatch(/^- `npm start -- --once` - Run the dashboard once and exit\. `--once --max-age <seconds>`.*never writes any state file.*$/m);
     expect(commands).toContain('runs once when stdout or stdin is not a terminal');
     expect(readme).toMatch(/^- `DANDELION_REFRESH_SECONDS` - .*Defaults to `300`/m);
   });

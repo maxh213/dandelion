@@ -2425,6 +2425,73 @@ describe('route eligibility state file', () => {
       });
     });
 
+    describe('--once --max-age', () => {
+      const LATER = '2026-09-13T10:04:59.000Z';
+      const idle = (id: string) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 0 }], fetchedAt: NOW });
+      const envOf = () => ({ DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: statePath, NO_COLOR: '1' });
+
+      function write(text: string): void {
+        mkdirSync(join(scratch, 'state'), { recursive: true });
+        writeFileSync(snapshotPath(), text);
+      }
+
+      function stateFiles(): Record<string, string> {
+        const dir = join(scratch, 'state');
+        return Object.fromEntries(readdirSync(dir).map((name) => [name, readFileSync(join(dir, name), 'utf8')]));
+      }
+
+      it('prints the dashboard probing would from a fresh snapshot and probes nothing', async () => {
+        await liveSnapshot();
+        const probed = await runApp(probing(), envOf(), LATER);
+        const io = failing();
+        expect(await runApp(io, envOf(), LATER, 600)).toBe(probed);
+        expect(calls(io)).toBe(0);
+      });
+
+      it('shows the snapshot results rather than fresh probes', async () => {
+        write(JSON.stringify(IDS.map(idle)));
+        const output = await runApp(failing(), envOf(), LATER, 600);
+        expect(output).not.toBe(await runApp(probing(), envOf(), LATER));
+      });
+
+      it('marks providers the current state file turned off', async () => {
+        write(JSON.stringify(IDS.map(idle)));
+        const on = await runApp(failing(), envOf(), LATER, 600);
+        writeFileSync(statePath, '{"claude": false}');
+        expect(await runApp(failing(), envOf(), LATER, 600)).not.toBe(on);
+      });
+
+      it('writes no state, snapshot, history, view or hidden file', async () => {
+        await liveSnapshot();
+        const before = stateFiles();
+        await runApp(failing(), envOf(), LATER, 600);
+        await runApp(probing(), envOf(), LATER, 1);
+        expect(stateFiles()).toEqual(before);
+      });
+
+      describe('probes as plain --once when', () => {
+        async function probesAsPlain(maxAge: number | undefined): Promise<void> {
+          const plain = await runApp(probing(), envOf(), LATER);
+          expect(await runApp(probing(), envOf(), LATER, maxAge)).toBe(plain);
+        }
+
+        it('the snapshot is missing a provider', async () => {
+          write(JSON.stringify(IDS.slice(1).map(idle)));
+          await probesAsPlain(600);
+        });
+
+        it('one entry is older than the age', async () => {
+          write(JSON.stringify(IDS.map(idle)));
+          await probesAsPlain(60);
+        });
+
+        it('the snapshot is corrupt', async () => {
+          write('{nope');
+          await probesAsPlain(600);
+        });
+      });
+    });
+
     describe('probes exactly as without the flag when the snapshot', () => {
       const idle = (id: string) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 0 }], fetchedAt: NOW });
 

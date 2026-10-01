@@ -15,8 +15,8 @@ type Proc = Streams & {
   exit(code: number): void;
 };
 
-export async function main(io: ProbeIo, env: Record<string, string | undefined>, streams: Streams, nowStr: string): Promise<void> {
-  const output = await runApp(io, env, nowStr);
+export async function main(io: ProbeIo, env: Record<string, string | undefined>, streams: Streams, nowStr: string, maxAge?: number): Promise<void> {
+  const output = await runApp(io, env, nowStr, maxAge);
   streams.stdout.write(output + '\n');
   streams.stderr.write(routesWarning(env));
 }
@@ -85,6 +85,7 @@ const USAGE = [
   '',
   '  dandelion                            live dashboard (re-probes every DANDELION_REFRESH_SECONDS)',
   '  dandelion --once                     run every probe once, print the dashboard and exit',
+  '  dandelion --once --max-age <seconds> print the dashboard from the live snapshot if at most <seconds> old, without probing',
   '  dandelion --json                     print a machine-readable snapshot of every provider and both routes',
   '  dandelion --line                     print a one-line plain-text summary for tmux and shell prompts',
   '  dandelion --waybar                   print one Waybar custom-module JSON line (text, tooltip, class, percentage)',
@@ -138,7 +139,7 @@ function rejectionOf(argv: string[]): ((io: ProbeIo, proc: Proc) => Promise<void
 function modeOf(proc: Proc): (io: ProbeIo, proc: Proc) => Promise<void> {
   const flagged = flagModeOf(proc.argv);
   if (flagged !== undefined) return flagged;
-  return rejectionOf(proc.argv) ?? (isLive(proc) ? live : (io, p) => main(io, p.env, p, new Date().toISOString()));
+  return rejectionOf(proc.argv) ?? (isLive(proc) ? live : (io, p) => main(io, p.env, p, new Date().toISOString(), maxAgeOf(p.argv.slice(2))));
 }
 
 export function runIfMain(metaUrl: string, argv1: string, io: ProbeIo, proc: Proc): Promise<void> {
