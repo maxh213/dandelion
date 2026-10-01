@@ -204,7 +204,7 @@ function fresh(session: Session, key: string): boolean {
 function eventsOf(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): Notification[] {
   if (!notifying(session) || previous === undefined || current === undefined) return [];
   const now = session.clock();
-  return notificationEvents(previous, current, now, nextLocalMidnight(session.zone, now));
+  return notificationEvents(previous, current, now, (at) => nextLocalMidnight(session.zone, at));
 }
 
 function announce(session: Session, previous: LiveSlot['usage'], current: LiveSlot['usage']): void {

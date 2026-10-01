@@ -254,8 +254,10 @@ function recoveryEvents(pair: WindowPair): Notification[] {
   return recovered ? notification(pair, 'recovered', `${pair.id} ${pair.current.label} recovered at ${pair.current.usedPct}%`) : [];
 }
 
-function evaporationEvents(pair: WindowPair, tonight: Tonight, now: string): Notification[] {
-  if (evaporates(pair.previous, tonight) || !evaporates(pair.current, tonight)) return [];
+type Nights = { before: Tonight; tonight: Tonight };
+
+function evaporationEvents(pair: WindowPair, nights: Nights, now: string): Notification[] {
+  if (evaporates(pair.previous, nights.before) || !evaporates(pair.current, nights.tonight)) return [];
   const left = formatCountdown(String(pair.current.resetsAt), now);
   return notification(pair, 'evaporating', `${pair.id} ${pair.current.label} is evaporating, resets in ${left}`);
 }
@@ -270,16 +272,22 @@ function resetEvents(pair: WindowPair, now: string): Notification[] {
   return reset ? notification(pair, 'reset', `${pair.id} ${current.label} reset: ${current.usedPct}% used`) : [];
 }
 
-function pairEvents(pair: WindowPair, now: string, midnight: string): Notification[] {
-  const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
-  return [...thresholdEvents(pair), ...recoveryEvents(pair), ...evaporationEvents(pair, tonight, now), ...resetEvents(pair, now)];
+export type MidnightAfter = (at: string) => string;
+
+function nightOf(at: string, midnightAfter: MidnightAfter): Tonight {
+  return { nowMs: Date.parse(at), midnightMs: Date.parse(midnightAfter(at)) };
 }
 
-export function notificationEvents(previous: ProviderUsage, current: ProviderUsage, now: string, midnight: string): Notification[] {
+function pairEvents(pair: WindowPair, nights: Nights, now: string): Notification[] {
+  return [...thresholdEvents(pair), ...recoveryEvents(pair), ...evaporationEvents(pair, nights, now), ...resetEvents(pair, now)];
+}
+
+export function notificationEvents(previous: ProviderUsage, current: ProviderUsage, now: string, midnightAfter: MidnightAfter): Notification[] {
   if (previous.status !== 'ok' || current.status !== 'ok') return [];
+  const nights = { before: nightOf(previous.fetchedAt, midnightAfter), tonight: nightOf(now, midnightAfter) };
   return current.windows.flatMap((window) => {
     const before = previous.windows.find((each) => each.label === window.label);
-    return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, now, midnight);
+    return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, nights, now);
   });
 }
 

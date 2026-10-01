@@ -865,13 +865,13 @@ describe('notificationEvents', () => {
       : { id: 'claude', displayName: 'claude', windows, fetchedAt: NOW, status, reason: 'down' };
   const week = (usedPct: number, resetsAt = '2026-09-18T10:00:00.000Z'): UsageWindow => ({ label: 'weekly', kind: 'weekly', usedPct, resetsAt });
   const session = (usedPct: number): UsageWindow => ({ label: '5h', kind: 'rolling', usedPct, resetsAt: '2026-09-13T15:00:00.000Z' });
-  const texts = (before: UsageWindow[], after: UsageWindow[]) => notificationEvents(usageOf(before), usageOf(after), NOW, MIDNIGHT).map((event) => event.text);
+  const texts = (before: UsageWindow[], after: UsageWindow[]) => notificationEvents(usageOf(before), usageOf(after), NOW, () => MIDNIGHT).map((event) => event.text);
 
   it('reports the highest threshold crossed, keyed by period', () => {
     expect(texts([week(79)], [week(80)])).toEqual(['claude weekly at 80%']);
     expect(texts([week(94)], [week(95)])).toEqual(['claude weekly at 95%']);
     expect(texts([week(70)], [week(97)])).toEqual(['claude weekly at 97%']);
-    expect(notificationEvents(usageOf([week(79)]), usageOf([week(80)]), NOW, MIDNIGHT)[0].key).toContain('2026-09-18T10:00:00.000Z');
+    expect(notificationEvents(usageOf([week(79)]), usageOf([week(80)]), NOW, () => MIDNIGHT)[0].key).toContain('2026-09-18T10:00:00.000Z');
   });
 
   it('reports nothing for windows already over a threshold or new windows', () => {
@@ -893,10 +893,23 @@ describe('notificationEvents', () => {
     expect(texts([week(50)], [week(51)])).toEqual([]);
   });
 
+  it('judges the previous window against the midnight that applied when it was fetched', () => {
+    const resets = '2026-09-17T10:00:00.000Z';
+    const fetched = (windows: UsageWindow[], fetchedAt: string): ProviderUsage => ({ id: 'claude', displayName: 'claude', windows, fetchedAt, status: 'ok' });
+    const between = (before: [UsageWindow, string], after: [UsageWindow, string]) =>
+      notificationEvents(fetched([before[0]], before[1]), fetched([after[0]], after[1]), after[1], (at) => nextLocalMidnight('UTC', at));
+    const wed = '2026-09-16T23:58:00.000Z';
+    const thu = '2026-09-17T00:03:00.000Z';
+    const later = '2026-09-17T00:08:00.000Z';
+    expect(between([week(50, resets), wed], [week(50, resets), thu]).map((event) => event.text)).toEqual(['claude weekly is evaporating, resets in 9h57m']);
+    expect(between([week(50, resets), thu], [week(50, resets), later])).toEqual([]);
+    expect(between([week(2, resets), thu], [week(50, resets), later]).map((event) => event.text)).toEqual(['claude weekly is evaporating, resets in 9h52m']);
+  });
+
   it('reports a weekly window that reset with less usage', () => {
     const past = '2026-09-13T09:00:00.000Z';
     expect(texts([week(70, past)], [week(3)])).toEqual(['claude weekly reset: 3% used']);
-    expect(notificationEvents(usageOf([week(70, past)]), usageOf([week(3)]), NOW, MIDNIGHT)[0].key).toContain('2026-09-18T10:00:00.000Z|reset');
+    expect(notificationEvents(usageOf([week(70, past)]), usageOf([week(3)]), NOW, () => MIDNIGHT)[0].key).toContain('2026-09-18T10:00:00.000Z|reset');
     expect(texts([week(70, NOW)], [week(3)])).toEqual(['claude weekly reset: 3% used']);
   });
 
@@ -911,8 +924,8 @@ describe('notificationEvents', () => {
   });
 
   it('reports nothing unless both results are ok', () => {
-    expect(notificationEvents(usageOf([week(10)], 'error'), usageOf([week(99)]), NOW, MIDNIGHT)).toEqual([]);
-    expect(notificationEvents(usageOf([week(10)]), usageOf([week(99)], 'error'), NOW, MIDNIGHT)).toEqual([]);
+    expect(notificationEvents(usageOf([week(10)], 'error'), usageOf([week(99)]), NOW, () => MIDNIGHT)).toEqual([]);
+    expect(notificationEvents(usageOf([week(10)]), usageOf([week(99)], 'error'), NOW, () => MIDNIGHT)).toEqual([]);
   });
 });
 
