@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
 import { openEligibility, openHidden, openHistory, openUsageSnapshot, openView, type ClaudeStatus, type Routes } from '../render/index.ts';
 import { launchOf } from './launch.ts';
-import { startLive } from './live.ts';
+import { startLive, type CopyResult } from './live.ts';
 
 const LINES = {
   route: {
@@ -58,7 +58,7 @@ type SessionOverrides = {
   historyWrites?: boolean;
   snapshotWrites?: boolean;
   notifier?: { notify(text: string): unknown };
-  copy?: (text: string) => Promise<boolean>;
+  copy?: (text: string) => Promise<CopyResult>;
   ids?: string[];
   spawn?: () => Promise<number | 'missing'>;
   routes?: Routes;
@@ -66,7 +66,7 @@ type SessionOverrides = {
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, notifier, copy, spawn, routes, statusProbe } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, notifier, copy, spawn, routes, statusProbe } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async (): Promise<CopyResult> => 'command', historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
   const spawner = { spawn: vi.fn(spawn), terminate: vi.fn<(signal: string) => Promise<void>>(async () => undefined) };
   const writes: string[] = [];
@@ -1448,6 +1448,16 @@ describe('route boxes', () => {
       await session.finished;
     });
 
+    it('flashes sent to terminal: when only the OSC 52 fallback was used', async () => {
+      const session = startSession({ copy: async () => 'terminal' });
+      await session.settleRound(0);
+      session.press('c');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(summary(session)).toBe('sent to terminal: model-a high claude');
+      session.press('q');
+      await session.finished;
+    });
+
     it('copies nothing and flashes nothing to copy while the first round is unsettled', async () => {
       const session = startSession();
       session.press('c');
@@ -1480,7 +1490,7 @@ describe('route boxes', () => {
     });
 
     it('flashes copy failed and keeps running when the clipboard fails', async () => {
-      const session = startSession({ copy: async () => false });
+      const session = startSession({ copy: async () => 'failed' });
       await session.settleRound(0);
       session.press('c');
       await vi.advanceTimersByTimeAsync(0);
@@ -1492,13 +1502,13 @@ describe('route boxes', () => {
     });
 
     it('does not flash when the copy settles after quit', async () => {
-      let finish: (copied: boolean) => void = () => undefined;
+      let finish: (result: CopyResult) => void = () => undefined;
       const session = startSession({ copy: () => new Promise((resolve) => (finish = resolve)) });
       await session.settleRound(0);
       session.press('c');
       session.press('q');
       await session.finished;
-      finish(true);
+      finish('command');
       await vi.advanceTimersByTimeAsync(0);
       expect(vi.getTimerCount()).toBe(0);
     });

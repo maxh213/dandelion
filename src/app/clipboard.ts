@@ -1,4 +1,4 @@
-import type { Clipboard } from './live.ts';
+import type { Clipboard, CopyResult } from './live.ts';
 
 export type CommandTry = (command: string, args: string[], input: string) => Promise<boolean>;
 
@@ -20,14 +20,14 @@ async function firstCommand(tryCommand: CommandTry, text: string): Promise<boole
 
 export function openClipboard({ tryCommand, write }: ClipboardDeps): Clipboard {
   return {
-    async copy(text) {
-      if (await firstCommand(tryCommand, text)) return true;
+    async copy(text): Promise<CopyResult> {
+      if (await firstCommand(tryCommand, text)) return 'command';
       try {
         write(osc52(text));
       } catch {
-        return false;
+        return 'failed';
       }
-      return true;
+      return 'terminal';
     }
   };
 }

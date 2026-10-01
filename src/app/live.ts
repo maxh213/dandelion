@@ -21,8 +21,10 @@ export interface FixRunner {
   terminate(signal: SignalName): Promise<void>;
 }
 
+export type CopyResult = 'command' | 'terminal' | 'failed';
+
 export interface Clipboard {
-  copy(text: string): Promise<boolean>;
+  copy(text: string): Promise<CopyResult>;
 }
 
 interface Signals {
@@ -414,14 +416,20 @@ function leave(session: Session): void {
   else quitCleanly(session);
 }
 
-function copyOutcome(session: Session, line: string, copied: boolean): void {
-  if (!session.quitting) showFlash(session, ROUTE_FLASH, copied ? `copied: ${line}` : COPY_FAILED);
+const COPY_FLASHES: Record<CopyResult, (line: string) => string> = {
+  command: (line) => `copied: ${line}`,
+  terminal: (line) => `sent to terminal: ${line}`,
+  failed: () => COPY_FAILED
+};
+
+function copyOutcome(session: Session, line: string, result: CopyResult): void {
+  if (!session.quitting) showFlash(session, ROUTE_FLASH, COPY_FLASHES[result](line));
 }
 
 function copyLine(session: Session, which: 0 | 1): void {
   const line = currentRouteLines(viewOf(session), session.clock())?.[which];
   if (line === undefined || line === NO_ROUTE) showFlash(session, ROUTE_FLASH, NOTHING_TO_COPY);
-  else void session.clipboard.copy(line).then((copied) => copyOutcome(session, line, copied));
+  else void session.clipboard.copy(line).then((result) => copyOutcome(session, line, result));
 }
 
 function copyRoute(session: Session): void {
