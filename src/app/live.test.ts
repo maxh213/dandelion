@@ -2298,4 +2298,73 @@ describe('foreground command', () => {
     expect(await session.finished).toBe(143);
     expect(session.spawner.terminate).not.toHaveBeenCalled();
   });
+
+  function pendingStop() {
+    let release: () => void = () => undefined;
+    const stopChildren = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
+    const session = startSession({ stopChildren });
+    let result: number | undefined;
+    void session.finished.then((value) => (result = value));
+    return { session, release: () => release(), result: () => result };
+  }
+
+  it('absorbs a SIGHUP after SIGTERM while the foreground command is still exiting', async () => {
+    let exited: () => void = () => undefined;
+    const session = startSession();
+    session.spawner.terminate.mockImplementation(() => new Promise<void>((resolve) => (exited = resolve)));
+    await session.settleRound(0);
+    session.press('l');
+    let result: number | undefined;
+    void session.finished.then((value) => (result = value));
+    session.deliver('SIGTERM');
+    session.deliver('SIGHUP');
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(session.spawner.terminate).toHaveBeenCalledTimes(1);
+    expect(session.spawner.terminate).toHaveBeenCalledWith('SIGTERM');
+    expect(session.stopChildren).not.toHaveBeenCalled();
+    exited();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.stopChildren).toHaveBeenCalledTimes(1);
+    expect(result).toBe(143);
+  });
+
+  it('absorbs a SIGTERM after SIGHUP while stopChildren is pending', async () => {
+    const { session, release, result } = pendingStop();
+    await session.settleRound(0);
+    session.deliver('SIGHUP');
+    session.deliver('SIGTERM');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(result()).toBeUndefined();
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.stopChildren).toHaveBeenCalledTimes(1);
+    expect(result()).toBe(129);
+  });
+
+  it('absorbs a SIGTERM after q while stopChildren is pending', async () => {
+    const { session, release, result } = pendingStop();
+    await session.settleRound(0);
+    session.press('q');
+    session.deliver('SIGTERM');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(result()).toBeUndefined();
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.stopChildren).toHaveBeenCalledTimes(1);
+    expect(result()).toBe(0);
+  });
+
+  it('keeps the handlers until done and removes both of them when it is called', async () => {
+    const { session, release, result } = pendingStop();
+    await session.settleRound(0);
+    session.deliver('SIGTERM');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.handlersFor('SIGTERM')).toHaveLength(1);
+    expect(session.handlersFor('SIGHUP')).toHaveLength(1);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(result()).toBe(143);
+    expect(session.handlersFor('SIGTERM')).toHaveLength(0);
+    expect(session.handlersFor('SIGHUP')).toHaveLength(0);
+  });
 });

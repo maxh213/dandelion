@@ -538,6 +538,7 @@ async function stopForeground(session: Session, signal: SignalName): Promise<voi
 }
 
 async function quit(session: Session, code: number, signal: SignalName = 'SIGTERM'): Promise<void> {
+  if (session.quitting) return;
   session.quitting = true;
   clearTimeout(session.frameTimer);
   clearTimeout(session.refreshTimer);
@@ -545,9 +546,9 @@ async function quit(session: Session, code: number, signal: SignalName = 'SIGTER
   session.screen.write(LEAVE_ALTERNATE);
   session.keyboard.setRawMode(false);
   session.keyboard.pause();
-  for (const [name, listener] of session.terminators) session.signals.off(name, listener);
   await stopForeground(session, signal);
   await session.stopChildren();
+  for (const [name, listener] of session.terminators) session.signals.off(name, listener);
   session.done(code);
 }
 
