@@ -444,6 +444,25 @@ describe('live session', () => {
     await session.finished;
   });
 
+  it('redraws at the new terminal width on resize', async () => {
+    const session = startSession({ rows: 30 });
+    await session.settleRound(0);
+    const wide = (): number => Math.max(...session.lastFrame().split('\n').map((line) => [...line].length));
+    expect(wide()).toBe(72);
+    Object.assign(session.screen, { columns: 120 });
+    session.screen.emit('resize');
+    expect(session.lastFrame().split('\n')[0]).toHaveLength(120);
+    expect(wide()).toBe(120);
+    Object.assign(session.screen, { columns: 40 });
+    session.screen.emit('resize');
+    expect(wide()).toBeLessThanOrEqual(40);
+    Object.assign(session.screen, { columns: undefined });
+    session.screen.emit('resize');
+    expect(wide()).toBe(72);
+    session.press('q');
+    await session.finished;
+  });
+
   it('scrolls a short session to the last panel and walks back to the first with the boxes in the chrome', async () => {
     const session = startSession({ rows: 12 });
     await session.settleRound(0);

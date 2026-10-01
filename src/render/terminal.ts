@@ -105,12 +105,15 @@ function flagsOf(marks: PanelMarks): string {
   return [...(marks.hidden ? [HIDDEN] : []), ...(marks.ineligible ? [ROUTING_OFF] : [])].join(' · ');
 }
 
+function widthOfMarks(marks: PanelMarks): number {
+  return marks.width ?? WIDTH;
+}
+
 function headerLine(name: string, marks: PanelMarks, tag: (text: string) => string): string {
   const titled = marks.spinner === undefined ? name : `${name} ${marks.spinner}`;
   const lead = marks.selected ? `${MARKER}${titled}` : titled;
   const flags = flagsOf(marks);
-  if (flags === '') return lead;
-  return `${lead}${repeatChar(' ', (marks.width ?? WIDTH) - cellCount(lead) - cellCount(flags))}${tag(flags)}`;
+  return flags === '' ? lead : `${lead}${repeatChar(' ', widthOfMarks(marks) - cellCount(lead) - cellCount(flags))}${tag(flags)}`;
 }
 
 function dimPanel(lines: string[], marks: PanelMarks, noColor: boolean): string {
@@ -293,7 +296,8 @@ export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: 
   return [renderBanner(now, zone, noColor), ...panels].join('\n');
 }
 
-const TOKEN = /\x1b\[[0-9;]*m|[^]/gu;
+const ESCAPE_CHAR = String.fromCharCode(27);
+const TOKEN = new RegExp(`${ESCAPE_CHAR}\\[[0-9;]*m|[^]`, 'gu');
 
 function isEscape(token: string): boolean {
   return token.length > 1 && token.startsWith('\x1b');

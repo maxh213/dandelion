@@ -12,6 +12,9 @@ import {
   STYLE_TOKENS,
   cellCount,
   clockTime,
+  columnsWidth,
+  fitToWidth,
+  layoutOf,
   type PanelMarks
 } from './terminal.ts';
 import { renderLiveFrame, type LiveView } from './live-frame.ts';
@@ -494,6 +497,80 @@ describe('live frame', () => {
     expect(london({ refreshing: true }).endsWith('refreshing… · data 0h0m old · 19:43:05')).toBe(true);
     expect(cellCount(london())).toBe(72);
     expect(cellCount(london({ refreshing: true }))).toBe(72);
+  });
+
+  describe('terminal width', () => {
+    const visible = (line: string): number => cellCount(line.replace(ANSI_CODE, ''));
+    const frameAt = (columns: number | undefined, noColor: boolean, rows = 80): string[] =>
+      renderLiveFrame(viewOf(background(), { columns, rows }), noColor, NOW).split('\n');
+    const widest = (lines: string[]): number => Math.max(...lines.map(visible));
+
+    it.each([true, false])('stretches the banner, dividers, route boxes and gauges to 200 columns (noColor %s)', (noColor) => {
+      const lines = frameAt(200, noColor);
+      const plain = lines.map((line) => line.replace(ANSI_CODE, ''));
+      expect(visible(lines[0])).toBe(200);
+      expect(visible(lines[2])).toBe(200);
+      expect(plain.filter((line) => /^[=━]+$/.test(line)).map((line) => line.length)).toEqual(Array(plain.filter((line) => /^[=━]+$/.test(line)).length).fill(200));
+      expect(plain.filter((line) => /^[=━]+$/.test(line)).length).toBeGreaterThan(3);
+      expect(widest(lines)).toBe(200);
+      const row = plain.find((line) => line.startsWith('session')) ?? '';
+      expect(row.search(/[#█]/)).toBe(36);
+      expect(row.search(/\d+%/)).toBeGreaterThan(72);
+      expect(row.search(/↻/)).toBeGreaterThan(72);
+    });
+
+    it('keeps the 72-wide labels and caps the gauge', () => {
+      expect(layoutOf(200)).toEqual({ width: 200, label: 35, gauge: 80 });
+      expect(layoutOf(72)).toEqual({ width: 72, label: 35, gauge: 20 });
+      expect(layoutOf(80)).toEqual({ width: 80, label: 35, gauge: 28 });
+    });
+
+    it('shrinks the gauge and then the label below 72 columns', () => {
+      expect(layoutOf(60)).toEqual({ width: 60, label: 35, gauge: 8 });
+      expect(layoutOf(50)).toEqual({ width: 50, label: 27, gauge: 6 });
+      expect(layoutOf(10)).toEqual({ width: 10, label: 14, gauge: 6 });
+    });
+
+    it.each([true, false])('keeps every line within 50 columns and the row budget (noColor %s)', (noColor) => {
+      const lines = frameAt(50, noColor, 20);
+      expect(widest(lines)).toBeLessThanOrEqual(50);
+      expect(lines.length).toBeLessThanOrEqual(20);
+      expect(visible(lines[0])).toBeLessThanOrEqual(50);
+    });
+
+    it.each([undefined, 0, -3, 12.5, Number.NaN])('renders the 72-wide frame for columns %s', (columns) => {
+      const reference = renderLiveFrame(viewOf(background(), { rows: 80 }), false, NOW);
+      expect(renderLiveFrame(viewOf(background(), { rows: 80, columns }), false, NOW)).toBe(reference);
+      expect(columnsWidth(columns)).toBeUndefined();
+    });
+
+    it('accepts a positive integer width', () => {
+      expect(columnsWidth(120)).toBe(120);
+    });
+
+    it('cuts a coloured line on a cell boundary, closing the style', () => {
+      const line = `\x1b[1mDANDELION\x1b[0m \x1b[90mrefreshing\x1b[0m`;
+      const cut = fitToWidth(line, 12);
+      expect(cut).toBe(`\x1b[1mDANDELION\x1b[0m \x1b[90mre\x1b[0m${RESET}`);
+      expect(visible(cut)).toBe(12);
+      expect(cut.endsWith(RESET)).toBe(true);
+      expect(cut.replace(ANSI_CODE, '')).not.toContain(ESCAPE);
+    });
+
+    it('leaves a line that fits untouched', () => {
+      expect(fitToWidth('', 3)).toBe('');
+      expect(fitToWidth('\x1b[1mabc\x1b[0m', 3)).toBe('\x1b[1mabc\x1b[0m');
+    });
+
+    it('cuts a plain line without a reset escape being invented in the text', () => {
+      expect(fitToWidth('abcdef', 3)).toBe(`abc${RESET}`);
+    });
+
+    it('stretches the graph view to the width', () => {
+      const samples: HistorySample[] = [{ id: 'claude', label: 'weekly', slot: 0, usedPct: 10, resetsAt: '2026-09-14T00:00:00.000Z', at: '2026-09-13T08:00:00.000Z' }];
+      const lines = renderLiveFrame(viewOf([], { columns: 100, graph: { id: 'claude', samples, usage: undefined } }), true, NOW).split('\n');
+      expect(widest(lines)).toBeLessThanOrEqual(100);
+    });
   });
 
   it('shows only the clock in the banner while nothing has settled', () => {
