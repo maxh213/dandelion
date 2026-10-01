@@ -26,6 +26,7 @@ import {
   fitToWidth,
   renderDimPanel,
   renderPanel,
+  renderPanelRemembered,
   repeatChar,
   splitBanner,
   viewportLines,
@@ -46,7 +47,7 @@ const PROBING = 'probing…';
 const ROUTES_FILE_ERROR = 'routes file error';
 const FALLBACK_ROWS = 24;
 
-export type LiveSlot = { id: string; usage: ProviderUsage | undefined; probing?: boolean };
+export type LiveSlot = { id: string; usage: ProviderUsage | undefined; probing?: boolean; lastGood?: Extract<ProviderUsage, { status: 'ok' }> };
 
 export const ROUTE_FLASH = -1;
 
@@ -147,8 +148,13 @@ function settledMarks(slot: LiveSlot, usage: ProviderUsage, spinner: number, now
   return { ...marks, age, spinner: slot.probing === true ? spinnerFrame(spinner) : undefined };
 }
 
+function rememberedPanel(slot: LiveSlot, good: NonNullable<LiveSlot['lastGood']>, failed: Exclude<ProviderUsage, { status: 'ok' }>, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
+  return renderPanelRemembered(good, failed, noColor, now, { ...settledMarks(slot, good, spinner, now, marks), fixable: failed.fix !== undefined });
+}
+
 function livePanel(slot: LiveSlot, spinner: number, noColor: boolean, now: string, marks: PanelMarks): string {
   if (slot.usage === undefined) return pendingPanel(slot.id, spinner, noColor, marks);
+  if (slot.usage.status !== 'ok' && slot.lastGood !== undefined) return rememberedPanel(slot, slot.lastGood, slot.usage, spinner, noColor, now, marks);
   return renderPanel(slot.usage, noColor, now, { ...settledMarks(slot, slot.usage, spinner, now, marks), fixable: slot.usage.fix !== undefined });
 }
 

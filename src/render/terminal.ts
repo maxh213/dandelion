@@ -254,10 +254,18 @@ function snapshotLines(usage: OkUsage, now: string): string[] {
   return usage.snapshotAt === undefined ? [] : [snapshotLine(usage.snapshotAt, now)];
 }
 
-function renderPanelStale(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
+function plainRows(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string[] {
   const layout = layoutOf(marks.width);
-  const rows = panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String, marks.absoluteZone, layout), (text) => text, layout);
-  return dimPanel([headerLine(usage.displayName, marks, String), ...rows, ...snapshotLines(usage, now), captionLine(usage, marks)], marks, noColor);
+  return panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String, marks.absoluteZone, layout), (text) => text, layout);
+}
+
+function renderPanelStale(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
+  return dimPanel([headerLine(usage.displayName, marks, String), ...plainRows(usage, noColor, now, marks), ...snapshotLines(usage, now), captionLine(usage, marks)], marks, noColor);
+}
+
+export function renderPanelRemembered(good: OkUsage, failed: FailedUsage, noColor: boolean, now: string, marks: PanelMarks): string {
+  const lines = [headerLine(good.displayName, marks, String), ...plainRows(good, noColor, now, marks), `last probe failed: ${failed.reason}`, captionLine(good, marks)];
+  return dimPanel(lines, marks, noColor);
 }
 
 function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {

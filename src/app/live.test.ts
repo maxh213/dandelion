@@ -1401,4 +1401,67 @@ describe('fix key', () => {
     session.press('q');
     await session.finished;
   });
+
+  describe('a failed re-probe', () => {
+    const failure = (id: string, now: string): Usage => ({ id, displayName: id, windows: [], fetchedAt: now, status: 'error', reason: 'claude timed out after 90s' });
+    const fail = async (session: ReturnType<typeof startSession>, round: number, overrides: Record<string, Usage> = {}) => {
+      await session.settleRound(round, { claude: failure('claude', session.probes[0].calls[round].now), ...overrides });
+    };
+
+    it('keeps the previous rows dimmed with the reason and the age of the good data, then recovers', async () => {
+      const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '420' } });
+      await session.settleRound(0);
+      await vi.advanceTimersByTimeAsync(420000);
+      await fail(session, 1);
+      const lines = session.lastFrame().split('\n');
+      const at = lines.indexOf('claude');
+      expect(lines.slice(at, at + 4)).toEqual(['claude', `${'weekly'.padEnd(35)} ##------------------  10%`, 'last probe failed: claude timed out after 90s', 'plan · claude · 0h7m ago']);
+      await vi.advanceTimersByTimeAsync(420000);
+      await session.settleRound(2);
+      expect(session.lastFrame()).not.toContain('last probe failed');
+      expect(session.lastFrame()).toContain('plan · claude · 0h0m ago');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('draws a first-time failure as the plain reason panel', async () => {
+      const session = startSession();
+      await fail(session, 0);
+      const lines = session.lastFrame().split('\n');
+      const at = lines.indexOf('claude');
+      expect(lines.slice(at, at + 3)).toEqual(['claude', 'claude timed out after 90s', 'claude · 0h0m ago']);
+      expect(session.lastFrame()).not.toContain('last probe failed');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('draws no ANSI escape in the remembered panel under NO_COLOR', async () => {
+      const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
+      await session.settleRound(0);
+      await vi.advanceTimersByTimeAsync(1000);
+      await fail(session, 1);
+      expect(session.lastFrame()).toContain('last probe failed');
+      expect(session.lastFrame()).not.toContain('\x1b');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('still routes, copies and records history as if the provider were unavailable', async () => {
+      const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
+      await session.settleRound(0);
+      session.press('c');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.clipboard.copy).toHaveBeenLastCalledWith(expect.stringContaining('model-a'));
+      await vi.advanceTimersByTimeAsync(1000);
+      await fail(session, 1);
+      session.press('c');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.clipboard.copy).toHaveBeenLastCalledWith(expect.not.stringContaining('model-a'));
+      const samples = JSON.parse(session.historyReplace.mock.calls.at(-1)?.[1] ?? '[]');
+      expect(samples.filter((sample: { id: string }) => sample.id === 'claude')).toHaveLength(1);
+      expect(samples.filter((sample: { id: string; at: string }) => sample.id === 'claude' && sample.at !== START)).toEqual([]);
+      session.press('q');
+      await session.finished;
+    });
+  });
 });

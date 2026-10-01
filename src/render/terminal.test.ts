@@ -1391,3 +1391,67 @@ describe('pace warning', () => {
     expect(renderPanelOk(safe as Extract<ProviderUsage, { status: 'ok' }>, true, NOW, PLAIN).split('\n')).toHaveLength(4);
   });
 });
+
+describe('remembered panel', () => {
+  type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
+  const good: OkUsage = {
+    id: 'claude',
+    displayName: 'claude',
+    planLabel: 'personal',
+    windows: [{ label: 'weekly', kind: 'weekly', usedPct: 96, resetsAt: '2026-09-15T10:00:00.000Z' }],
+    fetchedAt: '2026-09-13T09:53:00.000Z',
+    status: 'ok'
+  };
+  const failed: ProviderUsage = { id: 'claude', displayName: 'claude', windows: [], fetchedAt: NOW, status: 'error', reason: 'claude timed out after 90s' };
+  const viewOf = (slot: Partial<LiveView['slots'][number]>, extra: Partial<LiveView> = {}): LiveView => ({
+    slots: [{ id: 'claude', usage: failed, lastGood: good, ...slot }],
+    spinner: 0,
+    refreshing: false,
+    footer: false,
+    ineligible: [],
+    zone: 'UTC',
+    routes: { lines: LINES },
+    rows: 60,
+    ...extra
+  });
+  const panelOf = (view: LiveView, noColor: boolean): string[] => renderLiveFrame(view, noColor, NOW).split('\n').slice(6);
+
+  it('shows the previous rows uncoloured, the failure reason and the age of the good data', () => {
+    expect(panelOf(viewOf({}), true)).toEqual([
+      '='.repeat(72),
+      'claude',
+      `${'weekly'.padEnd(35)} ###################-  96% ↻ 2d0h`,
+      'last probe failed: claude timed out after 90s',
+      'personal · claude · 0h7m ago'
+    ]);
+  });
+
+  it('dims the whole block with plain gauge glyphs and no ramp escape', () => {
+    const lines = panelOf(viewOf({}), false);
+    expect(lines.slice(1).every((line) => line.startsWith('\x1b[90m') && line.endsWith(RESET))).toBe(true);
+    expect(lines.join('\n')).not.toContain('\x1b[35m');
+    expect(lines[3]).toBe(`\x1b[90mlast probe failed: claude timed out after 90s${RESET}`);
+  });
+
+  it('contains no escape sequence under NO_COLOR', () => {
+    expect(panelOf(viewOf({}, { selected: 0 }), true).join('\n')).not.toContain(ESCAPE);
+  });
+
+  it('shows a balance line, a spinner while re-probing and the fix hint of the failure', () => {
+    const balance: OkUsage = { ...good, windows: [], balance: { amount: 5, currency: '$', reference: 20 } };
+    const fixable: ProviderUsage = { ...failed, fix: { command: 'claude', args: [] } };
+    const lines = panelOf(viewOf({ lastGood: balance, usage: fixable, probing: true }), true);
+    expect(lines[1]).toBe('claude ⠋');
+    expect(lines[2]).toBe(`${'balance $5.00'.padEnd(35)} #####---------------  25%`.padEnd(72));
+    expect(lines[4]).toBe('personal · claude · 0h7m ago · x fix');
+  });
+
+  it('renders a failure without remembered data exactly as before', () => {
+    expect(panelOf(viewOf({ lastGood: undefined }), true)).toEqual(['='.repeat(72), 'claude', 'claude timed out after 90s', 'claude · 0h0m ago']);
+  });
+
+  it('renders an ok result normally even when it remembers older data', () => {
+    const lines = panelOf(viewOf({ usage: good }), true);
+    expect(lines.join('\n')).not.toContain('last probe failed');
+  });
+});

@@ -52,6 +52,7 @@ type SettledRound = NonNullable<LiveSlot['usage']>[];
 type Session = LiveOptions & {
   clock: () => string;
   results: LiveSlot['usage'][];
+  lastGood: LiveSlot['lastGood'][];
   inFlight: Set<number>;
   generations: number[];
   settled: SettledRound | undefined;
@@ -112,7 +113,7 @@ function graphOf(session: Session): NonNullable<LiveView['graph']> {
 
 function viewOf(session: Session): LiveView {
   return {
-    slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index], probing: session.inFlight.has(index) })),
+    slots: session.probes.map(({ id }, index) => ({ id, usage: session.results[index], probing: session.inFlight.has(index), lastGood: session.lastGood[index] })),
     spinner: session.spinner,
     refreshing: session.running === true && session.rounds > 1,
     footer: session.footer,
@@ -184,6 +185,7 @@ function reorder(session: Session): void {
 function settle(session: Session, index: number, usage: LiveSlot['usage']): void {
   announce(session, session.results[index], usage);
   session.results[index] = usage;
+  if (usage?.status === 'ok') session.lastGood[index] = usage;
   session.inFlight.delete(index);
   reorder(session);
   draw(session);
@@ -442,6 +444,7 @@ export function startLive(options: LiveOptions): Promise<void> {
       ...options,
       clock: options.clock ?? wallClock,
       results: options.probes.map(() => undefined),
+      lastGood: options.probes.map(() => undefined),
       inFlight: new Set(),
       generations: options.probes.map(() => 0),
       settled: undefined,
