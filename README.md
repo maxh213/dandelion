@@ -6,6 +6,8 @@ Called dandelion because dandelion seeds can lay dormant for a period of time be
 
 Pace warning: when a window of known length (rolling `5h` windows, and windows whose label contains `week`, which are 7 days) is on course to hit 100% before it resets, a dim line `  → 100% in ~1h20m (before reset)` appears directly under its row, in the live dashboard and in `--once`. The projection assumes the usage so far was spread evenly over the time elapsed in the window, and stays silent for windows of unknown length, a missing or past reset, 0% or full usage, and windows under 5% elapsed. Routing and `route` output are unaffected.
 
+Pace marker: on those same windows of known length with a reset in the future and no further away than the window length, the gauge shows a dim `│` (`|` under `NO_COLOR`) at the point where steady usage would be, that is the share of the window already elapsed, in the live dashboard and in `--once`. The marker replaces the cell at that position and the gauge keeps its width, so a fill past the marker means you are ahead of pace. Windows of unknown length, a missing or past reset, a reset further away than the window length, and balance rows get no marker.
+
 ## Providers
 
 Panels always appear in this order. A provider whose CLI is missing, fails, times out or prints unexpected output renders as a dim panel with the reason; when claude, agy or kilo exits with an error, the reason is `Command exited with an error: ` and the first line the CLI wrote to stderr (stripped of control characters, with long secrets replaced by `…`).

@@ -137,7 +137,7 @@ describe('terminal renderer', () => {
     });
     const strip = (text: string): string => text.replace(ANSI_CODE, '');
     const balanceRow = (usage: ProviderUsage, noColor: boolean): string => renderPanelOk(usage as Extract<ProviderUsage, { status: 'ok' }>, noColor, NOW, PLAIN).split('\n')[2];
-    const weeklyRow = (noColor: boolean): string => renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct: 10, resetsAt: '2026-09-13T22:00:00Z' }, noColor, NOW);
+    const weeklyRow = (noColor: boolean): string => renderWindowRow({ label: 'credits', kind: 'weekly', usedPct: 10, resetsAt: '2026-09-13T22:00:00Z' }, noColor, NOW);
 
     it.each([true, false])('starts the gauge in the window row gauge column with noColor %s', (noColor) => {
       const column = (row: string): number => strip(row).search(/[#█░-]{20}/);
@@ -237,7 +237,7 @@ describe('terminal renderer', () => {
       '='.repeat(72),
       'claude',
       'session                             #-------------------   3% ↻ 8h40m',
-      'weekly                              #################---  86% ↻ 12h0m',
+      'weekly                              #################-|-  86% ↻ 12h0m',
       'claude · personal · claude'
     ]);
   });
@@ -353,10 +353,38 @@ describe('terminal renderer', () => {
   });
 });
 
+describe('pace marker', () => {
+  const fiveHour: UsageWindow = { label: '5h', kind: 'rolling', usedPct: 30, resetsAt: '2026-09-13T12:30:00.000Z' };
+  const gaugeOf = (row: string): string => row.replace(ANSI_CODE, '').slice(36, 56);
+
+  it('marks cell 10 of a 20-cell gauge and keeps its width', () => {
+    const gauge = gaugeOf(renderWindowRow(fiveHour, true, NOW));
+    expect(gauge).toBe('######----|---------');
+    expect([...gauge]).toHaveLength(20);
+  });
+
+  it('draws a dim bar around which the gauge colour is closed', () => {
+    const row = renderWindowRow(fiveHour, false, NOW);
+    expect(row).toContain(`\x1b[32m██████░░░░\x1b[0m\x1b[90m│\x1b[0m\x1b[32m░░░░░░░░░\x1b[0m`);
+  });
+
+  it('clamps to the last cell', () => {
+    expect(gaugeOf(renderWindowRow({ ...fiveHour, resetsAt: '2026-09-13T10:00:01.000Z' }, true, NOW))).toBe('######-------------|');
+  });
+
+  it.each([
+    ['unknown length', { ...fiveHour, label: 'credits', kind: 'weekly' as const }],
+    ['no reset', { ...fiveHour, resetsAt: undefined }],
+    ['a past reset', { ...fiveHour, resetsAt: '2026-09-13T09:00:00.000Z' }]
+  ])('is absent for %s', (_name, window) => {
+    expect(renderWindowRow(window, true, NOW)).not.toContain('|');
+  });
+});
+
 describe('window rows', () => {
   it('pads the label, gauge and right-aligned percent then the countdown', () => {
     expect(renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: '2026-09-13T22:00:00Z' }, true, NOW))
-      .toBe('weekly                              #################---  86% ↻ 12h0m');
+      .toBe('weekly                              #################-|-  86% ↻ 12h0m');
   });
 
   it('truncates labels longer than 35 cells with an ellipsis', () => {
@@ -681,24 +709,24 @@ describe('live frame', () => {
       RULE,
       'claude',
       'session                             #-------------------   3% ↻ 3d0h',
-      'weekly                              #################---  86% ↻ 3d0h',
+      'weekly                              ###########|#####---  86% ↻ 3d0h',
       '  → 100% in ~15h37m (before reset)',
-      'weekly Fable                        #################### 100% ↻ 3d0h',
+      'weekly Fable                        ###########|######## 100% ↻ 3d0h',
       'claude · personal · claude · 0h0m ago'
     ];
     const WORK_PANEL = [
       RULE,
       'claude-work',
       'session                             --------------------   0% ↻ 3d0h',
-      'weekly                              ##------------------  12% ↻ 3d0h',
-      'weekly Fable                        #####---------------  23% ↻ 3d0h',
+      'weekly                              ##---------|--------  12% ↻ 3d0h',
+      'weekly Fable                        #####------|--------  23% ↻ 3d0h',
       'claude · work · claude-work · 0h0m ago'
     ];
     const AGY_PANEL = [
       RULE,
       'agy',
       'Gemini Models · Five Hour Limit     ##########----------  50% ↻ 3d0h',
-      'Gemini Models · Weekly Limit        ##########----------  50% ↻ 3d0h',
+      'Gemini Models · Weekly Limit        ##########-|--------  50% ↻ 3d0h',
       'agy · agy · 0h0m ago'
     ];
     const win = (label: string, kind: 'rolling' | 'weekly', usedPct: number): UsageWindow => ({ label, kind, usedPct, resetsAt: LATER });
@@ -1421,7 +1449,7 @@ describe('remembered panel', () => {
     expect(panelOf(viewOf({}), true)).toEqual([
       '='.repeat(72),
       'claude',
-      `${'weekly'.padEnd(35)} ###################-  96% ↻ 2d0h`,
+      `${'weekly'.padEnd(35)} ##############|####-  96% ↻ 2d0h`,
       'last probe failed: claude timed out after 90s',
       'personal · claude · 0h7m ago'
     ]);

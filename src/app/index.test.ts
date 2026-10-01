@@ -226,12 +226,12 @@ describe('claude and agy windows', () => {
     expect(panelOf(output, 'claude')).toEqual([
       'claude',
       `${'session'.padEnd(35)} ${'█'.repeat(1)}${'░'.repeat(19)}   3% ↻ 8h40m`,
-      `${'weekly'.padEnd(35)} ${'█'.repeat(17)}${'░'.repeat(3)}  86% ↻ 12h0m`,
-      `${'weekly Fable'.padEnd(35)} ${'█'.repeat(20)} 100% ↻ 12h0m`,
+      `${'weekly'.padEnd(35)} ${'█'.repeat(17)}░│░  86% ↻ 12h0m`,
+      `${'weekly Fable'.padEnd(35)} ${'█'.repeat(18)}│█ 100% ↻ 12h0m`,
       'claude · personal · claude'
     ]);
     const noColor = await runApp(routedRunner(), { NO_COLOR: '1' }, NOW);
-    expect(noColor.split('\n')).toContain('weekly                              #################---  86% ↻ 12h0m');
+    expect(noColor.split('\n')).toContain('weekly                              #################-|-  86% ↻ 12h0m');
   });
 
   it('renders agy remaining percent as used percent', async () => {
@@ -261,8 +261,8 @@ describe('claude and agy windows', () => {
     const rowOf = (label: string) => lines.find((line) => line.startsWith(`${label.padEnd(35)} \x1b`));
     const [calm, hot, critical] = ['\x1b[32m', '\x1b[31m', '\x1b[35m'];
     expect(rowOf('session')).toBe(`${'session'.padEnd(35)} ${calm}█${'░'.repeat(19)}\x1b[0m ${calm}  3%\x1b[0m ↻ 8h40m`);
-    expect(rowOf('weekly')).toBe(`${'weekly'.padEnd(35)} ${hot}${'█'.repeat(17)}${'░'.repeat(3)}\x1b[0m ${hot} 86%\x1b[0m ↻ 12h0m`);
-    expect(rowOf('weekly Fable')).toBe(`${'weekly Fable'.padEnd(35)} ${critical}${'█'.repeat(20)}\x1b[0m ${critical}100%\x1b[0m ↻ 12h0m`);
+    expect(rowOf('weekly')).toBe(`${'weekly'.padEnd(35)} ${hot}${'█'.repeat(17)}░\x1b[0m${DIM}│\x1b[0m${hot}░\x1b[0m ${hot} 86%\x1b[0m ↻ 12h0m`);
+    expect(rowOf('weekly Fable')).toBe(`${'weekly Fable'.padEnd(35)} ${critical}${'█'.repeat(18)}\x1b[0m${DIM}│\x1b[0m${critical}█\x1b[0m ${critical}100%\x1b[0m ↻ 12h0m`);
   });
 
   it('renders a claude window without a reset and no session row', async () => {
@@ -376,12 +376,12 @@ describe('claude and agy windows', () => {
 describe('claude-work panel', () => {
   const WORK_ROWS = [
     'session                             --------------------   0% ↻ 12h10m',
-    'weekly                              ##------------------  12% ↻ 2d7h',
-    'weekly Fable                        #####---------------  23% ↻ 2d7h'
+    'weekly                              ##-----------|------  12% ↻ 2d7h',
+    'weekly Fable                        #####--------|------  23% ↻ 2d7h'
   ];
   const WORK_CAPTION = 'claude · work · claude-work';
   const PERSONAL_CAPTION = 'claude · personal · claude';
-  const PERSONAL_ROW = 'weekly                              #################---  86% ↻ 12h0m';
+  const PERSONAL_ROW = 'weekly                              #################-|-  86% ↻ 12h0m';
   const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
   const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
   const OTHERS = NAMES.filter((name) => name !== 'claude-work');
@@ -421,10 +421,10 @@ describe('claude-work panel', () => {
     const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const work = output.slice(output.indexOf('\nclaude-work\n'), output.indexOf(`${DIM}${WORK_CAPTION}\x1b[0m\n`));
     expect(work).toContain(`${CALM}${'░'.repeat(20)}\x1b[0m ${CALM}  0%\x1b[0m ↻ 12h10m`);
-    expect(work).toContain(`${CALM}${'█'.repeat(2)}${'░'.repeat(18)}\x1b[0m ${CALM} 12%\x1b[0m ↻ 2d7h`);
-    expect(work).toContain(`${CALM}${'█'.repeat(5)}${'░'.repeat(15)}\x1b[0m ${CALM} 23%\x1b[0m ↻ 2d7h`);
-    expect(output).toContain(`\x1b[31m${'█'.repeat(17)}${'░'.repeat(3)}\x1b[0m \x1b[31m 86%`);
-    expect(output).toContain(`\x1b[35m${'█'.repeat(20)}\x1b[0m \x1b[35m100%`);
+    expect(work).toContain(`${CALM}${'█'.repeat(2)}${'░'.repeat(11)}\x1b[0m${DIM}│\x1b[0m${CALM}${'░'.repeat(6)}\x1b[0m ${CALM} 12%\x1b[0m ↻ 2d7h`);
+    expect(work).toContain(`${CALM}${'█'.repeat(5)}${'░'.repeat(8)}\x1b[0m${DIM}│\x1b[0m${CALM}${'░'.repeat(6)}\x1b[0m ${CALM} 23%\x1b[0m ↻ 2d7h`);
+    expect(output).toContain(`\x1b[31m${'█'.repeat(17)}░\x1b[0m${DIM}│\x1b[0m\x1b[31m░\x1b[0m \x1b[31m 86%`);
+    expect(output).toContain(`\x1b[35m${'█'.repeat(18)}\x1b[0m${DIM}│\x1b[0m\x1b[35m█\x1b[0m \x1b[35m100%`);
   });
 
   it.each<[string, Record<string, string>]>([
@@ -502,9 +502,9 @@ describe('kimi panel', () => {
     expect(lines.slice(kimi - 1, kimi + 6)).toEqual([
       '='.repeat(72),
       'kimi',
-      'weekly                              ############--------  59% ↻ 5d0h',
+      'weekly                              #####|######--------  59% ↻ 5d0h',
       '  → 100% in ~1d9h (before reset)',
-      '5h                                  ########------------  42% ↻ 5h0m',
+      '5h                                  |#######------------  42% ↻ 5h0m',
       'kimi code · kimi',
       '='.repeat(72)
     ]);
@@ -519,7 +519,7 @@ describe('kimi panel', () => {
     const output = await runApp(routedRunner(), {}, NOW);
     const WARM = '\x1b[33m';
     expect(output).toContain(
-      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(12)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${DIM}  → 100% in ~1d9h (before reset)\x1b[0m\n${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 5h0m\n${DIM}kimi code · kimi\x1b[0m\n`
+      `\nkimi\n${'weekly'.padEnd(35)} ${WARM}${'█'.repeat(5)}\x1b[0m${DIM}│\x1b[0m${WARM}${'█'.repeat(6)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m ↻ 5d0h\n${DIM}  → 100% in ~1d9h (before reset)\x1b[0m\n${'5h'.padEnd(35)} ${CALM}\x1b[0m${DIM}│\x1b[0m${CALM}${'█'.repeat(7)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 5h0m\n${DIM}kimi code · kimi\x1b[0m\n`
     );
   });
 
@@ -532,8 +532,8 @@ describe('kimi panel', () => {
     expect(lines.slice(kimi - 1, kimi + 5)).toEqual([
       '='.repeat(72),
       'kimi',
-      'weekly                              --------------------   0% ↻ 6d0h',
-      '5h                                  --------------------   0% ↻ 2h0m',
+      'weekly                              --|-----------------   0% ↻ 6d0h',
+      '5h                                  ------------|-------   0% ↻ 2h0m',
       'kimi code · kimi',
       '='.repeat(72)
     ]);
@@ -824,8 +824,8 @@ describe('codex panel', () => {
     expect(lines.slice(35, 42)).toEqual([
       '='.repeat(72),
       'codex',
-      '5h                                  ########------------  42% ↻ 2h30m',
-      'weekly                              #################---  86% ↻ 3d0h',
+      '5h                                  ########--|---------  42% ↻ 2h30m',
+      'weekly                              ###########|#####---  86% ↻ 3d0h',
       '  → 100% in ~15h37m (before reset)',
       'codex · codex',
       '='.repeat(72)
@@ -845,8 +845,8 @@ describe('codex panel', () => {
     expect(output).toContain(
       [
         '\ncodex',
-        `${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 2h30m`,
-        `${'weekly'.padEnd(35)} ${HOT}${'█'.repeat(17)}${'░'.repeat(3)}\x1b[0m ${HOT} 86%\x1b[0m ↻ 3d0h`,
+        `${'5h'.padEnd(35)} ${CALM}${'█'.repeat(8)}${'░'.repeat(2)}\x1b[0m${DIM}│\x1b[0m${CALM}${'░'.repeat(9)}\x1b[0m ${CALM} 42%\x1b[0m ↻ 2h30m`,
+        `${'weekly'.padEnd(35)} ${HOT}${'█'.repeat(11)}\x1b[0m${DIM}│\x1b[0m${HOT}${'█'.repeat(5)}${'░'.repeat(3)}\x1b[0m ${HOT} 86%\x1b[0m ↻ 3d0h`,
         `${DIM}  → 100% in ~15h37m (before reset)\x1b[0m`,
         `${DIM}codex · codex\x1b[0m\n`
       ].join('\n')
@@ -860,7 +860,7 @@ describe('codex panel', () => {
 
     it('shows the projection line under the 5h row', async () => {
       const lines = panelOf(plain(await runApp(ioAt(65), GROK_ENV, NOW)), 'codex');
-      expect(lines.slice(1, 4).map((line) => line.trim().replace(/ +/g, ' '))).toEqual(['5h █████████████░░░░░░░ 65% ↻ 2h0m', '→ 100% in ~1h36m (before reset)', 'weekly █████████████████░░░ 86% ↻ 3d0h']);
+      expect(lines.slice(1, 4).map((line) => line.trim().replace(/ +/g, ' '))).toEqual(['5h ████████████│░░░░░░░ 65% ↻ 2h0m', '→ 100% in ~1h36m (before reset)', 'weekly ███████████│█████░░░ 86% ↻ 3d0h']);
     });
 
     it('puts projectedFullAt in the json snapshot', async () => {

@@ -1,4 +1,4 @@
-import { HOT_PCT, formatCountdown, formatResetAt, isStale, projectFull, type Balance, type ClaudeStatus, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { HOT_PCT, elapsedFraction, formatCountdown, formatResetAt, isStale, projectFull, type Balance, type ClaudeStatus, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -182,8 +182,17 @@ function countdown(resetsAt: string | undefined, now: string, absoluteZone: stri
   return resetsAt === undefined ? '' : ` ↻ ${resetText(resetsAt, now, absoluteZone)}`;
 }
 
-function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, absoluteZone: string | undefined, layout: Layout): string {
-  const gauge = paint(renderGauge(window.usedPct, 100, noColor, layout.gauge));
+function paceGauge(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, mark: (text: string) => string, cells: number): string {
+  const gauge = renderGauge(window.usedPct, 100, noColor, cells);
+  const fraction = elapsedFraction(window, now);
+  if (fraction === undefined) return paint(gauge);
+  const index = Math.min(cells - 1, Math.floor(fraction * cells));
+  const chars = [...gauge];
+  return paint(chars.slice(0, index).join('')) + mark(noColor ? '|' : '│') + paint(chars.slice(index + 1).join(''));
+}
+
+function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, mark: (text: string) => string, absoluteZone: string | undefined, layout: Layout): string {
+  const gauge = paceGauge(window, noColor, now, paint, mark, layout.gauge);
   const percent = paint(`${window.usedPct}%`.padStart(PERCENT_CELLS));
   const label = fitLabel(window.label, absoluteZone === undefined ? layout.label : layout.label - (LABEL_CELLS - ABSOLUTE_LABEL_CELLS));
   return `${label} ${gauge} ${percent}${countdown(window.resetsAt, now, absoluteZone)}`;
@@ -191,7 +200,7 @@ function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (tex
 
 export function renderWindowRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone?: string, width?: number): string {
   const style = STYLE_TOKENS[styleToken(window.usedPct)];
-  return rowWith(window, noColor, now, (text) => styled(text, style, noColor), absoluteZone, layoutOf(width));
+  return rowWith(window, noColor, now, (text) => styled(text, style, noColor), (text) => dim(text, noColor), absoluteZone, layoutOf(width));
 }
 
 function pacedRow(window: UsageWindow, noColor: boolean, now: string, absoluteZone: string | undefined, width?: number): string {
@@ -263,7 +272,7 @@ function snapshotLines(usage: OkUsage, now: string): string[] {
 
 function plainRows(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string[] {
   const layout = layoutOf(marks.width);
-  return panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String, marks.absoluteZone, layout), (text) => text, layout);
+  return panelBody(usage, noColor, (window) => rowWith(window, noColor, now, String, String, marks.absoluteZone, layout), (text) => text, layout);
 }
 
 function renderPanelStale(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {

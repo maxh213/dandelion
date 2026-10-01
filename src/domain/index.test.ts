@@ -15,6 +15,7 @@ import {
   orderPanels,
   passedResets,
   resetKey,
+  elapsedFraction,
   projectFull,
   routeDecision,
   routeLine,
@@ -912,6 +913,29 @@ describe('notificationEvents', () => {
   it('reports nothing unless both results are ok', () => {
     expect(notificationEvents(usageOf([week(10)], 'error'), usageOf([week(99)]), NOW, MIDNIGHT)).toEqual([]);
     expect(notificationEvents(usageOf([week(10)]), usageOf([week(99)], 'error'), NOW, MIDNIGHT)).toEqual([]);
+  });
+});
+
+describe('elapsedFraction', () => {
+  const NOW = '2026-09-13T10:00:00.000Z';
+  const window = (label: string, kind: UsageWindow['kind'], resetsAt?: string): UsageWindow => ({ label, kind, usedPct: 10, resetsAt });
+
+  it('is half for a 5h rolling window resetting in 2h30m', () => {
+    expect(elapsedFraction(window('5h', 'rolling', '2026-09-13T12:30:00.000Z'), NOW)).toBe(0.5);
+  });
+
+  it('is zero for a weekly window resetting in 7 days', () => {
+    expect(elapsedFraction(window('weekly', 'weekly', '2026-09-20T10:00:00.000Z'), NOW)).toBe(0);
+  });
+
+  it.each([
+    ['unknown length', window('credits', 'weekly', '2026-09-13T12:30:00.000Z')],
+    ['no reset', window('5h', 'rolling')],
+    ['a past reset', window('5h', 'rolling', '2026-09-13T09:00:00.000Z')],
+    ['a reset now', window('5h', 'rolling', NOW)],
+    ['a reset beyond the length', window('5h', 'rolling', '2026-09-13T15:00:00.001Z')]
+  ])('is undefined for %s', (_name, input) => {
+    expect(elapsedFraction(input, NOW)).toBeUndefined();
   });
 });
 

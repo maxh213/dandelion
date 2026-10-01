@@ -188,6 +188,13 @@ function hasUsage(usedPct: number): boolean {
   return usedPct > 0 && usedPct < FULL_PCT;
 }
 
+export function elapsedFraction(window: UsageWindow, now: string): number | undefined {
+  const lengthMs = windowLengthMs(window);
+  const remainingMs = Date.parse(String(window.resetsAt)) - Date.parse(now);
+  if (lengthMs === undefined || !(remainingMs > 0) || remainingMs > lengthMs) return undefined;
+  return (lengthMs - remainingMs) / lengthMs;
+}
+
 export function projectFull(window: UsageWindow, now: string): string | undefined {
   const nowMs = Date.parse(now);
   const resetMs = Date.parse(String(window.resetsAt));
