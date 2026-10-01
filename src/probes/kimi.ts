@@ -207,25 +207,64 @@ function expiryMs(value: unknown): number | undefined {
   return value < 1e12 ? value * 1000 : value;
 }
 
-function tokenOf(parsed: unknown, now: string): string {
-  const token = fieldOf(parsed, 'access_token');
-  if (!isFilled(token)) throw new ProbeUnavailable(NO_AUTH);
+type Credential = { base: string; parsed: unknown };
+
+function isExpired(parsed: unknown, now: string): boolean {
   const expiry = expiryMs(fieldOf(parsed, 'expires_at'));
-  if (expiry !== undefined && expiry <= Date.parse(now)) throw new ProbeUnavailable(EXPIRED);
-  return token;
+  return expiry !== undefined && expiry <= Date.parse(now);
 }
 
-async function loadAuth(io: KimiIo, env: Env, now: string): Promise<Auth | undefined> {
+function authOf(credential: Credential): Auth {
+  const token = fieldOf(credential.parsed, 'access_token');
+  if (!isFilled(token)) throw new ProbeUnavailable(NO_AUTH);
+  return { base: credential.base, token };
+}
+
+function parseCredential(text: string): unknown {
+  try {
+    return parseJson(text);
+  } catch {
+    throw new ProbeUnavailable(NO_AUTH);
+  }
+}
+
+async function loadCredential(io: KimiIo, env: Env): Promise<Credential | undefined> {
   const home = kimiHome(io.reader, env);
   const config = await io.reader.read(`${home}/config.toml`);
   const text = await io.reader.read(`${home}/credentials/${credentialName(config)}.json`);
   if (text === undefined) return undefined;
+  return { base: apiBase(config), parsed: parseCredential(text) };
+}
+
+function isFresh(credential: Credential | undefined, now: string): credential is Credential {
+  return credential !== undefined && !isExpired(credential.parsed, now);
+}
+
+async function waitForFresh(io: KimiIo, env: Env, child: LaunchedProcess, now: string, waitedMs: number): Promise<Auth> {
+  const exited = child.hasExited();
+  const credential = await loadCredential(io, env);
+  if (isFresh(credential, now)) return authOf(credential);
+  if (exited || waitedMs >= TOKEN_WAIT_MS) throw new ProbeUnavailable(EXPIRED);
+  await sleep(POLL_MS);
+  return waitForFresh(io, env, child, now, waitedMs + POLL_MS);
+}
+
+async function refreshViaKimi(io: KimiIo, env: Env, now: string): Promise<Auth> {
+  const port = parsePort(env['DANDELION_KIMI_PORT']);
+  const child = await io.launcher.launch('kimi', ['web', '--no-open', '--port', String(port)]);
+  if (child === undefined) throw new ProbeUnavailable(EXPIRED);
   try {
-    return { base: apiBase(config), token: tokenOf(parseJson(text), now) };
-  } catch (error) {
-    if (!(error instanceof SyntaxError)) throw error;
-    throw new ProbeUnavailable(NO_AUTH);
+    return await waitForFresh(io, env, child, now, 0);
+  } finally {
+    await child.stop();
   }
+}
+
+async function authFor(io: KimiIo, env: Env, credential: Credential, now: string): Promise<Auth> {
+  const auth = authOf(credential);
+  if (!isExpired(credential.parsed, now)) return auth;
+  if (!isFilled(fieldOf(credential.parsed, 'refresh_token'))) throw new ProbeUnavailable(EXPIRED);
+  return refreshViaKimi(io, env, now);
 }
 
 async function readLocal(io: KimiIo, env: Env): Promise<UsageWindow[]> {
@@ -246,8 +285,8 @@ async function readApi(io: KimiIo, auth: Auth): Promise<UsageWindow[]> {
 }
 
 async function readKimi(io: KimiIo, env: Env, now: string): Promise<UsageWindow[]> {
-  const auth = await loadAuth(io, env, now);
-  return auth === undefined ? readLocal(io, env) : readApi(io, auth);
+  const credential = await loadCredential(io, env);
+  return credential === undefined ? readLocal(io, env) : readApi(io, await authFor(io, env, credential, now));
 }
 
 export async function probeKimi(io: KimiIo, env: Env, now: string): Promise<ProviderUsage> {

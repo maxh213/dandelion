@@ -525,3 +525,112 @@ describe('probeKimi coding API', () => {
     expect(usage.status).toBe('ok');
   });
 });
+
+describe('probeKimi expired token refresh', () => {
+  const STALE = JSON.stringify({ access_token: 'stale-token', refresh_token: 'refresh-secret', expires_at: Date.parse(NOW) / 1000 - 60 });
+  const FRESH = JSON.stringify({ access_token: 'fresh-token', refresh_token: 'refresh-secret-2', expires_at: FUTURE });
+  const PATH = `${HOME}/credentials/scoped-key.json`;
+
+  function refreshing(child: FakeChild | undefined, rewriteAfterReads: number) {
+    const files = scoped(STALE);
+    let reads = 0;
+    const base = ioWith(child, bodyOf(LEGACY), files);
+    const reader: FileReader = {
+      homeDir: () => '/home/tester',
+      isDirectory: async () => false,
+      read: async (path) => {
+        if (path === PATH && (reads += 1) > rewriteAfterReads) files[PATH] = FRESH;
+        return files[path];
+      }
+    };
+    return { ...base, io: { ...base.io, reader } };
+  }
+
+  it('starts kimi web so kimi refreshes its own token, then reads the coding API counters', async () => {
+    const child = fakeChild('');
+    const { io, launches, requests } = refreshing(child, 1);
+    const usage = await probeKimi(io, PORT, NOW);
+    expect(launches).toEqual([['kimi', ['web', '--no-open', '--port', '48123']]]);
+    expect(requests).toEqual([[
+      'https://api.kimi.ai/coding/v1/usages',
+      { Authorization: 'Bearer fresh-token', Accept: 'application/json', 'User-Agent': 'kimi-code-cli/2.1.1' },
+      10000
+    ]]);
+    expect(usage).toMatchObject({
+      status: 'ok',
+      windows: [
+        { label: 'weekly', kind: 'weekly', usedPct: 29, resetsAt: '2026-10-02T12:58:51.471957Z' },
+        { label: '5h', kind: 'rolling', usedPct: 88, resetsAt: '2026-10-01T01:58:51.471957Z' }
+      ]
+    });
+    expect(child.stops).toBe(1);
+    expect(JSON.stringify(usage)).not.toMatch(/token|secret/);
+  });
+
+  it('polls the credential file every 500ms until it is fresh', async () => {
+    vi.useFakeTimers();
+    const child = fakeChild('');
+    const { io } = refreshing(child, 3);
+    const probe = probeKimi(io, PORT, NOW);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await probe).toMatchObject({ status: 'ok' });
+  });
+
+  it('keeps the expired message when the credential stays stale for 20s', async () => {
+    vi.useFakeTimers();
+    const child = fakeChild('');
+    const { io } = refreshing(child, Number.POSITIVE_INFINITY);
+    const probe = probeKimi(io, PORT, NOW);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(await probe).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once' });
+    expect(child.stops).toBe(1);
+  });
+
+  it('keeps the expired message when kimi web exits without refreshing', async () => {
+    const child = fakeChild('', true);
+    const { io, requests } = refreshing(child, Number.POSITIVE_INFINITY);
+    expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once' });
+    expect(requests).toEqual([]);
+    expect(child.stops).toBe(1);
+  });
+
+  it('keeps the expired message when kimi is not installed', async () => {
+    const { io } = refreshing(undefined, 1);
+    expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once' });
+  });
+
+  it('rejects an invalid port before launching', async () => {
+    const { io, launches } = refreshing(fakeChild(), 1);
+    expect(await probeKimi(io, { DANDELION_KIMI_PORT: '0' }, NOW)).toMatchObject({
+      status: 'unavailable',
+      reason: 'DANDELION_KIMI_PORT must be an integer from 1 to 65535'
+    });
+    expect(launches).toEqual([]);
+  });
+
+  it('does not launch when the refresh_token is empty or missing', async () => {
+    const expiredAt = Date.parse(NOW) / 1000 - 60;
+    for (const body of [{ refresh_token: '' }, {}]) {
+      const files = scoped(JSON.stringify({ access_token: 'stale-token', expires_at: expiredAt, ...body }));
+      const { io, launches } = ioWith(fakeChild(), bodyOf(LEGACY), files);
+      expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'kimi token expired — run kimi once' });
+      expect(launches).toEqual([]);
+    }
+  });
+
+  it('reports a missing access_token as no auth even when expired with a refresh_token', async () => {
+    const body = JSON.stringify({ refresh_token: 'refresh-secret', expires_at: 1 });
+    const { io, launches } = ioWith(fakeChild(), bodyOf(LEGACY), scoped(body));
+    expect(await probeKimi(io, PORT, NOW)).toMatchObject({ status: 'unavailable', reason: 'no kimi auth — run kimi login' });
+    expect(launches).toEqual([]);
+  });
+
+  it('reads the human comment payload to the second', async () => {
+    const usage = await probeKimi(ioWith(undefined, bodyOf(LEGACY), scoped()).io, {}, NOW);
+    const instants = usage.windows.map((w) => [w.usedPct, Math.floor(Date.parse(w.resetsAt ?? '') / 1000)]);
+    expect(instants).toEqual([
+      [29, Date.parse('2026-10-02T12:58:51Z') / 1000],
+      [88, Date.parse('2026-10-01T01:58:51Z') / 1000]
+    ]);
+  });
+});
