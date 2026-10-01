@@ -602,7 +602,8 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['H', toggleShowHidden]
 ]);
 
-const TOKEN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[A-Za-z]|[\\s\\S]`, 'gu');
+const ESC = String.fromCharCode(27);
+const TOKEN = new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]|${ESC}O[\\s\\S]|${ESC}[^[O${ESC}]|[\\s\\S]`, 'gu');
 
 function keysIgnored(session: Session): boolean {
   return session.suspended || session.quitting;

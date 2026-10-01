@@ -672,6 +672,45 @@ describe('live session', () => {
     await session.finished;
   });
 
+  it('ignores Alt+key chords on the dashboard', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    const count = session.writes.length;
+    ['\x1bq', '\x1bx', '\x1bl', '\x1bL'].forEach((chord) => session.press(chord));
+    expect(session.writes).toHaveLength(count);
+    expect(session.probes[0].calls).toHaveLength(1);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('keeps the graph open for unknown escape sequences and Alt+key', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press('g');
+    const graph = session.lastFrame();
+    const count = session.writes.length;
+    ['\x1b[5~', '\x1b[6~', '\x1b[3~', '\x1b[2~', '\x1b[15~', '\x1bOP', '\x1bOH', '\x1bq'].forEach((key) => session.press(key));
+    expect(session.writes).toHaveLength(count);
+    expect(session.lastFrame()).toBe(graph);
+    session.press('\x1b');
+    expect(session.lastFrame()).not.toBe(graph);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('still treats a doubled escape as Esc and batched arrows as separate moves', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press('g');
+    session.press('\x1b\x1b');
+    expect(session.lastFrame().startsWith('claude · usage')).toBe(false);
+    const before = session.lastFrame();
+    session.press('\x1b[B\x1b[B');
+    expect(session.lastFrame()).not.toBe(before);
+    session.press('q');
+    await session.finished;
+  });
+
   it('charts the recorded history of the provider, reset drop included', async () => {
     const at = (hour: number) => `2026-09-13T0${hour}:00:00.000Z`;
     const stored = [80, 95, 3].map((usedPct, index) => ({ id: 'claude', slot: 0, label: 'weekly', usedPct, at: at(index + 6) }));
