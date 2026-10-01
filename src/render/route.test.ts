@@ -94,6 +94,22 @@ describe('renderRoute', () => {
       });
     });
 
+    it('says when each tripped account comes back, also when nothing is routable', () => {
+      const work = usage('claude-work', ['session', 'rolling', 92, SOON], ['other', 'rolling', 95, LATER]);
+      const bare = usage('claude', ['session', 'rolling', 91]);
+      const past = usage('agy', ['session', 'rolling', 91, '2026-09-14T00:00:00.000Z']);
+      expect(why([work, bare, past], [], 'headroom')).toEqual({
+        out: 'none\nnone: no account can take the work\ntripped: claude (session 91%), claude-work (other 95%, back Sat 17:00), agy (session 91%); unavailable: claude-deepseek, kimi, grok, cursor, junie, hermes\n',
+        err: '',
+        code: 1
+      });
+    });
+
+    it('shows a month and day for a back time six or more days away', () => {
+      const far = usage('claude', ['session', 'rolling', 92, '2026-09-25T04:00:00.000Z']);
+      expect(why([far], [], 'headroom').out).toContain('tripped: claude (session 92%, back Sep 24 21:00)');
+    });
+
     it('names the winning rank and why each higher rank was skipped', () => {
       const usages = [usage('claude', ['session', 'rolling', 95], ['weekly fable', 'weekly', 10]), usage('grok', ['credits', 'weekly', 30])];
       expect(why(usages, [], 'high')).toEqual({

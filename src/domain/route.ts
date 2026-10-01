@@ -90,7 +90,7 @@ function highest(candidates: Candidate[], score: (windows: RoutableWindow[]) => 
   }, { id: undefined, score: -Infinity });
 }
 
-type Tripped = { id: string; label: string; usedPct: number };
+type Tripped = { id: string; label: string; usedPct: number; backAt?: string };
 
 export type Skipped = { tripped: Tripped[]; ineligible: string[]; unavailable: string[] };
 
@@ -100,16 +100,29 @@ type Rival = { id: string; left: number };
 
 export type RouteDecision = { chosen: Chosen | undefined; rivals: Rival[]; skipped: Skipped };
 
-function trippedOf(candidates: Candidate[]): Tripped[] {
+function trippingWindows({ windows }: Candidate): RoutableWindow[] {
+  return windows.filter((window) => window.kind === 'rolling' && trips(window.usedPct));
+}
+
+function backAtOf(windows: RoutableWindow[], nowMs: number): string | undefined {
+  const resets = windows.map((window) => Date.parse(String(window.resetsAt)));
+  const known = resets.every((resetMs) => !Number.isNaN(resetMs));
+  const latest = Math.max(...resets);
+  return known && latest > nowMs ? new Date(latest).toISOString() : undefined;
+}
+
+function trippedOf(candidates: Candidate[], nowMs: number): Tripped[] {
   return candidates.flatMap((candidate) => {
     const window = trippingWindow(candidate);
-    return window === undefined ? [] : [{ id: candidate.id, label: window.label, usedPct: window.usedPct }];
+    if (window === undefined) return [];
+    const backAt = backAtOf(trippingWindows(candidate), nowMs);
+    return [{ id: candidate.id, label: window.label, usedPct: window.usedPct, ...(backAt === undefined ? {} : { backAt }) }];
   });
 }
 
-function skippedOf(all: Candidate[], ineligible: string[]): Skipped {
+function skippedOf(all: Candidate[], ineligible: string[], nowMs: number): Skipped {
   return {
-    tripped: trippedOf(all),
+    tripped: trippedOf(all, nowMs),
     ineligible: ROUTED_IDS.filter((id) => ineligible.indexOf(id) !== -1),
     unavailable: ROUTED_IDS.filter((id) => !ineligible.includes(id) && !all.some((candidate) => candidate.id === id))
   };
@@ -142,7 +155,7 @@ export function routeDecision(usages: RoutableUsage[], now: string, midnight: st
   const candidates = all.filter(isUntripped);
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
   const chosen = evaporationChoice(candidates, tonight) ?? headroomChoice(candidates);
-  return { chosen, rivals: rivalsOf(candidates, chosen), skipped: skippedOf(all, ineligible) };
+  return { chosen, rivals: rivalsOf(candidates, chosen), skipped: skippedOf(all, ineligible, tonight.nowMs) };
 }
 
 export function routeDecisionLine(lines: RouteLines, { chosen }: RouteDecision): string {

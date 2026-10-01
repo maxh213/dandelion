@@ -2,6 +2,7 @@ import {
   NO_ROUTE,
   highDecision,
   highDecisionLine,
+  formatResetAt,
   highRouteLine,
   nextLocalMidnight,
   projectFull,
@@ -45,9 +46,13 @@ function choiceText({ chosen, rivals }: RouteDecision, zone: string): string {
   return `headroom: ${chosen.id} binding ${percent(chosen.left)} left${others === '' ? '' : ` (${others})`}`;
 }
 
-function skippedText({ tripped, ineligible, unavailable }: Skipped): string {
+function trippedEntry({ id, label, usedPct, backAt }: Skipped['tripped'][number], now: string, zone: string): string {
+  return `${id} (${label} ${percent(usedPct)}${backAt === undefined ? '' : `, back ${formatResetAt(backAt, now, zone)}`})`;
+}
+
+function skippedText({ tripped, ineligible, unavailable }: Skipped, now: string, zone: string): string {
   const parts = [
-    tripped.length > 0 ? `tripped: ${tripped.map(({ id, label, usedPct }) => `${id} (${label} ${percent(usedPct)})`).join(', ')}` : '',
+    tripped.length > 0 ? `tripped: ${tripped.map((each) => trippedEntry(each, now, zone)).join(', ')}` : '',
     ineligible.length > 0 ? `ineligible: ${ineligible.join(', ')}` : '',
     unavailable.length > 0 ? `unavailable: ${unavailable.join(', ')}` : ''
   ];
@@ -79,7 +84,7 @@ function explainHigh(lines: RouteLines, usages: ProviderUsage[], ineligible: str
 
 function explainHeadroom(lines: RouteLines, usages: ProviderUsage[], ineligible: string[], { now, zone }: RouteRequest): RouteOutput {
   const decision = routeDecision(usages, now, nextLocalMidnight(zone, now), ineligible);
-  return withExplanation(routeDecisionLine(lines, decision), [choiceText(decision, zone), skippedText(decision.skipped)]);
+  return withExplanation(routeDecisionLine(lines, decision), [choiceText(decision, zone), skippedText(decision.skipped, now, zone)]);
 }
 
 function explained(lines: RouteLines, usages: ProviderUsage[], ineligible: string[], request: RouteRequest): RouteOutput {

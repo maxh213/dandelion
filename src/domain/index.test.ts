@@ -145,6 +145,18 @@ describe('routeLine', () => {
     expect(routeLine(LINES, usages, NOW, MIDNIGHT, ['grok'])).toBe('model-c high agy');
   });
 
+  it('reports when a tripped account comes back, the latest reset of its tripping windows', () => {
+    const usages = [usageOf('claude: rolling 91 @2026-09-15T05:00:00.000Z, rolling 97 @2026-09-15T04:00:00.000Z, rolling 10 @2026-09-16T00:00:00.000Z')];
+    expect(routeDecision(usages, NOW, MIDNIGHT, []).skipped.tripped).toEqual([{ id: 'claude', label: 'rolling', usedPct: 97, backAt: '2026-09-15T05:00:00.000Z' }]);
+  });
+
+  it('gives no back time when a tripping window has no reset or the reset has passed', () => {
+    const missing = [usageOf('claude: rolling 91 @2026-09-15T05:00:00.000Z, rolling 97 @-')];
+    const past = [usageOf('claude: rolling 97 @2026-09-14T00:00:00.000Z')];
+    expect(routeDecision(missing, NOW, MIDNIGHT, []).skipped.tripped[0]).not.toHaveProperty('backAt');
+    expect(routeDecision(past, NOW, MIDNIGHT, []).skipped.tripped[0]).not.toHaveProperty('backAt');
+  });
+
   it('reports the most used rolling window of a tripped account', () => {
     const usages = [usageOf('claude: rolling 91 @-, rolling 97 @-')];
     expect(routeDecision(usages, NOW, MIDNIGHT, []).skipped.tripped).toEqual([{ id: 'claude', label: 'rolling', usedPct: 97 }]);
