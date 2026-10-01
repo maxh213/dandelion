@@ -1399,6 +1399,19 @@ describe('cursor panel', () => {
       await dashboard.finished;
     });
 
+    it('launches the routed command through the real spawner and flashes command not found when it is not on PATH', async () => {
+      vi.stubEnv('PATH', '/nonexistent');
+      const io = { ...cursorIo(), launcher: kimiOnlyOnce() };
+      const dashboard = startDashboard(io, LIVE_ENV);
+      await settleProbes();
+      dashboard.press('l');
+      await settleProbes();
+      expect(dashboard.lastFrame().split('\n')[1]).toMatch(/^\S+: command not found$/);
+      dashboard.press('q');
+      await dashboard.finished;
+      vi.unstubAllEnvs();
+    });
+
     it('answers ?, r and other keys as the key scenario says', async () => {
       const io = { ...cursorIo(), launcher: kimiOnlyOnce() };
       const run = vi.spyOn(io.runner, 'run');

@@ -374,6 +374,7 @@ export function runLive(
   return startLive({
     probes: providerProbes(io, env),
     env,
+    launchOf: (routeLine) => launchOf(routeLine, [], env, io.reader.homeDir()),
     keyboard,
     signals: process,
     screen,

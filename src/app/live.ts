@@ -12,8 +12,10 @@ export interface Notifier {
   notify(text: string): unknown;
 }
 
+type Launch = { command: string; args: string[]; env: Record<string, string> };
+
 interface FixRunner {
-  spawn(launch: { command: string; args: string[]; env: Record<string, string> }): Promise<number | 'missing'>;
+  spawn(launch: Launch): Promise<number | 'missing'>;
 }
 
 export interface Clipboard {
@@ -38,6 +40,7 @@ export interface Keyboard {
 type LiveOptions = {
   probes: ProviderProbe[];
   env: Record<string, string | undefined>;
+  launchOf(routeLine: string): Launch;
   screen: Screen;
   keyboard: Keyboard;
   signals: Signals;
@@ -111,6 +114,7 @@ const HIDDEN_NOT_SAVED = 'hidden state not saved';
 const VIEW_NOT_SAVED = 'view state not saved';
 const NOTHING_TO_COPY = 'nothing to copy';
 const COPY_FAILED = 'copy failed';
+const NOTHING_TO_LAUNCH = 'nothing to launch';
 const NO_FIX = 'no fix for this panel';
 
 function refreshSecondsOf(raw: string): number {
@@ -436,15 +440,39 @@ function ignoreInterrupt(): void {
   return undefined;
 }
 
-async function runFix(session: Session, fix: Fix): Promise<void> {
+async function runForeground(session: Session, launch: Launch): Promise<number | 'missing'> {
   session.suspended = true;
   session.signals.on('SIGINT', ignoreInterrupt);
   session.screen.write(LEAVE_ALTERNATE);
   session.keyboard.setRawMode(false);
   session.keyboard.pause();
-  await session.spawner.spawn({ command: fix.command, args: fix.args, env: fix.env ?? {} });
+  const status = await session.spawner.spawn(launch);
   session.signals.off('SIGINT', ignoreInterrupt);
   restoreAfterFix(session);
+  return status;
+}
+
+async function runFix(session: Session, fix: Fix): Promise<void> {
+  await runForeground(session, { command: fix.command, args: fix.args, env: fix.env ?? {} });
+}
+
+async function runLaunch(session: Session, launch: Launch): Promise<void> {
+  const status = await runForeground(session, launch);
+  if (status === 'missing' && !session.quitting) showFlash(session, ROUTE_FLASH, `${launch.command}: command not found`);
+}
+
+function launchLine(session: Session, which: 0 | 1): void {
+  const line = currentRouteLines(viewOf(session), session.clock())?.[which];
+  if (line === undefined || line === NO_ROUTE) showFlash(session, ROUTE_FLASH, NOTHING_TO_LAUNCH);
+  else void runLaunch(session, session.launchOf(line));
+}
+
+function launchRoute(session: Session): void {
+  launchLine(session, 0);
+}
+
+function launchHigh(session: Session): void {
+  launchLine(session, 1);
 }
 
 function fixSelected(session: Session): void {
@@ -488,6 +516,8 @@ const KEYS = new Map<string, (session: Session) => unknown>([
   ['t', toggleResetTimes],
   ['c', copyRoute],
   ['C', copyHigh],
+  ['l', launchRoute],
+  ['L', launchHigh],
   ['x', fixSelected],
   ['?', toggleFooter],
   ['q', leave],

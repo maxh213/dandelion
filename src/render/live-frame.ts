@@ -36,7 +36,7 @@ import {
 
 const SPINNER_FRAMES = [...'⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'];
 const REFRESHING = 'refreshing…';
-const HIDE_HELP = 'h hide · H show hidden · R refresh panel · s sort · x fix';
+const HIDE_HELP = 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch';
 const GRAPH_HINT = 'g usage graph of the selected panel · esc/q/g back';
 const HELP_FOOTER = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
 const BOX_GAP = '  ';

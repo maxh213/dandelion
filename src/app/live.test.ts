@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
 import { openEligibility, openHidden, openHistory, openUsageSnapshot, openView, type ClaudeStatus, type Routes } from '../render/index.ts';
+import { launchOf } from './launch.ts';
 import { startLive } from './live.ts';
 
 const LINES = {
@@ -58,17 +59,18 @@ type SessionOverrides = {
   snapshotWrites?: boolean;
   notifier?: { notify(text: string): unknown };
   copy?: (text: string) => Promise<boolean>;
+  ids?: string[];
   spawn?: () => Promise<number | 'missing'>;
   routes?: Routes;
   statusProbe?: () => Promise<ClaudeStatus | undefined>;
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, notifier, copy, spawn, routes, statusProbe } = { spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, notifier, copy, spawn, routes, statusProbe } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
   const spawner = { spawn: vi.fn(spawn) };
   const writes: string[] = [];
-  const probes = IDS.map((id) => deferredProbe(id, writes));
+  const probes = ids.map((id) => deferredProbe(id, writes));
   const keyboard = Object.assign(new EventEmitter(), { setRawMode: vi.fn(), setEncoding: vi.fn(), pause: vi.fn(), resume: vi.fn() });
   const screen = Object.assign(new EventEmitter(), { rows, columns, write: (text: string) => writes.push(text) });
   const disk = { text: JSON.stringify(state) };
@@ -107,7 +109,7 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: viewReplace
   });
   const viewSaved = () => viewReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, signals, screen, stopChildren, eligibility, hidden, view, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, launchOf: (line) => launchOf(line, [], env, '/home/u'), keyboard, signals, screen, stopChildren, eligibility, hidden, view, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
@@ -705,7 +707,7 @@ describe('live session', () => {
     expect(claude[7]).toBe('▸ claude');
     expect(claude.slice(2, 6).join('\n')).not.toContain('▸');
     session.press('?');
-    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel · s sort · x fix', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
+    expect(session.lastFrame().split('\n')).toEqual([...claude.slice(0, 6), ...claude.slice(7, 10), 'h hide · H show hidden · R refresh panel · s sort · x fix · l/L launch', 'g usage graph of the selected panel · esc/q/g back', '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?']);
     session.press('q');
     await session.finished;
   });
@@ -1668,7 +1670,7 @@ describe('fix key', () => {
   it('lists x in the ? help', async () => {
     const session = startSession();
     session.press('?');
-    expect(session.lastFrame()).toContain('R refresh panel · s sort · x fix');
+    expect(session.lastFrame()).toContain('R refresh panel · s sort · x fix · l/L launch');
     session.press('q');
     await session.finished;
   });
@@ -1846,5 +1848,93 @@ describe('re-probe after a reset', () => {
     expect(session.probes[0].calls).toHaveLength(2);
     session.press('q');
     await session.finished;
+  });
+
+  describe('launch keys', () => {
+    const summary = (session: ReturnType<typeof startSession>) => session.lastFrame().split('\n')[1];
+    const WORK_ENV = { NO_COLOR: '1', DANDELION_CLAUDE_WORK_CONFIG_DIR: '/work' };
+
+    it('launches the route line with l and the route --high line with L, as dandelion run does', async () => {
+      const session = startSession({ ids: ['claude-work'], env: WORK_ENV });
+      await session.settleRound(0);
+      session.press('l');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.spawner.spawn).toHaveBeenLastCalledWith({ command: 'claude', args: ['--model', 'model-a', '--effort', 'high'], env: { CLAUDE_CONFIG_DIR: '/work' } });
+      session.press('L');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.spawner.spawn).toHaveBeenCalledTimes(2);
+      expect(session.spawner.spawn).toHaveBeenLastCalledWith({ command: 'claude', args: ['--model', 'model-h1', '--effort', 'max'], env: { CLAUDE_CONFIG_DIR: '/work' } });
+      session.press('q');
+      await session.finished;
+    });
+
+    it('runs in the foreground, starts no round meanwhile, then restores and starts one full round', async () => {
+      let finish: (status: number) => void = () => undefined;
+      const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' }, spawn: () => new Promise((resolve) => (finish = resolve)) });
+      await session.settleRound(0);
+      const writes = session.writes.length;
+      session.press('l');
+      expect(session.writes.slice(writes)).toEqual([LEAVE_ALTERNATE]);
+      expect(session.keyboard.setRawMode).toHaveBeenLastCalledWith(false);
+      expect(session.keyboard.pause).toHaveBeenCalledTimes(1);
+      expect(session.handlers.length).toBe(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(session.writes.length).toBe(writes + 1);
+      expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 1));
+      finish(0);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.handlers.length).toBe(0);
+      expect(session.writes[writes + 1]).toBe(ENTER_ALTERNATE);
+      expect(session.keyboard.setRawMode).toHaveBeenLastCalledWith(true);
+      expect(session.keyboard.resume).toHaveBeenCalledTimes(1);
+      expect(session.frames().length).toBeGreaterThan(0);
+      expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
+      session.press('q');
+      await session.finished;
+    });
+
+    it('flashes nothing to launch and spawns nothing while probing, on a none route and on a bad routes file', async () => {
+      const probing = startSession();
+      probing.press('l');
+      expect(summary(probing)).toBe('nothing to launch');
+      probing.press('q');
+      await probing.finished;
+      const none = startSession({ state: Object.fromEntries(IDS.map((id) => [id, false])) });
+      await none.settleRound(0);
+      none.press('L');
+      expect(summary(none)).toBe('nothing to launch');
+      none.press('q');
+      await none.finished;
+      const bad = startSession({ routes: { fault: { path: '/x/routes.json', problem: 'bad routes.json' } } });
+      await bad.settleRound(0);
+      bad.press('l');
+      expect(summary(bad)).toBe('nothing to launch');
+      for (const session of [probing, none, bad]) expect(session.spawner.spawn).not.toHaveBeenCalled();
+      bad.press('q');
+    });
+
+    it('flashes command not found once the dashboard is restored when the command is missing', async () => {
+      const session = startSession({ spawn: async () => 'missing' });
+      await session.settleRound(0);
+      session.press('l');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.writes).toContain(ENTER_ALTERNATE);
+      expect(summary(session)).toBe('claude: command not found');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(summary(session)).not.toContain('command not found');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('does not flash a missing command after quitting', async () => {
+      let finish: (status: 'missing') => void = () => undefined;
+      const session = startSession({ spawn: () => new Promise((resolve) => (finish = resolve)) });
+      await session.settleRound(0);
+      session.press('l');
+      session.deliver('SIGTERM');
+      finish('missing');
+      await session.finished;
+      expect(session.lastFrame()).not.toContain('command not found');
+    });
   });
 });
