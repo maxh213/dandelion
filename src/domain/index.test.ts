@@ -11,6 +11,7 @@ import {
   openHidden,
   openHistory,
   openRoutes,
+  openUsageSnapshot,
   orderPanels,
   passedResets,
   resetKey,
@@ -918,5 +919,53 @@ describe('dueReprobes', () => {
   it('skips a handled key but not another reset value or another provider', () => {
     const handled = new Set([resetKey(0, PAST)]);
     expect(dueReprobes([okWith(PAST), okWith(PAST), okWith(PAST, '2026-09-13T09:00:00.000Z')], NOW, handled)).toEqual([1, 2]);
+  });
+});
+
+describe('usage snapshot', () => {
+  const IDS = ['claude', 'kilo'];
+  const usage = (id: string, fetchedAt: string): ProviderUsage => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 5 }], fetchedAt });
+  const opens = (text: string | Error, env: Record<string, string | undefined> = {}, ok = true) => {
+    const replace = vi.fn<(path: string, text: string) => boolean>(() => ok);
+    const read = () => {
+      if (text instanceof Error) throw text;
+      return text;
+    };
+    return { snapshot: openUsageSnapshot(env, '/home/u', { read, replace }), replace };
+  };
+  const stored = (...entries: unknown[]) => JSON.stringify(entries);
+  const AT = '2026-09-13T10:00:00.000Z';
+  const FINE = [usage('claude', AT), usage('kilo', AT)];
+
+  it('writes next to the eligibility file, or under the default state dir', () => {
+    const custom = opens('[]', { DANDELION_STATE_FILE: '/s/dir/eligibility.json' });
+    expect(custom.snapshot.record(FINE)).toBe(true);
+    expect(custom.replace).toHaveBeenCalledWith('/s/dir/snapshot.json', `${JSON.stringify(FINE)}\n`);
+    const fallback = opens('[]', { XDG_STATE_HOME: '/x' });
+    fallback.snapshot.record(FINE);
+    expect(fallback.replace.mock.calls[0][0]).toBe('/x/dandelion/snapshot.json');
+  });
+
+  it('reports a failed write', () => {
+    expect(opens('[]', {}, false).snapshot.record(FINE)).toBe(false);
+  });
+
+  it('returns the entries in provider order when every one is within the age, the boundary included', () => {
+    const { snapshot } = opens(stored(usage('kilo', AT), usage('claude', AT), usage('extra', AT)));
+    expect(snapshot.fresh(IDS, '2026-09-13T10:01:00.000Z', 60)).toEqual([usage('claude', AT), usage('kilo', AT)]);
+    expect(snapshot.fresh(IDS, '2026-09-13T10:01:00.001Z', 60)).toBeUndefined();
+  });
+
+  it('keeps the reason of unavailable and error entries', () => {
+    const failed: ProviderUsage[] = [{ ...usage('claude', AT), status: 'unavailable', reason: 'no cli' }, { ...usage('kilo', AT), status: 'error', reason: 'boom' }];
+    expect(opens(stored(...failed)).snapshot.fresh(IDS, AT, 1)).toEqual(failed);
+  });
+
+  it('is undefined when an entry is missing, unreadable, corrupt or malformed', () => {
+    const bad = (patch: Record<string, unknown>) => stored(usage('claude', AT), { ...usage('kilo', AT), ...patch });
+    for (const text of [stored(usage('claude', AT)), '{', '{"id":"claude"}', 'null', stored(usage('claude', AT), null), bad({ id: 1 }), bad({ displayName: 1 }), bad({ fetchedAt: 'soon' }), bad({ windows: {} }), bad({ windows: [null] }), bad({ windows: [{ label: 'w', kind: 'daily', usedPct: 1 }] }), bad({ windows: [{ label: 1, kind: 'weekly', usedPct: 1 }] }), bad({ windows: [{ label: 'w', kind: 'weekly', usedPct: 'x' }] }), bad({ windows: [{ label: 'w', kind: 'weekly', usedPct: 1, resetsAt: 5 }] }), bad({ status: 'weird' }), bad({ status: 'error' })]) {
+      expect(opens(text).snapshot.fresh(IDS, AT, 60)).toBeUndefined();
+    }
+    expect(opens(new Error('ENOENT')).snapshot.fresh(IDS, AT, 60)).toBeUndefined();
   });
 });

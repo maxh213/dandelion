@@ -1,4 +1,5 @@
-import type { Fix } from './ports.ts';
+import { openSnapshot, type Snapshot, type StateFile } from './eligibility.ts';
+import { isRecord, validInstant, type Fix } from './ports.ts';
 import { evaporates, trips, type Tonight, type WindowKind } from './route.ts';
 
 export {
@@ -47,7 +48,7 @@ export {
 
 export { nextLocalMidnight } from './midnight.ts';
 
-export { openEligibility, openHidden, openHistory, type Eligibility, type Hidden, type History, type HistorySample, type StateFile } from './eligibility.ts';
+export { openEligibility, openHidden, openHistory, type Eligibility, type Hidden, type History, type HistorySample, type Snapshot, type StateFile } from './eligibility.ts';
 
 export type UsageWindow = {
   label: string;
@@ -75,6 +76,39 @@ type ProviderIdentity = {
 export type ProviderUsage =
   | (ProviderIdentity & { status: 'ok'; balance?: Balance; snapshotAt?: string; note?: string })
   | (ProviderIdentity & { status: 'unavailable' | 'error'; reason: string });
+
+const WINDOW_KINDS = ['rolling', 'weekly', 'other'];
+const STATUSES = ['ok', 'unavailable', 'error'];
+
+type Fields = Record<string, unknown>;
+
+const WINDOW_CHECKS: ((value: Fields) => boolean)[] = [
+  (value) => typeof value['label'] === 'string',
+  (value) => WINDOW_KINDS.includes(String(value['kind'])),
+  (value) => Number.isFinite(value['usedPct']),
+  (value) => value['resetsAt'] === undefined || typeof value['resetsAt'] === 'string'
+];
+
+function isUsageWindow(value: unknown): boolean {
+  return isRecord(value) && WINDOW_CHECKS.every((check) => check(value));
+}
+
+const USAGE_CHECKS: ((value: Fields) => boolean)[] = [
+  (value) => typeof value['id'] === 'string',
+  (value) => typeof value['displayName'] === 'string',
+  (value) => validInstant(value['fetchedAt']) !== undefined,
+  (value) => Array.isArray(value['windows']) && value['windows'].every(isUsageWindow),
+  (value) => STATUSES.includes(String(value['status'])),
+  (value) => value['status'] === 'ok' || typeof value['reason'] === 'string'
+];
+
+function isProviderUsage(value: unknown): value is ProviderUsage {
+  return isRecord(value) && USAGE_CHECKS.every((check) => check(value));
+}
+
+export function openUsageSnapshot(env: Record<string, string | undefined>, homeDir: string, file: StateFile): Snapshot<ProviderUsage> {
+  return openSnapshot(env, homeDir, file, isProviderUsage);
+}
 
 const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
 

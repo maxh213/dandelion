@@ -1886,6 +1886,10 @@ describe('runJson', () => {
   });
 });
 
+function filesBesidesSnapshot(dir: string): string[] {
+  return readdirSync(dir).filter((name) => name !== 'snapshot.json');
+}
+
 describe('route eligibility state file', () => {
   const CLAUDE_TAG = `claude${' '.repeat(55)}routing off`;
   let scratch = '';
@@ -1944,6 +1948,132 @@ describe('route eligibility state file', () => {
     expect(samples.every((sample: { at: string }) => sample.at === NOW)).toBe(true);
     dashboard.press('q');
     await dashboard.finished;
+  });
+
+  describe('snapshot.json', () => {
+    const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+    const requestOf = (mode: 'headroom' | 'high', extra: { why?: boolean; maxAge?: number; now?: string } = {}) => ({ mode, now: NOW, zone: 'UTC', ...extra });
+    const snapshotPath = () => join(scratch, 'state', 'snapshot.json');
+
+    function failing(): ProbeIo {
+      const fail = async (): Promise<never> => {
+        throw new Error('probed');
+      };
+      const run = vi.fn(fail);
+      const launch = vi.fn(fail);
+      const get = vi.fn(fail);
+      const post = vi.fn(fail);
+      const read = vi.fn(fail);
+      const isDirectory = vi.fn(fail);
+      const spawn = vi.fn(() => {
+        throw new Error('probed');
+      });
+      const io = { runner: { run }, launcher: { launch }, fetcher: { get, post }, reader: { homeDir: () => scratch, read, isDirectory }, spawner: { spawn } };
+      return Object.assign(io, { calls: () => [run, launch, get, post, read, isDirectory, spawn].reduce((total, fn) => total + fn.mock.calls.length, 0) });
+    }
+
+    function calls(io: ProbeIo): number {
+      return (io as unknown as { calls(): number }).calls();
+    }
+
+    const probing = (): ProbeIo => ({ ...routedRunner(), launcher: MISSING_KIMI });
+
+    async function liveSnapshot(env: Record<string, string> = {}): Promise<Record<string, string>> {
+      const full = { DANDELION_STATE_FILE: statePath, DANDELION_HISTORY_FILE: join(scratch, 'h.json'), ...env };
+      const dashboard = await settledDashboard(probing(), full);
+      await quit(dashboard);
+      vi.useRealTimers();
+      return { DANDELION_STATE_FILE: statePath };
+    }
+
+    function entries(): { id: string; windows: { usedPct: number }[] }[] {
+      return JSON.parse(readFileSync(snapshotPath(), 'utf8'));
+    }
+
+    it('is written only by the live dashboard, one entry per provider, and never by --once, --json or route', async () => {
+      const env = { DANDELION_STATE_FILE: statePath, NO_COLOR: '1' };
+      await runApp(routedRunner(), env, NOW);
+      await runJson(routedRunner(), env, { now: NOW, zone: 'UTC' });
+      await routeWith(routedRunner(), env, requestOf('headroom'));
+      await routeWith(routedRunner(), env, requestOf('high', { why: true, maxAge: 60 }));
+      expect(readdirSync(scratch)).toEqual([]);
+      await liveSnapshot();
+      expect(entries().map(({ id }) => id)).toEqual(IDS);
+      expect(readFileSync(snapshotPath(), 'utf8')).not.toMatch(/token|Bearer|authorization/i);
+      expect(readdirSync(join(scratch, 'state'))).toContain('snapshot.json');
+    });
+
+    it.each([
+      ['headroom', false],
+      ['headroom', true],
+      ['high', false],
+      ['high', true]
+    ] as const)('answers %s (why: %s) from a recent snapshot exactly as probing would and probes nothing', async (mode, why) => {
+      const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, ...(await liveSnapshot()) };
+      const probed = await runRoute(probing(), env, requestOf(mode, { why }));
+      const io = failing();
+      const cached = await runRoute(io, env, requestOf(mode, { why, maxAge: 300, now: '2026-09-13T10:04:59.000Z' }));
+      expect(cached).toEqual(probed);
+      expect(calls(io)).toBe(0);
+    });
+
+    it('takes the ineligible providers from the current state file, not from the snapshot', async () => {
+      const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, ...(await liveSnapshot()) };
+      const before = await runRoute(probing(), env, requestOf('headroom'));
+      writeFileSync(statePath, '{"claude": false, "claude-work": false}');
+      const probed = await runRoute(probing(), env, requestOf('headroom'));
+      expect(probed.out).not.toBe(before.out);
+      expect(await runRoute(failing(), env, requestOf('headroom', { maxAge: 60 }))).toEqual(probed);
+    });
+
+    it('is not used without --max-age, even when a snapshot would answer differently', async () => {
+      mkdirSync(join(scratch, 'state'), { recursive: true });
+      const everyoneIdle = IDS.map((id) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 0 }], fetchedAt: NOW }));
+      writeFileSync(snapshotPath(), JSON.stringify(everyoneIdle));
+      const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: statePath };
+      const plain = await runRoute(routedRunner(), env, requestOf('headroom'));
+      const cached = await runRoute(failing(), env, requestOf('headroom', { maxAge: 60 }));
+      expect(plain.out).toBe('model-a max claude\n');
+      expect(cached.out).not.toBe(plain.out);
+    });
+
+    describe('probes exactly as without the flag when the snapshot', () => {
+      const idle = (id: string) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 0 }], fetchedAt: NOW });
+
+      async function probesAsPlain(maxAge: number, now = NOW): Promise<void> {
+        const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: statePath };
+        const plain = await runRoute(routedRunner(), env, requestOf('headroom', { now }));
+        expect(plain.out).toBe('model-a max claude\n');
+        expect(await runRoute(routedRunner(), env, requestOf('headroom', { now, maxAge }))).toEqual(plain);
+      }
+
+      function write(text: string): void {
+        mkdirSync(join(scratch, 'state'), { recursive: true });
+        writeFileSync(snapshotPath(), text);
+      }
+
+      it('is missing', () => probesAsPlain(60));
+
+      it('is a directory', async () => {
+        mkdirSync(snapshotPath(), { recursive: true });
+        await probesAsPlain(60);
+      });
+
+      it.each([['corrupt', '{nope'], ['not an array', '{"claude":1}'], ['holding a bad entry', JSON.stringify([...IDS.map(idle), { id: 'x' }])]])('is %s', async (_case, text) => {
+        write(text);
+        await probesAsPlain(60);
+      });
+
+      it('lacks a provider', async () => {
+        write(JSON.stringify(IDS.slice(1).map(idle)));
+        await probesAsPlain(60);
+      });
+
+      it('is older than the age', async () => {
+        write(JSON.stringify(IDS.map(idle)));
+        await probesAsPlain(60, '2026-09-13T10:01:01.000Z');
+      });
+    });
   });
 
   it('routes as the 010 rules say with no state file and never creates one', async () => {
@@ -2019,7 +2149,7 @@ describe('route eligibility state file', () => {
     expect(await runApp(routedRunner(), env, NOW)).toBe(plainOutput);
     expect(await routeWith(routedRunner(), env, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual(routeOutput);
     expect(await routeWith(routedRunner(), env, { mode: 'high', now: NOW, zone: 'UTC' })).toEqual(await routeWith(routedRunner(), { DANDELION_STATE_FILE: join(scratch, 'elsewhere', 'e.json') }, { mode: 'high', now: NOW, zone: 'UTC' }));
-    expect(readdirSync(join(scratch, 'state'))).toEqual(['hidden.json']);
+    expect(filesBesidesSnapshot(join(scratch, 'state'))).toEqual(['hidden.json']);
   });
 
   it('keeps every panel with a bad routes file and shows routes file error over the unknown key in both boxes', async () => {
@@ -2048,12 +2178,12 @@ describe('route eligibility state file', () => {
     expect(dashboard.lastFrame()).not.toMatch(/routing off|▸/);
     dashboard.press('j');
     expect(headerOf(dashboard.lastFrame(), 'claude')).toBe('▸ claude');
-    expect(readdirSync(scratch)).toEqual([]);
+    expect(filesBesidesSnapshot(join(scratch, 'state'))).toEqual([]);
     const rows = dashboard.lastFrame().split('\n').filter((line) => line.startsWith('session ') || line.startsWith('weekly '));
     dashboard.press(' ');
     expect(stateOf()).toEqual({ claude: false });
     expect(readFileSync(statePath, 'utf8')).toBe('{\n  "claude": false\n}\n');
-    expect(readdirSync(join(scratch, 'state'))).toEqual(['eligibility.json']);
+    expect(filesBesidesSnapshot(join(scratch, 'state'))).toEqual(['eligibility.json']);
     expect(headerOf(dashboard.lastFrame(), 'claude')).toBe(`▸ ${CLAUDE_TAG.slice(0, -13)}routing off`);
     expect(dashboard.lastFrame().split('\n').filter((line) => line.startsWith('session ') || line.startsWith('weekly '))).toEqual(rows);
     expect((await routeWith(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).line).toBe('model-a high claude-work');
@@ -2098,7 +2228,7 @@ describe('route eligibility state file', () => {
     expect(dashboard.lastFrame().split('\n').at(-1)).toBe('not routable (no usage windows)');
     await vi.advanceTimersByTimeAsync(2000);
     expect(dashboard.lastFrame().split('\n').at(-1)).toBe('api balance · kilo · 0h0m ago');
-    expect(readdirSync(scratch)).toEqual([]);
+    expect(filesBesidesSnapshot(join(scratch, 'state'))).toEqual([]);
     await quit(dashboard);
   });
 
@@ -2114,7 +2244,7 @@ describe('route eligibility state file', () => {
     dashboard.press(' ');
     expect(dashboard.lastFrame()).toContain('\nrouting state not saved\n');
     expect(dashboard.lastFrame()).not.toContain('routing off');
-    expect(readdirSync(dirOf(scratch)).sort()).toEqual(entries);
+    expect(filesBesidesSnapshot(dirOf(scratch)).sort()).toEqual(entries);
     unblock(scratch);
     dashboard.press(' ');
     expect(JSON.parse(readFileSync(pathOf(scratch), 'utf8'))).toEqual({ claude: false });
@@ -2316,7 +2446,7 @@ describe('junie panel', () => {
       await vi.advanceTimersByTimeAsync(2000);
       const later = unreferenced.lastFrame().split('\n');
       expect(later[later.indexOf('▸ junie') + 3]).toBe('701513 credits · junie · 0h0m ago');
-      expect(readdirSync(scratch)).toEqual([]);
+      expect(filesBesidesSnapshot(scratch)).toEqual([]);
       unreferenced.press('q');
       await unreferenced.finished;
     });
@@ -2611,7 +2741,7 @@ describe('hermes panel', () => {
       await vi.advanceTimersByTimeAsync(2000);
       const later = unroutable.lastFrame().split('\n');
       expect(later[later.indexOf('▸ hermes') + 2]).toBe('hermes · hermes · 0h0m ago · x fix');
-      expect(readdirSync(scratch)).toEqual([]);
+      expect(filesBesidesSnapshot(scratch)).toEqual([]);
       unroutable.press('q');
       await unroutable.finished;
     });

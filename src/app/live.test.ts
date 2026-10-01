@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
-import { openEligibility, openHidden, openHistory, type ClaudeStatus, type Routes } from '../render/index.ts';
+import { openEligibility, openHidden, openHistory, openUsageSnapshot, type ClaudeStatus, type Routes } from '../render/index.ts';
 import { startLive } from './live.ts';
 
 const LINES = {
@@ -52,6 +52,7 @@ type SessionOverrides = {
   hiddenSaves?: boolean[];
   historyText?: string;
   historyWrites?: boolean;
+  snapshotWrites?: boolean;
   notifier?: { notify(text: string): unknown };
   copy?: (text: string) => Promise<boolean>;
   spawn?: () => Promise<number | 'missing'>;
@@ -60,7 +61,7 @@ type SessionOverrides = {
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier, copy, spawn, routes, statusProbe } = { spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, snapshotWrites, notifier, copy, spawn, routes, statusProbe } = { spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
   const spawner = { spawn: vi.fn(spawn) };
   const writes: string[] = [];
@@ -71,6 +72,9 @@ function startSession(overrides: SessionOverrides = {}) {
   const eligibility = openEligibility({}, '/home/u', { read: () => JSON.stringify(state), replace });
   const historyReplace = vi.fn<(path: string, text: string) => boolean>(() => historyWrites);
   const history = openHistory({}, '/home/u', { read: () => historyText, replace: historyReplace });
+  const snapshotReplace = vi.fn<(path: string, text: string) => boolean>(() => snapshotWrites);
+  const snapshot = openUsageSnapshot({ DANDELION_STATE_FILE: '/s/eligibility.json' }, '/home/u', { read: () => '[]', replace: snapshotReplace });
+  const snapshotSaved = () => snapshotReplace.mock.calls.map(([path, text]) => ({ path, entries: JSON.parse(text) }));
   const saved = () => replace.mock.calls.map(([, text]) => JSON.parse(text));
   const hiddenReplace = vi.fn<(path: string, text: string) => boolean>(() => hiddenSaves?.shift() ?? true);
   const hidden = openHidden({ DANDELION_STATE_FILE: '/s/eligibility.json' }, '/home/u', {
@@ -81,13 +85,13 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: hiddenReplace
   });
   const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes, zone, notifier, clipboard, spawner, statusProbe });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { notifier, clipboard, spawner, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
+  return { notifier, clipboard, spawner, writes, probes, keyboard, screen, finished, frames, stopChildren, replace, saved, hiddenReplace, hiddenSaved, historyReplace, snapshotReplace, snapshotSaved, settleRound, lastFrame: () => frames().at(-1) ?? '', press: (key: string) => keyboard.emit('data', key) };
 }
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
@@ -337,6 +341,34 @@ describe('live session', () => {
     const samples = JSON.parse(session.historyReplace.mock.calls[0][1]);
     expect(samples).toHaveLength(IDS.length);
     expect(samples[0]).toEqual({ id: 'claude', slot: 0, label: 'weekly', usedPct: 10, at: START });
+    session.press('q');
+    await session.finished;
+  });
+
+  it('writes the settled results to snapshot.json next to the state file after each round and each single-panel re-probe', async () => {
+    const session = startSession();
+    expect(session.snapshotReplace).not.toHaveBeenCalled();
+    await session.settleRound(0);
+    expect(session.snapshotSaved()).toHaveLength(1);
+    const [{ path, entries }] = session.snapshotSaved();
+    expect(path).toBe('/s/snapshot.json');
+    expect(entries).toEqual(IDS.map((id) => usageOf(id, START)));
+    session.press('j');
+    session.press('R');
+    session.probes[0].calls[1].resolve({ ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 55 }] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshotSaved()).toHaveLength(2);
+    expect(session.snapshotSaved()[1].entries).toHaveLength(IDS.length);
+    expect(session.snapshotSaved()[1].entries[0].windows[0].usedPct).toBe(55);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('keeps the dashboard running when the snapshot cannot be written', async () => {
+    const session = startSession({ snapshotWrites: false });
+    await session.settleRound(0);
+    expect(session.snapshotReplace).toHaveBeenCalledTimes(1);
+    expect(session.lastFrame()).toContain('weekly');
     session.press('q');
     await session.finished;
   });

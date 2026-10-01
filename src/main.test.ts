@@ -292,6 +292,25 @@ describe('main', () => {
     expect(vi.mocked(runRoute).mock.calls[0][2]).toMatchObject({ mode, why: true });
   });
 
+  it.each<[string[], number | undefined]>([
+    [['route', '--max-age', '30'], 30],
+    [['route', '--high', '--max-age', '5', '--why'], 5],
+    [['route', '--why', '--max-age', '1'], 1],
+    [['route'], undefined],
+    [['route', '--max-age'], undefined],
+    [['route', '--max-age', '0'], undefined],
+    [['route', '--max-age', '-5'], undefined],
+    [['route', '--max-age', '1.5'], undefined],
+    [['route', '--max-age', 'abc'], undefined],
+    [['route', '--max-age', '--high'], undefined],
+    [['route', '--max-age=30'], undefined],
+    [['route', '30'], undefined]
+  ])('runIfMain %j passes max age %s to route', async (args, maxAge) => {
+    vi.mocked(runRoute).mockClear();
+    await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, ...args], false, false).proc);
+    expect(vi.mocked(runRoute).mock.calls[0][2].maxAge).toBe(maxAge);
+  });
+
   it('runIfMain route never asks for the explanation without --why', async () => {
     vi.mocked(runRoute).mockClear();
     await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, 'route', '--Why'], false, false).proc);

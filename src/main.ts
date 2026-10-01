@@ -25,8 +25,15 @@ function routeModeOf(argv: string[]): RouteMode {
   return argv.slice(3).includes('--high') ? 'high' : 'headroom';
 }
 
+const POSITIVE_INTEGER = /^[1-9]\d*$/;
+
+function maxAgeOf(args: string[]): number | undefined {
+  const value = args[args.indexOf('--max-age') + 1];
+  return args.includes('--max-age') && POSITIVE_INTEGER.test(String(value)) ? Number(value) : undefined;
+}
+
 async function route(io: ProbeIo, proc: Proc): Promise<void> {
-  const { out, err, code } = await runRoute(io, proc.env, { mode: routeModeOf(proc.argv), now: new Date().toISOString(), zone: processZone(), why: proc.argv.slice(3).includes('--why') });
+  const { out, err, code } = await runRoute(io, proc.env, { mode: routeModeOf(proc.argv), now: new Date().toISOString(), zone: processZone(), why: proc.argv.slice(3).includes('--why'), maxAge: maxAgeOf(proc.argv.slice(3)) });
   proc.stdout.write(out);
   proc.stderr.write(err);
   if (code !== 0) proc.exit(code);

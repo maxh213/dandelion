@@ -172,3 +172,45 @@ export function openHistory(env: Record<string, string | undefined>, homeDir: st
     }
   };
 }
+
+export interface Snapshot<T> {
+  record(usages: T[]): boolean;
+  fresh(ids: string[], now: string, maxAgeSeconds: number): T[] | undefined;
+}
+
+const SNAPSHOT_FILE = 'snapshot.json';
+
+function snapshotPath(env: Record<string, string | undefined>, homeDir: string): string {
+  const state = statePath(env, homeDir);
+  return `${state.slice(0, state.lastIndexOf('/') + 1)}${SNAPSHOT_FILE}`;
+}
+
+function readEntries<T>(file: StateFile, path: string, isEntry: (value: unknown) => value is T): T[] | undefined {
+  try {
+    const value: unknown = JSON.parse(file.read(path));
+    return Array.isArray(value) && value.every(isEntry) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecent<T extends { fetchedAt: string }>(entry: T, now: string, maxAgeSeconds: number): boolean {
+  return Date.parse(now) - Date.parse(entry.fetchedAt) <= maxAgeSeconds * 1000;
+}
+
+function coveredFresh<T extends { id: string; fetchedAt: string }>(entries: T[], ids: string[], now: string, maxAgeSeconds: number): T[] | undefined {
+  const chosen = ids.map((id) => entries.find((entry) => entry.id === id));
+  const complete = chosen.filter((entry): entry is T => entry !== undefined);
+  return complete.length === ids.length && complete.every((entry) => isRecent(entry, now, maxAgeSeconds)) ? complete : undefined;
+}
+
+export function openSnapshot<T extends { id: string; fetchedAt: string }>(env: Record<string, string | undefined>, homeDir: string, file: StateFile, isEntry: (value: unknown) => value is T): Snapshot<T> {
+  const path = snapshotPath(env, homeDir);
+  return {
+    record: (usages) => file.replace(path, `${JSON.stringify(usages)}\n`),
+    fresh(ids, now, maxAgeSeconds) {
+      const entries = readEntries(file, path, isEntry);
+      return entries === undefined ? undefined : coveredFresh(entries, ids, now, maxAgeSeconds);
+    }
+  };
+}

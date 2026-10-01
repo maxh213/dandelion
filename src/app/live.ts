@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type ClaudeStatus, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
+import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type ClaudeStatus, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes, type Snapshot } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -37,6 +37,7 @@ type LiveOptions = {
   eligibility: Eligibility;
   hidden: Hidden;
   history: History;
+  snapshot: Snapshot<NonNullable<LiveSlot['usage']>>;
   routes: Routes;
   zone: string;
   notifier: Notifier;
@@ -208,6 +209,7 @@ function endRound(session: Session): void {
   session.inFlight.clear();
   session.settled = session.results.filter((usage) => usage !== undefined);
   session.history.record(session.settled, session.clock());
+  session.snapshot.record(session.settled);
   if (session.quitting) return;
   session.refreshTimer = setTimeout(() => refresh(session), session.refreshMs);
   draw(session);
@@ -242,6 +244,7 @@ function settlePanel(session: Session, index: number, generation: number, usage:
   if (session.generations[index] !== generation) return;
   settle(session, index, usage);
   session.settled = session.results.filter((result) => result !== undefined);
+  session.snapshot.record(session.settled);
   draw(session);
 }
 

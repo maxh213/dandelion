@@ -26,6 +26,7 @@ import {
   openHidden,
   openHistory,
   openRoutes,
+  openUsageSnapshot,
   renderDashboard,
   renderRoute,
   renderRoutesFault,
@@ -33,8 +34,10 @@ import {
   type Eligibility,
   type Hidden,
   type History,
+  type ProviderUsage,
   type RouteOutput,
   type RouteRequest,
+  type Snapshot,
   type SnapshotRequest,
   type Routes,
   type RoutesFile,
@@ -259,6 +262,10 @@ function historyOf(io: ProbeIo, env: Record<string, string | undefined>): Histor
   return openHistory(env, io.reader.homeDir(), realStateFile);
 }
 
+function snapshotOf(io: ProbeIo, env: Record<string, string | undefined>): Snapshot<ProviderUsage> {
+  return openUsageSnapshot(env, io.reader.homeDir(), realStateFile);
+}
+
 const SHIPPED_ROUTES = fileURLToPath(new URL('../../routes.json', import.meta.url));
 const realRoutesFile: RoutesFile = { read: readText };
 
@@ -277,10 +284,22 @@ export async function runApp(io: ProbeIo, env: Record<string, string | undefined
   return renderDashboard(usages, noColor, now, eligibilityOf(io, env).ineligible(), processZone());
 }
 
-export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, request: RouteRequest): Promise<RouteOutput> {
+export type CachedRouteRequest = RouteRequest & { maxAge?: number };
+
+function recentUsages(io: ProbeIo, env: Record<string, string | undefined>, request: CachedRouteRequest): ProviderUsage[] | undefined {
+  if (request.maxAge === undefined) return undefined;
+  const ids = providerProbes(io, env).map(({ id }) => id);
+  return snapshotOf(io, env).fresh(ids, request.now, request.maxAge);
+}
+
+async function routeUsages(io: ProbeIo, env: Record<string, string | undefined>, request: CachedRouteRequest): Promise<ProviderUsage[]> {
+  return recentUsages(io, env, request) ?? (await probeOnce(io, env, request.now));
+}
+
+export async function runRoute(io: ProbeIo, env: Record<string, string | undefined>, request: CachedRouteRequest): Promise<RouteOutput> {
   const { lines, fault } = routesOf(env);
   if (fault !== undefined) return renderRoutesFault(fault);
-  return renderRoute(lines, await probeOnce(io, env, request.now), eligibilityOf(io, env).ineligible(), request);
+  return renderRoute(lines, await routeUsages(io, env, request), eligibilityOf(io, env).ineligible(), request);
 }
 
 export async function runJson(io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest): Promise<JsonOutput> {
@@ -355,6 +374,7 @@ export function runLive(
     eligibility: eligibilityOf(io, env),
     hidden: hiddenOf(io, env),
     history: historyOf(io, env),
+    snapshot: snapshotOf(io, env),
     routes: routesOf(env),
     zone: processZone(),
     notifier: realNotifier,
