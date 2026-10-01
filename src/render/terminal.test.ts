@@ -453,6 +453,14 @@ describe('window rows', () => {
     expect(row.startsWith(`${'weekly'.padEnd(35)} ${STYLE_TOKENS[token]}`)).toBe(true);
   });
 
+  it.each<[number, string]>([
+    [89.5, ' 90%'],
+    [99.6, '100%'],
+    [89.4, ' 89%']
+  ])('prints %d used as %s, rounding half up', (usedPct, text) => {
+    expect(renderWindowRow({ label: 'weekly', kind: 'weekly', usedPct }, true, NOW).slice(36)).toContain(text);
+  });
+
   it('maps the four tokens to distinct escapes', () => {
     expect(new Set(Object.values(STYLE_TOKENS)).size).toBe(4);
     expect(Object.keys(STYLE_TOKENS)).toEqual(['calm', 'warm', 'hot', 'critical']);
@@ -699,6 +707,10 @@ describe('live frame', () => {
       expect(rows[0]).toBe('  claude            #################### 100% ↻ 8h40m');
       expect(rows[1]).toBe('  agy               ###############-----  75% ↻ 12h13m');
       expect(rows[2]).toBe('  kimi              ############--------  59% ↻ 5d0h');
+    });
+
+    it.each<[number, string]>([[89.5, ' 90%'], [99.6, '100%']])('prints the worst window at %d as %s', (usedPct, text) => {
+      expect(compact([okUsage('x', [{ label: 'a', kind: 'weekly', usedPct }])])[0]).toMatch(new RegExp(`${text}$`));
     });
 
     it('omits the reset when no window has one and ignores other windows for the gauge', () => {

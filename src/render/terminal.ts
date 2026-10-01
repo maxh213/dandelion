@@ -293,7 +293,7 @@ function sparkCells(spark: string): number {
 
 function rowWith(window: UsageWindow, noColor: boolean, now: string, paint: (text: string) => string, mark: (text: string) => string, absoluteZone: string | undefined, layout: Layout, spark = ''): string {
   const gauge = paceGauge(window, noColor, now, paint, mark, layout.gauge - sparkCells(spark));
-  const percent = paint(`${window.usedPct}%`.padStart(PERCENT_CELLS));
+  const percent = paint(`${Math.round(window.usedPct)}%`.padStart(PERCENT_CELLS));
   const label = fitLabel(window.label, absoluteZone === undefined ? layout.label : layout.label - (LABEL_CELLS - ABSOLUTE_LABEL_CELLS));
   return `${label} ${gauge} ${percent}${spark}${countdown(window.resetsAt, now, absoluteZone)}`;
 }
@@ -532,7 +532,7 @@ function balanceText(balance: Balance | undefined): string {
 function windowRow(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
   const worst = worstWindow(usage.windows);
   const lead = compactLead(usage.id, marks);
-  const meter = `${renderGauge(worst.usedPct, 100, noColor)} ${`${worst.usedPct}%`.padStart(PERCENT_CELLS)}`;
+  const meter = `${renderGauge(worst.usedPct, 100, noColor)} ${`${Math.round(worst.usedPct)}%`.padStart(PERCENT_CELLS)}`;
   const reset = cutCells(countdown(soonestReset(usage.windows, now), now, marks.absoluteZone), widthOfMarks(marks) - cellCount(lead) - cellCount(meter) - cellCount(flagsOf(marks)) - 1);
   const weight = marks.selected ? BOLD : '';
   const tail = rightAligned(`${lead}${meter}${reset}`, marks).slice(cellCount(lead) + cellCount(meter));

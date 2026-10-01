@@ -15,7 +15,7 @@ function grokHome(reader: FileReader, env: Record<string, string | undefined>): 
 
 function usedPercent(config: unknown): number | undefined {
   const percent = fieldOf(config, 'creditUsagePercent');
-  return isCount(percent) ? Math.round(percent) : undefined;
+  return isCount(percent) ? percent : undefined;
 }
 
 function tierOf(ctx: unknown): string {

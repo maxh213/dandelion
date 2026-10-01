@@ -71,7 +71,7 @@ function cycleEnd(value: unknown): string | undefined {
 
 function windowOf(label: string, percent: unknown, resetsAt: string | undefined): UsageWindow[] {
   if (!isCount(percent)) return [];
-  return [withReset({ label, kind: 'weekly', usedPct: Math.round(percent) }, resetsAt)];
+  return [withReset({ label, kind: 'weekly', usedPct: percent }, resetsAt)];
 }
 
 function windowsOf(usage: unknown): UsageWindow[] {

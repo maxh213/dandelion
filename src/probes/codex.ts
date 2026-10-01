@@ -79,7 +79,7 @@ function windowOf(limits: unknown, name: string): UsageWindow[] {
   if (!isCount(usedPercent)) return [];
   const label = labelOf(fieldOf(entry, 'windowDurationMins'), name);
   const resetsAt = resetInstant(fieldOf(entry, 'resetsAt'));
-  return [withReset({ label, kind: kindOf(label), usedPct: Math.round(usedPercent) }, resetsAt)];
+  return [withReset({ label, kind: kindOf(label), usedPct: usedPercent }, resetsAt)];
 }
 
 function errorMessage(error: unknown): string {

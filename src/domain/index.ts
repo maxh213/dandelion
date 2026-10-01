@@ -124,7 +124,7 @@ export function withReset(window: UsageWindow, resetsAt: string | undefined): Us
 const FULL_PCT = 100;
 
 export function usedPctFromRemaining(remaining: number, grant: number): number {
-  return Math.min(FULL_PCT, Math.max(0, Math.round(FULL_PCT - (FULL_PCT * remaining) / grant)));
+  return Math.min(FULL_PCT, Math.max(0, FULL_PCT - (FULL_PCT * remaining) / grant));
 }
 
 export const HOT_PCT = 80;
@@ -255,7 +255,7 @@ function notification(pair: WindowPair, event: string, text: string): Notificati
 function thresholdEvents(pair: WindowPair, thresholds: number[]): Notification[] {
   const highest = thresholds.filter((pct) => crossed(pair, pct)).at(-1);
   if (highest === undefined) return [];
-  return notification(pair, `at${highest}`, `${pair.id} ${pair.current.label} at ${pair.current.usedPct}%`);
+  return notification(pair, `at${highest}`, `${pair.id} ${pair.current.label} at ${Math.round(pair.current.usedPct)}%`);
 }
 
 function isTripped(usage: ProviderUsage): boolean {
@@ -268,7 +268,7 @@ function droppedBelowTrip(pair: WindowPair): boolean {
 
 function recoveryEvents(pair: WindowPair, accountRecovered: boolean): Notification[] {
   const recovered = accountRecovered && droppedBelowTrip(pair);
-  return recovered ? notification(pair, 'recovered', `${pair.id} ${pair.current.label} recovered at ${pair.current.usedPct}%`) : [];
+  return recovered ? notification(pair, 'recovered', `${pair.id} ${pair.current.label} recovered at ${Math.round(pair.current.usedPct)}%`) : [];
 }
 
 type Nights = { before: Tonight; tonight: Tonight };
@@ -286,7 +286,7 @@ function resetPassed(window: UsageWindow, now: string): boolean {
 function resetEvents(pair: WindowPair, now: string): Notification[] {
   const { previous, current } = pair;
   const reset = current.kind === 'weekly' && resetPassed(previous, now) && current.usedPct < previous.usedPct;
-  return reset ? notification(pair, 'reset', `${pair.id} ${current.label} reset: ${current.usedPct}% used`) : [];
+  return reset ? notification(pair, 'reset', `${pair.id} ${current.label} reset: ${Math.round(current.usedPct)}% used`) : [];
 }
 
 export type MidnightAfter = (at: string) => string;

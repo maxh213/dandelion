@@ -152,6 +152,7 @@ describe('probeHermes', () => {
     ['credits remaining above the monthly grant', account({ subscription: { credits_remaining: 22.472091793333334 } }), [{ ...WINDOW_75, usedPct: 0 }], 'Plus · $22.47 of $22'],
     ['zero remaining', account({ subscription: { credits_remaining: 0 } }), [{ ...WINDOW_75, usedPct: 100 }], 'Plus · $0.00 of $22'],
     ['half remaining', account({ subscription: { credits_remaining: 11 } }), [{ ...WINDOW_75, usedPct: 50 }], 'Plus · $11.00 of $22'],
+    ['0.4 of 100 remaining', account({ subscription: { credits_remaining: 0.4, monthly_credits: 100 } }), [{ ...WINDOW_75, usedPct: 99.6 }], 'Plus · $0.40 of $100'],
     ['3.3 remaining', account({ subscription: { credits_remaining: 3.3 } }), [{ ...WINDOW_75, usedPct: 85 }], 'Plus · $3.30 of $22'],
     ['no plan', account({ subscription: { plan: undefined } }), [WINDOW_75], 'hermes'],
     ['an empty plan', account({ subscription: { plan: '' } }), [WINDOW_75], 'hermes'],

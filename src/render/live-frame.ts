@@ -456,7 +456,7 @@ function axisRow(from: number, to: number, zone: string, plot: number): string {
 function windowBlock(label: string, samples: HistorySample[], rows: number, range: [number, number], noColor: boolean, width: number): string[] {
   const columns = columnsOf(samples, range[0], range[1], plotCells(width));
   const latest = samples[samples.length - 1].usedPct;
-  const title = `${cutCells(label, width - 8)}  ${latest}%`;
+  const title = `${cutCells(label, width - 8)}  ${Math.round(latest)}%`;
   return [bold(title, noColor), ...chartRows(columns, rows, noColor), dim(resetRow(columns, noColor), noColor)];
 }
 

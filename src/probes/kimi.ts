@@ -113,14 +113,14 @@ function countOf(value: unknown): number | undefined {
 }
 
 function usedPctOf(ratio: unknown): number | undefined {
-  return isCount(ratio) ? Math.min(100, Math.round(100 * ratio)) : undefined;
+  return isCount(ratio) ? Math.min(100, 100 * ratio) : undefined;
 }
 
 function counterPct(entry: unknown): number | undefined {
   const used = countOf(fieldOf(entry, 'used'));
   const limit = countOf(fieldOf(entry, 'limit'));
   if (used === undefined || limit === undefined || limit === 0) return undefined;
-  return Math.min(100, Math.round((100 * used) / limit));
+  return Math.min(100, (100 * used) / limit);
 }
 
 function windowFrom(usedPct: number | undefined, identity: Pick<UsageWindow, 'label' | 'kind'>, resetsAt?: string): UsageWindow[] {

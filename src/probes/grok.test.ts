@@ -110,7 +110,7 @@ describe('probeGrok', () => {
 
   it.each<[string, unknown, { planLabel: string; windows: UsageWindow[] }]>([
     ['no tier or period', { creditUsagePercent: 75 }, { planLabel: 'grok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 75 }] }],
-    ['an empty tier and a half percent', { creditUsagePercent: 33.5 }, { planLabel: 'grok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 34 }] }],
+    ['an empty tier and a half percent', { creditUsagePercent: 33.5 }, { planLabel: 'grok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 33.5 }] }],
     ['a zero percent', { creditUsagePercent: 0 }, { planLabel: 'grok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 0 }] }],
     ['a bad period end', { creditUsagePercent: 130, currentPeriod: { end: 'soon' } }, { planLabel: 'SuperGrok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 130 }] }],
     ['a null period', { creditUsagePercent: 75, currentPeriod: null }, { planLabel: 'grok', windows: [{ label: 'credits', kind: 'weekly', usedPct: 75 }] }]

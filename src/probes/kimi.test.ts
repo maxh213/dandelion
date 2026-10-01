@@ -170,14 +170,14 @@ describe('probeKimi', () => {
     expect(child.stops).toBe(1);
   });
 
-  it('rounds limit7d 0.595 to 60% and keeps limit5h 0.42 at 42%', async () => {
+  it('keeps limit7d 0.595 at 59.5% and keeps limit5h 0.42 at 42%', async () => {
     const usages = {
       limit5h: { usedRatio: 0.42, resetAt: ROLLING_RESET },
       limit7d: { usedRatio: 0.595, resetAt: WEEKLY_RESET }
     };
     const usage = await probeKimi(ioWith(fakeChild(), bodyOf(envelope(usages))).io, PORT, NOW);
     expect(usage.windows).toStrictEqual([
-      { label: 'weekly', kind: 'weekly', usedPct: 60, resetsAt: WEEKLY_RESET },
+      { label: 'weekly', kind: 'weekly', usedPct: 59.5, resetsAt: WEEKLY_RESET },
       ROLLING_42
     ]);
   });
@@ -396,7 +396,7 @@ describe('probeKimi coding API', () => {
     const usage = await probeKimi(ioWith(fakeChild(), bodyOf(body), scoped()).io, PORT, NOW);
     expect(usage.windows).toStrictEqual([
       { label: 'weekly', kind: 'weekly', usedPct: 0, resetsAt: WEEKLY_RESET },
-      { label: '5h', kind: 'rolling', usedPct: 33 }
+      { label: '5h', kind: 'rolling', usedPct: 100 / 3 }
     ]);
   });
 
@@ -404,7 +404,7 @@ describe('probeKimi coding API', () => {
     const body = { usages: { limit_5h: { used_ratio: 0.42, reset_time: ROLLING_RESET }, limit_7d: { used_ratio: 0.595, reset_time: WEEKLY_RESET } } };
     const usage = await probeKimi(ioWith(fakeChild(), bodyOf(body), scoped()).io, PORT, NOW);
     expect(usage.windows).toStrictEqual([
-      { label: 'weekly', kind: 'weekly', usedPct: 60, resetsAt: WEEKLY_RESET },
+      { label: 'weekly', kind: 'weekly', usedPct: 59.5, resetsAt: WEEKLY_RESET },
       ROLLING_42
     ]);
   });

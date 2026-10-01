@@ -63,7 +63,7 @@ function referenceOf(raw: string | undefined): number | undefined {
 }
 
 function creditsWindows(balance: number, reference: number | undefined): UsageWindow[] {
-  return reference === undefined ? [] : [{ label: 'credits', kind: 'weekly', usedPct: usedPctFromRemaining(balance, reference) }];
+  return reference === undefined ? [] : [{ label: 'credits', kind: 'weekly', usedPct: Math.round(usedPctFromRemaining(balance, reference)) }];
 }
 
 function withNote(windows: UsageWindow[]): { note?: string } {

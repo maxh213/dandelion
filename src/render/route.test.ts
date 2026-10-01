@@ -182,6 +182,14 @@ function parsed(routes: Routes, ineligible: string[] = []) {
 }
 
 describe('renderSnapshot', () => {
+  it('prints whole-number usedPct for fractional probe values', () => {
+    const usages: ProviderUsage[] = [
+      { id: 'cursor', displayName: 'cursor', fetchedAt: SNAPSHOT_NOW, status: 'ok', windows: [{ label: 'total', kind: 'weekly', usedPct: 89.5 }, { label: 'auto', kind: 'weekly', usedPct: 99.6 }] }
+    ];
+    const windows = JSON.parse(renderSnapshot({ lines: LINES }, usages, [], REQUEST)).providers[0].windows;
+    expect(windows.map((window: { usedPct: number }) => window.usedPct)).toEqual([90, 100]);
+  });
+
   it('lists every provider in order with only the fields it has', () => {
     expect(parsed(GOOD).providers).toEqual([
       {

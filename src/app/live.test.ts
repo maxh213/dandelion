@@ -536,6 +536,18 @@ describe('live session', () => {
     });
   });
 
+  it('stores the unrounded percent in snapshot.json', async () => {
+    const session = startSession();
+    await session.settleRound(0);
+    session.press('j');
+    session.press('R');
+    session.probes[0].calls[1].resolve({ ...usageOf('claude', START), windows: [{ label: 'weekly', kind: 'weekly', usedPct: 89.5 }] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(session.snapshotSaved()[1].entries[0].windows[0].usedPct).toBe(89.5);
+    session.press('q');
+    await session.finished;
+  });
+
   it('keeps the dashboard running when the snapshot cannot be written', async () => {
     const session = startSession({ snapshotWrites: false });
     await session.settleRound(0);

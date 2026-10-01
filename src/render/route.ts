@@ -36,7 +36,7 @@ function clockIn(zone: string, instant: string): string {
 }
 
 function percent(value: number): string {
-  return `${value}%`;
+  return `${Math.round(value)}%`;
 }
 
 function choiceText({ chosen, rivals }: RouteDecision, zone: string): string {
@@ -132,7 +132,7 @@ function statusFields(usage: ProviderUsage): Record<string, unknown> {
 
 function windowEntry(window: UsageWindow, now: string): Record<string, unknown> {
   const { label, kind, usedPct, resetsAt } = window;
-  return { label, kind, usedPct, resetsAt, projectedFullAt: projectFull(window, now) };
+  return { label, kind, usedPct: Math.round(usedPct), resetsAt, projectedFullAt: projectFull(window, now) };
 }
 
 function providerEntry(usage: ProviderUsage, ineligible: string[], now: string): Record<string, unknown> {

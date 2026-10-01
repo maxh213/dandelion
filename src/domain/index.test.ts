@@ -162,6 +162,12 @@ describe('routeLine', () => {
     expect(routeDecision(usages, NOW, MIDNIGHT, []).skipped.tripped).toEqual([{ id: 'claude', label: 'rolling', usedPct: 97 }]);
   });
 
+  it('does not trip a rolling window at 89.5 used and keeps the account a candidate', () => {
+    expect(routeOf('kimi: rolling 89.5 @-, weekly 10 @2026-09-20T00:00:00.000Z')).toBe('model-d max kimi');
+    expect(routeDecision([usageOf('kimi: rolling 89.5 @-')], NOW, MIDNIGHT, []).skipped.tripped).toEqual([]);
+    expect(routeDecision([usageOf('kimi: rolling 90 @-')], NOW, MIDNIGHT, []).skipped.tripped).toHaveLength(1);
+  });
+
   it('excludes ok usages with zero windows before any other rule', () => {
     expect(routeOf('claude: no windows')).toBe('none');
     expect(routeOf('claude: no windows; cursor: weekly 60 @2026-09-20T00:00:00.000Z')).toBe('model-f cursor');
@@ -195,6 +201,7 @@ describe('routeLine', () => {
     ['a weekly at 100 used never evaporates', 'claude: rolling 10 @-, weekly 100 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-, weekly 0 @-', 'model-c high agy'],
     ['an uncapped cursor weekly never evaporates', 'cursor: weekly 130 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'model-c high agy'],
     ['99 used still evaporates', 'claude: weekly 99 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'model-a max claude'],
+    ['a fractional 99.6 used still evaporates', 'hermes: weekly 99.6 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'vendor/model-h xhigh hermes'],
     ['97 left does not evaporate', 'claude: weekly 3 @2026-09-14T20:00:00.000Z; agy: rolling 0 @-', 'model-c high agy'],
     ['reset already past never evaporates', 'claude: weekly 50 @2026-09-14T10:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'model-c high agy'],
     ['reset exactly at now never evaporates', 'claude: weekly 50 @2026-09-14T11:00:00.000Z; agy: rolling 40 @-, weekly 40 @2026-09-20T00:00:00.000Z', 'model-c high agy'],
@@ -414,6 +421,12 @@ describe('highRouteLine', () => {
   function highOf(candidates: string, ineligible: string[] = [], lines = LINES): string {
     return highRouteLine(lines, candidates.split('; ').map(usageOf), ineligible);
   }
+
+  it('offers rank 2 cursor at 89.5 used and skips it at 90', () => {
+    const claude = 'claude: session rolling 95, weekly weekly 10, Fable weekly 10';
+    expect(highOf(`${claude}; cursor: total weekly 89.5`, [], F)).toBe('model-h2 cursor');
+    expect(highOf(`${claude}; cursor: total weekly 90`, [], F)).not.toBe('model-h2 cursor');
+  });
 
   it('matches Fable case-insensitively and keeps Fable off the opus gate', () => {
     expect(highOf('claude: session rolling 10, weekly weekly 50, weekly Fable weekly 100')).toBe('model-a max claude');
@@ -892,6 +905,12 @@ describe('notificationEvents', () => {
 
   const withThresholds = (before: number, after: number, raw: string) =>
     notificationEvents(usageOf([week(before)]), usageOf([week(after)]), NOW, () => MIDNIGHT, notifyThresholds(raw)).map((event) => event.text);
+
+  it('compares the unrounded percent against the threshold', () => {
+    expect(withThresholds(80, 89.5, '90')).toEqual([]);
+    expect(withThresholds(89.5, 90, '90')).toEqual(['claude weekly at 90%']);
+    expect(texts([week(79)], [week(94.6)])).toEqual(['claude weekly at 95%']);
+  });
 
   it('notifies for a custom threshold crossing only', () => {
     expect(withThresholds(40, 55, '50,90')).toEqual(['claude weekly at 55%']);
