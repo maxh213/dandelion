@@ -388,7 +388,7 @@ function toggleShowHidden(session: Session): void {
 }
 
 function openGraph(session: Session): void {
-  session.selected = Math.max(0, session.selected);
+  if (session.selected < 0) session.selected = shownIndexes(session)[0] ?? 0;
   session.graphing = true;
   draw(session);
 }

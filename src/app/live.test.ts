@@ -433,6 +433,42 @@ describe('live session', () => {
     expect(session.stopChildren).toHaveBeenCalled();
   });
 
+  it('graphs the first panel on screen when nothing is selected and the sort puts another provider on top', async () => {
+    const session = startSession();
+    const withWindow = (id: string, usedPct: number): Usage => ({ ...usageOf(id, START), windows: [{ label: 'weekly', kind: 'weekly', usedPct, resetsAt: START }] });
+    await session.settleRound(0, { claude: withWindow('claude', 90), agy: withWindow('agy', 20), kimi: withWindow('kimi', 50), kilo: NO_WINDOWS });
+    session.press('s');
+    session.press('g');
+    expect(session.lastFrame().split('\n')[0]).toMatch(/^grok · usage over time/);
+    session.press('\x1b');
+    expect(markedHeaders(session.lastFrame())).toEqual(['▸ grok']);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('graphs the first visible panel when claude is hidden and routes that panel after esc', async () => {
+    const session = startSession({ hiddenText: '["claude"]' });
+    await session.settleRound(0);
+    session.press('g');
+    expect(session.lastFrame().split('\n')[0]).toMatch(/^agy · usage over time/);
+    session.press('\x1b');
+    expect(markedHeaders(session.lastFrame())).toEqual(['▸ agy']);
+    session.press(' ');
+    expect(session.saved()).toEqual([{ agy: false }]);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('still opens the graph when every panel is hidden', async () => {
+    const session = startSession({ hiddenText: JSON.stringify(IDS) });
+    await session.settleRound(0);
+    session.press('g');
+    expect(session.lastFrame().split('\n')[0]).toMatch(/^claude · usage over time/);
+    session.press('q');
+    session.press('q');
+    await session.finished;
+  });
+
   it('redraws the open graph with the new samples when another round settles', async () => {
     const session = startSession({ env: { NO_COLOR: '1', DANDELION_REFRESH_SECONDS: '1' } });
     await session.settleRound(0);
