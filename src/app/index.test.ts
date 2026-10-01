@@ -11,11 +11,13 @@ import type { RunSpawner } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
 const execFileSpy = vi.hoisted(() => vi.fn());
+const spawnSpy = vi.hoisted(() => vi.fn());
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
   execFileSpy.mockImplementation(actual.execFile);
-  return { ...actual, execFile: execFileSpy };
+  spawnSpy.mockImplementation(actual.spawn);
+  return { ...actual, execFile: execFileSpy, spawn: spawnSpy };
 });
 
 const NOW = '2026-09-13T10:00:00.000Z';
@@ -1904,20 +1906,39 @@ describe('runRun', () => {
     });
 
     it('terminate forwards the signal to the running command and resolves once it has exited', async () => {
-      const running = realRunSpawner.spawn({ command: process.execPath, args: ['-e', 'process.on("SIGHUP", () => process.exit(7)); setInterval(() => undefined, 1000); console.log("up")'], env: {} });
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      const ready = join(mkdtempSync(join(tmpdir(), 'dandelion-run-')), 'ready');
+      const script = `process.on("SIGHUP", () => process.exit(7)); require("node:fs").writeFileSync(${JSON.stringify(ready)}, "x"); setInterval(() => undefined, 1000)`;
+      const running = realRunSpawner.spawn({ command: process.execPath, args: ['-e', script], env: {} });
+      await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 10000 });
       await realRunSpawner.terminate('SIGHUP');
       expect(await running).toBe(7);
+      rmSync(dirname(ready), { recursive: true, force: true });
     });
 
     it('terminate SIGKILLs a command that ignores the signal after 5s', async () => {
-      const running = realRunSpawner.spawn({ command: process.execPath, args: ['-e', 'process.on("SIGTERM", () => undefined); setInterval(() => undefined, 1000); console.log("up")'], env: {} });
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const started = Date.now();
-      await realRunSpawner.terminate('SIGTERM');
-      expect(Date.now() - started).toBeGreaterThanOrEqual(4500);
-      expect(await running).toBe(137);
-    }, 15000);
+      vi.useFakeTimers();
+      try {
+        const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null, kill: vi.fn() });
+        spawnSpy.mockImplementationOnce(() => child);
+        const running = realRunSpawner.spawn({ command: 'claude', args: [], env: {} });
+        const settled = vi.fn();
+        const stopped = realRunSpawner.terminate('SIGTERM').then(settled);
+        expect(child.kill).toHaveBeenCalledTimes(1);
+        expect(child.kill).toHaveBeenLastCalledWith('SIGTERM');
+        await vi.advanceTimersByTimeAsync(4999);
+        expect(child.kill).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(child.kill).toHaveBeenLastCalledWith('SIGKILL');
+        expect(settled).not.toHaveBeenCalled();
+        child.emit('exit', null, 'SIGKILL');
+        child.emit('close', null, 'SIGKILL');
+        await stopped;
+        expect(await running).toBe(137);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
 
     it('terminate resolves at once when nothing was spawned or the command already ended', async () => {
       await realRunSpawner.spawn({ command: process.execPath, args: ['-e', ''], env: {} });
