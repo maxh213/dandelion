@@ -445,6 +445,7 @@ describe('main', () => {
     [['run', '--high', 'x'], ['--model', 'model-h1', '--effort', 'max', 'x']],
     [['run', '--', '--high'], ['--model', 'model-a', '--effort', 'high', '--high']],
     [['run', '--max-age', '600', 'x'], ['--model', 'model-a', '--effort', 'high', 'x']],
+    [['run', '--max-age', '0', 'x'], ['--model', 'model-a', '--effort', 'high', 'x']],
     [['run', '--', '--max-age', '600'], ['--model', 'model-a', '--effort', 'high', '--max-age', '600']]
   ])('runIfMain %j launches the routed CLI and exits with its code', async (args, expected) => {
     const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(4);

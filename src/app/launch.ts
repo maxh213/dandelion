@@ -47,8 +47,10 @@ export function isMaxAge(value: string | undefined): boolean {
   return POSITIVE_INTEGER.test(String(value));
 }
 
+const NUMBER = /^-?\d+(\.\d+)?$/;
+
 function withoutMaxAge(args: string[]): string[] {
-  return args.filter((arg, index) => arg !== '--max-age' && !(args[index - 1] === '--max-age' && isMaxAge(arg)));
+  return args.filter((arg, index) => arg !== '--max-age' && !(args[index - 1] === '--max-age' && NUMBER.test(arg)));
 }
 
 export function extraArgs(args: string[]): string[] {

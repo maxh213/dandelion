@@ -33,8 +33,14 @@ describe('extraArgs', () => {
 
   it('drops --max-age and a valid value before -- only', () => {
     expect(extraArgs(['--max-age', '600', 'a', '--', '--max-age', '600'])).toEqual(['a', '--max-age', '600']);
-    expect(extraArgs(['a', '--max-age', '0', '--max-age'])).toEqual(['a', '0']);
-    expect(extraArgs(['--max-age', '--high', 'a'])).toEqual(['--high', 'a'].filter((arg) => arg !== '--high'));
+    expect(extraArgs(['a', '--max-age', '0', '--max-age'])).toEqual(['a']);
+    expect(extraArgs(['--max-age', '--high', 'a'])).toEqual(['a']);
+    expect(extraArgs(['--max-age', 'abc', 'a'])).toEqual(['abc', 'a']);
+    expect(extraArgs(['--max-age', '0', '--max-age', '600', 'a'])).toEqual(['a']);
+  });
+
+  it.each(['0', '-5', '1.5', '600'])('drops the numeric --max-age value %s', (value) => {
+    expect(extraArgs(['--max-age', value, 'a'])).toEqual(['a']);
   });
 });
 

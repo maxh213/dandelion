@@ -2171,7 +2171,11 @@ describe('route eligibility state file', () => {
       it('probes and launches as plain run does without the flag and with a stale snapshot', async () => {
         const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, ...(await liveSnapshot()) };
         const plain = runSpawner();
-        await runRun(probing(), env, requestOf('headroom'), [], plain.spawner);
+        const plainIo = probing();
+        const probed = vi.spyOn(plainIo.runner, 'run');
+        await runRun(plainIo, env, requestOf('headroom'), [], plain.spawner);
+        expect(probed).toHaveBeenCalled();
+        expect(plain.spawn.mock.calls[0][0]).toEqual({ command: 'claude', args: ['--model', 'model-a', '--effort', 'max'], env: {} });
         const stale = runSpawner();
         await runRun(probing(), env, requestOf('headroom', { maxAge: 60, now: '2026-09-13T10:10:00.000Z' }), ['--max-age', '60'], stale.spawner);
         expect(stale.spawn.mock.calls).toEqual(plain.spawn.mock.calls);
