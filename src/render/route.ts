@@ -4,6 +4,7 @@ import {
   highDecisionLine,
   highRouteLine,
   nextLocalMidnight,
+  projectFull,
   routeDecision,
   routeDecisionLine,
   routeLine,
@@ -14,7 +15,8 @@ import {
   type RouteLines,
   type Routes,
   type RoutesFault,
-  type Skipped
+  type Skipped,
+  type UsageWindow
 } from '../domain/index.ts';
 
 export type RouteOutput = { out: string; err: string; code: number };
@@ -122,14 +124,19 @@ function statusFields(usage: ProviderUsage): Record<string, unknown> {
   return { balance: usage.balance, snapshotAt: usage.snapshotAt, note: usage.note };
 }
 
-function providerEntry(usage: ProviderUsage, ineligible: string[]): Record<string, unknown> {
+function windowEntry(window: UsageWindow, now: string): Record<string, unknown> {
+  const { label, kind, usedPct, resetsAt } = window;
+  return { label, kind, usedPct, resetsAt, projectedFullAt: projectFull(window, now) };
+}
+
+function providerEntry(usage: ProviderUsage, ineligible: string[], now: string): Record<string, unknown> {
   return {
     id: usage.id,
     displayName: usage.displayName,
     status: usage.status,
     planLabel: usage.planLabel,
     eligible: !ineligible.includes(usage.id),
-    windows: usage.windows.map(({ label, kind, usedPct, resetsAt }) => ({ label, kind, usedPct, resetsAt })),
+    windows: usage.windows.map((window) => windowEntry(window, now)),
     ...statusFields(usage),
     fetchedAt: usage.fetchedAt
   };
@@ -144,7 +151,7 @@ function routeFields(routes: Routes, usages: ProviderUsage[], ineligible: string
 export function renderSnapshot(routes: Routes, usages: ProviderUsage[], ineligible: string[], request: SnapshotRequest): string {
   return JSON.stringify({
     generatedAt: request.now,
-    providers: usages.map((usage) => providerEntry(usage, ineligible)),
+    providers: usages.map((usage) => providerEntry(usage, ineligible, request.now)),
     ...routeFields(routes, usages, ineligible, request)
   });
 }

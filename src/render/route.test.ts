@@ -212,4 +212,19 @@ describe('renderSnapshot', () => {
     expect(snapshot.providers).toHaveLength(3);
     expect(parsed(GOOD)).not.toHaveProperty('routesError');
   });
+
+  it.each([
+    ['on pace', { label: '5h', kind: 'rolling', usedPct: 60, resetsAt: '2026-09-14T23:00:00.000Z' }, '2026-09-14T21:20:00.000Z'],
+    ['no reset', { label: '5h', kind: 'rolling', usedPct: 60 }, undefined],
+    ['unused', { label: '5h', kind: 'rolling', usedPct: 0, resetsAt: '2026-09-14T23:00:00.000Z' }, undefined],
+    ['full', { label: '5h', kind: 'rolling', usedPct: 100, resetsAt: '2026-09-14T23:00:00.000Z' }, undefined],
+    ['past reset', { label: '5h', kind: 'rolling', usedPct: 60, resetsAt: '2026-09-14T19:00:00.000Z' }, undefined],
+    ['too early', { label: '5h', kind: 'rolling', usedPct: 60, resetsAt: '2026-09-15T00:50:00.000Z' }, undefined],
+    ['not on pace', { label: '5h', kind: 'rolling', usedPct: 10, resetsAt: '2026-09-14T23:00:00.000Z' }, undefined]
+  ] as const)('projectedFullAt for %s window', (_name, window, expected) => {
+    const usage: ProviderUsage = { id: 'claude', displayName: 'claude', fetchedAt: SNAPSHOT_NOW, status: 'ok', windows: [window] };
+    const entry = JSON.parse(renderSnapshot(GOOD, [usage], [], REQUEST)).providers[0].windows[0];
+    expect(entry.projectedFullAt).toBe(expected);
+    expect('projectedFullAt' in entry).toBe(expected !== undefined);
+  });
 });
