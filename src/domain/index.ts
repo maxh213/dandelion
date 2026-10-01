@@ -299,14 +299,32 @@ function pairEvents(pair: WindowPair, accountRecovered: boolean, nights: Nights,
   return [...thresholdEvents(pair, thresholds), ...recoveryEvents(pair, accountRecovered), ...evaporationEvents(pair, nights, now), ...resetEvents(pair, now)];
 }
 
-export function notificationEvents(previous: ProviderUsage, current: ProviderUsage, now: string, midnightAfter: MidnightAfter, thresholds: number[] = DEFAULT_THRESHOLDS): Notification[] {
-  if (previous.status !== 'ok' || current.status !== 'ok') return [];
-  const nights = { before: nightOf(previous.fetchedAt, midnightAfter), tonight: nightOf(now, midnightAfter) };
-  const accountRecovered = isTripped(previous) && !isTripped(current);
+interface EventContext {
+  accountRecovered: boolean;
+  nights: Nights;
+  now: string;
+  thresholds: number[];
+}
+
+function windowEvents(previous: ProviderUsage, current: ProviderUsage, context: EventContext): Notification[] {
   return current.windows.flatMap((window) => {
     const before = previous.windows.find((each) => each.label === window.label);
-    return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, accountRecovered, nights, now, thresholds);
+    return before === undefined ? [] : pairEvents({ id: current.id, previous: before, current: window }, context.accountRecovered, context.nights, context.now, context.thresholds);
   });
+}
+
+function bothOk(previous: ProviderUsage, current: ProviderUsage): boolean {
+  return previous.status === 'ok' && current.status === 'ok';
+}
+
+function accountRecoveredBetween(previous: ProviderUsage, current: ProviderUsage): boolean {
+  return isTripped(previous) && !isTripped(current);
+}
+
+export function notificationEvents(previous: ProviderUsage, current: ProviderUsage, now: string, midnightAfter: MidnightAfter, thresholds: number[] = DEFAULT_THRESHOLDS): Notification[] {
+  if (!bothOk(previous, current)) return [];
+  const nights = { before: nightOf(previous.fetchedAt, midnightAfter), tonight: nightOf(now, midnightAfter) };
+  return windowEvents(previous, current, { accountRecovered: accountRecoveredBetween(previous, current), nights, now, thresholds });
 }
 
 export type { SortOrder };
