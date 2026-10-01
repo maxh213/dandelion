@@ -1,4 +1,4 @@
-import { elapsedFraction, formatCountdown, formatResetAt, isStale, projectFull, usageClass, type Balance, type ClaudeStatus, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { elapsedFraction, formatCountdown, formatResetAt, isStale, printable, projectFull, usageClass, type Balance, type ClaudeStatus, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -206,7 +206,7 @@ function headerLine(name: string, marks: PanelMarks, tag: (text: string) => stri
 
 function statusRows(marks: PanelMarks, noColor: boolean): string[] {
   if (marks.status === undefined) return [];
-  const text = cutCells(`status: ${marks.status.description}`, widthOfMarks(marks));
+  const text = cutCells(`status: ${printable(marks.status.description)}`, widthOfMarks(marks));
   return [noColor ? text : `${STYLE_TOKENS[marks.status.severity]}${text}${RESET}`];
 }
 

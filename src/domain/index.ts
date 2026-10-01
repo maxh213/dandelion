@@ -13,6 +13,7 @@ export {
   matchesOnJsonLine,
   newestLineMatch,
   parseJson,
+  printable,
   successBody,
   unavailableFix,
   unavailableReason,

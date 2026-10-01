@@ -73,6 +73,14 @@ export function isCount(value: unknown): value is number {
   return Number.isFinite(value) && Number(value) >= 0;
 }
 
+const ESC = String.fromCharCode(27);
+const ANSI = new RegExp(`${ESC}(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\p{Cc}]*|.)`, 'gu');
+const CONTROLS = /\p{Cc}/gu;
+
+export function printable(text: string): string {
+  return text.replace(ANSI, '').replace(CONTROLS, '').trim();
+}
+
 export function isFilled(value: unknown): value is string {
   return typeof value === 'string' && value !== '';
 }

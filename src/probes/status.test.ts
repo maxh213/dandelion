@@ -58,4 +58,15 @@ describe('probeClaudeStatus', () => {
   ] as [string, FetchOutcome][])('shows nothing for %s', async (_name, outcome) => {
     expect(await probeWith(outcome).result).toBeUndefined();
   });
+
+  it('strips control characters from the description', async () => {
+    const dirty = '\u001b[2J\u001b]0;x\u0007\r\nPartial outage\r\n\u007f\u0085';
+    const result = await probeWith({ status: 200, body: bodyOf('major', dirty) }).result;
+    expect(result?.description).toContain('Partial outage');
+    expect(result?.description).not.toMatch(/\p{Cc}/u);
+  });
+
+  it('shows nothing when only control characters remain', async () => {
+    expect(await probeWith({ status: 200, body: bodyOf('major', '\u001b[2J\u0007\r\n\u007f') }).result).toBeUndefined();
+  });
 });

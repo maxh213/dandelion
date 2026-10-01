@@ -1613,6 +1613,13 @@ describe('claude status line in the live frame', () => {
     expect(frameOf(MAJOR, false)).toContain(`${STYLE_TOKENS.hot}status: Partial System Outage${RESET}`);
   });
 
+  it('draws a hostile description without escape bytes beyond its own styling', () => {
+    const status = { severity: 'hot', description: '\u001b[2J\u0007\r\nPartial outage\u007f' } as const;
+    const row = frameOf(status, false).split('\n').find((line) => line.includes('status:')) ?? '';
+    expect(row).toBe(`${STYLE_TOKENS.hot}status: Partial outage${RESET}`);
+    expect(row.replace(`${STYLE_TOKENS.hot}`, '').replace(RESET, '')).not.toContain(ESCAPE);
+  });
+
   it('has no escape sequences under NO_COLOR', () => {
     expect(frameOf(MAJOR, true)).not.toContain(ESCAPE);
   });

@@ -1,4 +1,4 @@
-import { fieldOf, isFilled, isSuccess, parseJson, type ClaudeStatus, type Fetcher } from '../domain/index.ts';
+import { fieldOf, isFilled, isSuccess, parseJson, printable, type ClaudeStatus, type Fetcher } from '../domain/index.ts';
 
 export type StatusIo = { fetcher: Pick<Fetcher, 'get'> };
 
@@ -19,7 +19,8 @@ function statusOf(body: string): ClaudeStatus | undefined {
   const status = fieldOf(parseJson(body), 'status');
   const severity = severityOf(fieldOf(status, 'indicator'));
   const description = fieldOf(status, 'description');
-  return severity !== undefined && isFilled(description) ? { severity, description } : undefined;
+  const text = isFilled(description) ? printable(description) : '';
+  return severity !== undefined && text !== '' ? { severity, description: text } : undefined;
 }
 
 function parsed(body: string): ClaudeStatus | undefined {
