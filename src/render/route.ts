@@ -155,3 +155,16 @@ export function renderSnapshot(routes: Routes, usages: ProviderUsage[], ineligib
     ...routeFields(routes, usages, ineligible, request)
   });
 }
+
+const ROUTES_ERROR = 'routes file error';
+
+function segmentOf(usage: ProviderUsage): string[] {
+  if (usage.status !== 'ok' || usage.windows.length === 0) return [];
+  return [`${usage.id} ${percent(Math.round(Math.max(...usage.windows.map(({ usedPct }) => usedPct))))}`];
+}
+
+export function renderLine(routes: Routes, usages: ProviderUsage[], ineligible: string[], request: SnapshotRequest): string {
+  const { lines, fault } = routes;
+  const route = fault === undefined ? headroomLine(lines, usages, ineligible, { ...request, mode: 'headroom' }) : ROUTES_ERROR;
+  return `${[usages.flatMap(segmentOf).join(' · '), `→ ${route}`].filter((part) => part !== '').join(' ')}\n`;
+}

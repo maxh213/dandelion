@@ -1,4 +1,4 @@
 export { NO_ROUTE, dueReprobes, isRoutable, passedResets, resetKey, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, openEligibility, openHidden, openHistory, openRoutes, openUsageSnapshot, openView, type ClaudeStatus, type Eligibility, type Fix, type Hidden, type History, type Notification, type ProviderUsage, type Routes, type RoutesFile, type Snapshot, type SortOrder, type View, type StateFile } from '../domain/index.ts';
-export { renderRoute, renderRoutesFault, renderSnapshot, type RouteMode, type RouteOutput, type RouteRequest, type SnapshotRequest } from './route.ts';
+export { renderLine, renderRoute, renderRoutesFault, renderSnapshot, type RouteMode, type RouteOutput, type RouteRequest, type SnapshotRequest } from './route.ts';
 export { renderDashboard } from './terminal.ts';
 export { ROUTE_FLASH, currentRouteLines, renderLiveFrame, type Flash, type LiveSlot, type LiveView } from './live-frame.ts';

@@ -30,6 +30,7 @@ import {
   renderDashboard,
   renderRoute,
   renderRoutesFault,
+  renderLine,
   renderSnapshot,
   openView,
   type Eligibility,
@@ -309,11 +310,21 @@ export async function runRoute(io: ProbeIo, env: Record<string, string | undefin
   return renderRoute(lines, await cachedUsages(io, env, request), eligibilityOf(io, env).ineligible(), request);
 }
 
-export async function runJson(io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest & { maxAge?: number }): Promise<JsonOutput> {
+type Rendered = (routes: Routes, usages: ProviderUsage[], ineligible: string[], request: SnapshotRequest) => string;
+
+async function runSnapshot(render: Rendered, io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest & { maxAge?: number }): Promise<JsonOutput> {
   const routes = routesOf(env);
   const usages = await cachedUsages(io, env, request);
   const err = routes.fault === undefined ? '' : renderRoutesFault(routes.fault).err;
-  return { out: `${renderSnapshot(routes, usages, eligibilityOf(io, env).ineligible(), request)}\n`, err };
+  return { out: render(routes, usages, eligibilityOf(io, env).ineligible(), request), err };
+}
+
+export function runJson(io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest & { maxAge?: number }): Promise<JsonOutput> {
+  return runSnapshot((...args) => `${renderSnapshot(...args)}\n`, io, env, request);
+}
+
+export function runLine(io: ProbeIo, env: Record<string, string | undefined>, request: SnapshotRequest & { maxAge?: number }): Promise<JsonOutput> {
+  return runSnapshot(renderLine, io, env, request);
 }
 
 export const realNotifier: Notifier = {

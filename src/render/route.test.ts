@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ProviderUsage, RouteLines, Routes } from '../domain/index.ts';
-import { renderRoute, renderRoutesFault, renderSnapshot, type RouteRequest } from './route.ts';
+import { renderLine, renderRoute, renderRoutesFault, renderSnapshot, type RouteRequest } from './route.ts';
 
 const LINES: RouteLines = {
   route: {
@@ -227,5 +227,30 @@ describe('renderSnapshot', () => {
     const entry = JSON.parse(renderSnapshot(GOOD, [usage], [], REQUEST)).providers[0].windows[0];
     expect(entry.projectedFullAt).toBe(expected);
     expect('projectedFullAt' in entry).toBe(expected !== undefined);
+  });
+});
+
+describe('renderLine', () => {
+  const ok = (id: string, ...used: number[]): ProviderUsage => ({ id, displayName: id, fetchedAt: NOW, status: 'ok', windows: used.map((usedPct) => ({ label: 'w', kind: 'weekly', usedPct })) });
+  const failed: ProviderUsage = { id: 'agy', displayName: 'agy', fetchedAt: NOW, status: 'error', reason: 'boom', windows: [] };
+  const balanceOnly: ProviderUsage = { id: 'kilo', displayName: 'kilo', fetchedAt: NOW, status: 'ok', balance: { amount: 5, currency: 'USD' }, windows: [] };
+  const request = { now: NOW, zone: 'UTC' };
+  const routes: Routes = { lines: LINES };
+
+  it('lists the worst rounded used percent of each ok provider with windows, then the route', () => {
+    const usages = [ok('claude', 40, 62.6), ok('kimi', 12), failed, ok('grok', 0), balanceOnly];
+    expect(renderLine(routes, usages, [], request)).toBe(`claude 63% · kimi 12% · grok 0% → ${renderRoute(LINES, usages, [], { mode: 'headroom', ...request }).out}`);
+  });
+
+  it('keeps ineligible providers as segments but routes without them', () => {
+    expect(renderLine(routes, CLAUDE, ['claude'], request)).toBe('claude 50% → none\n');
+  });
+
+  it('ends with none and leaves out the segments when nothing is listed', () => {
+    expect(renderLine(routes, [failed, balanceOnly], [], request)).toBe('→ none\n');
+  });
+
+  it('says routes file error for a bad routes file', () => {
+    expect(renderLine({ fault: { path: '/x', problem: 'bad' } }, CLAUDE, [], request)).toBe('claude 50% → routes file error\n');
   });
 });

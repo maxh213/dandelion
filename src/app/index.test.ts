@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { isEntryFile, routesWarning, runApp, runJson, runLive, runRoute, runRun, realIo, realNotifier, realRunSpawner } from './index.ts';
+import { isEntryFile, routesWarning, runApp, runJson, runLine, runLive, runRoute, runRun, realIo, realNotifier, realRunSpawner } from './index.ts';
 import type { RunSpawner } from './index.ts';
 import type { CommandRunner, CommandRunnerResult, Fetcher, FileReader, LaunchedProcess, Launcher, ProbeIo, RpcChild, RpcSpawner } from '../probes/index.ts';
 
@@ -2147,6 +2147,61 @@ describe('route eligibility state file', () => {
         const now = name === 'holding an old entry' ? '2026-09-13T10:01:01.000Z' : NOW;
         const plain = await runJson(routedRunner(), env, jsonRequest({ now }));
         expect(await runJson(routedRunner(), env, jsonRequest({ now, maxAge: 60 }))).toEqual(plain);
+      });
+    });
+
+    describe('--line', () => {
+      const lineRequest = (extra: { maxAge?: number; now?: string } = {}) => ({ now: NOW, zone: 'UTC', ...extra });
+      const idle = (id: string) => ({ id, displayName: id, status: 'ok', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 0 }], fetchedAt: NOW });
+      const lineEnv = () => ({ DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: statePath });
+
+      it('prints the segments and the exact route line, with no escape sequence, and writes nothing', async () => {
+        const { out, err } = await runLine(routedRunner(), lineEnv(), lineRequest());
+        const route = await runRoute(routedRunner(), lineEnv(), requestOf('headroom'));
+        expect(out).toMatch(/^claude \d+% · .* → model-a max claude\n$/);
+        expect(out.endsWith(` → ${route.out}`)).toBe(true);
+        expect(out).not.toContain('\x1b');
+        expect(err).toBe('');
+        expect(readdirSync(scratch)).toEqual([]);
+      });
+
+      it('ends with none when nothing can be routed', async () => {
+        writeFileSync(join(scratch, 'off.json'), JSON.stringify(Object.fromEntries(IDS.map((id) => [id, false]))));
+        const { out } = await runLine(routedRunner(), { ...lineEnv(), DANDELION_STATE_FILE: join(scratch, 'off.json') }, lineRequest());
+        expect(out).toMatch(/ → none\n$/);
+      });
+
+      it('says routes file error and warns on stderr with a bad routes file', async () => {
+        const path = join(scratch, 'bad.json');
+        writeFileSync(path, '{"route":');
+        const { out, err } = await runLine(routedRunner(), { ...lineEnv(), DANDELION_ROUTES_FILE: path }, lineRequest());
+        expect(out).toMatch(/ → routes file error\n$/);
+        expect(err).toBe(`dandelion: routes file ${path}: is not valid JSON\n`);
+      });
+
+      it('builds the line from a fresh snapshot without probing and never writes any file', async () => {
+        const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, ...(await liveSnapshot()) };
+        const before = readdirSync(join(scratch, 'state')).sort();
+        const probed = await runLine(probing(), env, lineRequest());
+        const io = failing();
+        const cached = await runLine(io, env, lineRequest({ now: '2026-09-13T10:04:59.000Z', maxAge: 600 }));
+        expect(cached).toEqual(probed);
+        expect(calls(io)).toBe(0);
+        expect(readdirSync(join(scratch, 'state')).sort()).toEqual(before);
+      });
+
+      it.each([
+        ['missing', undefined],
+        ['corrupt', '{nope'],
+        ['holding an old entry', JSON.stringify(IDS.map(idle))]
+      ])('probes as plain --line when the snapshot is %s', async (name, text) => {
+        if (text !== undefined) {
+          mkdirSync(join(scratch, 'state'), { recursive: true });
+          writeFileSync(snapshotPath(), text);
+        }
+        const now = name === 'holding an old entry' ? '2026-09-13T10:01:01.000Z' : NOW;
+        const plain = await runLine(routedRunner(), lineEnv(), lineRequest({ now }));
+        expect(await runLine(routedRunner(), lineEnv(), lineRequest({ now, maxAge: 60 }))).toEqual(plain);
       });
     });
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { isEntryFile, processZone, routesWarning, runApp, runJson, isMaxAge, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
+import { isEntryFile, processZone, routesWarning, runApp, runJson, runLine, isMaxAge, runLive, runRoute, runRun, realIo, realRunSpawner, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -43,6 +43,12 @@ async function json(io: ProbeIo, proc: Proc): Promise<void> {
   proc.stderr.write(err);
 }
 
+async function line(io: ProbeIo, proc: Proc): Promise<void> {
+  const { out, err } = await runLine(io, proc.env, { now: new Date().toISOString(), zone: processZone(), maxAge: maxAgeOf(proc.argv.slice(2)) });
+  proc.stdout.write(out);
+  proc.stderr.write(err);
+}
+
 async function run(io: ProbeIo, proc: Proc): Promise<void> {
   const args = proc.argv.slice(3);
   const own = runOwnArgs(args);
@@ -74,6 +80,7 @@ const USAGE = [
   '  dandelion                            live dashboard (re-probes every DANDELION_REFRESH_SECONDS)',
   '  dandelion --once                     run every probe once, print the dashboard and exit',
   '  dandelion --json                     print a machine-readable snapshot of every provider and both routes',
+  '  dandelion --line                     print a one-line plain-text summary for tmux and shell prompts',
   '  dandelion route                      print the subscription to use right now',
   '  dandelion route --high               print the strongest model that still has quota',
   '  dandelion route --why                print the route and the rule that chose it',
@@ -101,8 +108,13 @@ function isUnknownCommand(argv: string[]): boolean {
   return argv.length > 2 && !argv[2].startsWith('-');
 }
 
+function flagModeOf(argv: string[]): ((io: ProbeIo, proc: Proc) => Promise<void>) | undefined {
+  return argv.includes('--json') ? json : argv.includes('--line') ? line : undefined;
+}
+
 function modeOf(proc: Proc): (io: ProbeIo, proc: Proc) => Promise<void> {
-  if (proc.argv.includes('--json')) return json;
+  const flagged = flagModeOf(proc.argv);
+  if (flagged !== undefined) return flagged;
   if (isUnknownCommand(proc.argv)) return unknown;
   return isLive(proc) ? live : (io, p) => main(io, p.env, p, new Date().toISOString());
 }

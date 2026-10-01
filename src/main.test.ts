@@ -22,11 +22,11 @@ vi.mock('./app/index.ts', async (importOriginal) => {
     reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
     spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
   };
-  return { ...original, realIo: stubIo, runRoute: vi.fn(original.runRoute), runJson: vi.fn(original.runJson), runRun: vi.fn(original.runRun) };
+  return { ...original, realIo: stubIo, runRoute: vi.fn(original.runRoute), runJson: vi.fn(original.runJson), runLine: vi.fn(original.runLine), runRun: vi.fn(original.runRun) };
 });
 
 const { main, runIfMain } = await import('./main.ts');
-const { runJson, runRoute, runRun, realRunSpawner } = await import('./app/index.ts');
+const { runJson, runLine, runRoute, runRun, realRunSpawner } = await import('./app/index.ts');
 const { highRouteLine, routeLine } = await import('./domain/index.ts');
 
 const routeIo: ProbeIo = {
@@ -240,7 +240,7 @@ describe('main', () => {
     }
   });
 
-  it.each<[string[]]>([[['--once']], [['route']], [['route', '--high']], [['--json']], [['run']]])('runIfMain %j installs no SIGTERM or SIGHUP handler', async (args) => {
+  it.each<[string[]]>([[['--once']], [['route']], [['route', '--high']], [['--json']], [['--line']], [['run']]])('runIfMain %j installs no SIGTERM or SIGHUP handler', async (args) => {
     const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(0);
     const on = vi.spyOn(process, 'on');
     const before = [process.listenerCount('SIGTERM'), process.listenerCount('SIGHUP')];
@@ -358,7 +358,7 @@ describe('main', () => {
       texts.push(output());
     }
     expect(new Set(texts).size).toBe(1);
-    for (const command of ['dandelion run', 'dandelion run --high', 'dandelion --json', 'dandelion route --why', 'dandelion route --max-age <seconds>']) {
+    for (const command of ['dandelion run', 'dandelion run --high', 'dandelion --json', 'dandelion --line', 'dandelion route --why', 'dandelion route --max-age <seconds>']) {
       expect(texts[0]).toMatch(new RegExp(`^  ${command.replace(/[-<>]/g, '\\$&')} +\\S`, 'm'));
     }
   });
@@ -413,6 +413,42 @@ describe('main', () => {
     vi.mocked(runJson).mockClear();
     await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, ...args], false, false).proc);
     expect(vi.mocked(runJson).mock.calls[0][2].maxAge).toBe(maxAge);
+  });
+
+  it.each<[string[], number | undefined]>([
+    [['--line', '--max-age', '30'], 30],
+    [['--max-age', '5', '--line'], 5],
+    [['--line'], undefined],
+    [['--line', '--max-age', '0'], undefined]
+  ])('runIfMain %j passes max age %s to --line', async (args, maxAge) => {
+    vi.mocked(runLine).mockClear();
+    await runIfMain(MAIN_URL, MAIN, routeIo, procOf(['node', MAIN, ...args], false, false).proc);
+    expect(vi.mocked(runLine).mock.calls[0][2].maxAge).toBe(maxAge);
+  });
+
+  it('runIfMain --line prints one plain line on two terminals without live mode and exits 0', async () => {
+    const { proc, output, errors, keyboard } = procOf(['node', MAIN, '--line'], true, true);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(output()).toMatch(/^.* → model-a high claude\n$/);
+    expect(output()).not.toContain('\x1b');
+    expect([errors(), proc.exit.mock.calls, keyboard.setRawMode.mock.calls]).toEqual(['', [], []]);
+  });
+
+  it('runIfMain --line with a bad routes file warns on stderr and does not exit', async () => {
+    const { proc, output, errors } = procOf(['node', MAIN, '--line'], true, true, { DANDELION_ROUTES_FILE: '/nonexistent/routes.json' });
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(output()).toMatch(/→ routes file error\n$/);
+    expect(errors()).toBe('dandelion: routes file /nonexistent/routes.json: cannot be read\n');
+    expect(proc.exit).not.toHaveBeenCalled();
+  });
+
+  it('runIfMain --json --line prints the JSON object and route --line prints the route', async () => {
+    const both = procOf(['node', MAIN, '--line', '--json'], false, false);
+    await runIfMain(MAIN_URL, MAIN, routeIo, both.proc);
+    expect(JSON.parse(both.output()).route).toBe('model-a high claude');
+    const route = procOf(['node', MAIN, 'route', '--line'], false, false);
+    await runIfMain(MAIN_URL, MAIN, routeIo, route.proc);
+    expect(route.output()).toBe('model-a high claude\n');
   });
 
   it('runIfMain --json with a bad routes file nulls the routes, warns on stderr and does not exit', async () => {
