@@ -63,7 +63,8 @@ function labelOf(minutes: unknown, fallback: string): string {
 }
 
 function kindOf(label: string): WindowKind {
-  return label === 'weekly' ? 'weekly' : 'other';
+  if (label === 'weekly') return 'weekly';
+  return label === '5h' ? 'rolling' : 'other';
 }
 
 function resetInstant(seconds: unknown): string | undefined {

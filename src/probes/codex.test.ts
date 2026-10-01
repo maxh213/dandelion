@@ -94,7 +94,7 @@ describe('probeCodex login', () => {
     expect(usage).toStrictEqual({
       ...IDENTITY,
       windows: [
-        { label: '5h', kind: 'other', usedPct: 42, resetsAt: '2026-09-13T12:30:00.000Z' },
+        { label: '5h', kind: 'rolling', usedPct: 42, resetsAt: '2026-09-13T12:30:00.000Z' },
         { label: 'weekly', kind: 'weekly', usedPct: 86, resetsAt: '2026-09-16T10:00:00.000Z' }
       ],
       status: 'ok'
@@ -130,7 +130,7 @@ describe('probeCodex login', () => {
 
 describe('probeCodex rate limits', () => {
   it.each<[unknown, unknown[]]>([
-    [{ primary: { usedPercent: 33.5, windowDurationMins: 300 }, secondary: null }, [{ label: '5h', kind: 'other', usedPct: 34 }]],
+    [{ primary: { usedPercent: 33.5, windowDurationMins: 300 }, secondary: null }, [{ label: '5h', kind: 'rolling', usedPct: 34 }]],
     [{ primary: null, secondary: { usedPercent: 130, windowDurationMins: 10080, resetsAt: 'soon' } }, [{ label: 'weekly', kind: 'weekly', usedPct: 130 }]],
     [{ primary: { usedPercent: 0, windowDurationMins: 1440, resetsAt: null } }, [{ label: '1d', kind: 'other', usedPct: 0 }]],
     [{ primary: { usedPercent: 10, windowDurationMins: 90 }, secondary: { usedPercent: 'x' } }, [{ label: '90m', kind: 'other', usedPct: 10 }]],

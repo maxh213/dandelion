@@ -853,6 +853,35 @@ describe('codex panel', () => {
     );
   });
 
+  describe('rolling 5h window', () => {
+    const RESET = Date.parse('2026-09-13T12:00:00.000Z') / 1000;
+    const limitsAt = (usedPercent: number) => ({ ...CODEX_LIMITS, primary: { usedPercent, windowDurationMins: 300, resetsAt: RESET } });
+    const ioAt = (usedPercent: number) => codexIo(CODEX_CHATGPT, codexSpawner(codexLines(limitsAt(usedPercent))));
+
+    it('shows the projection line under the 5h row', async () => {
+      const lines = panelOf(plain(await runApp(ioAt(65), GROK_ENV, NOW)), 'codex');
+      expect(lines.slice(1, 4).map((line) => line.trim().replace(/ +/g, ' '))).toEqual(['5h █████████████░░░░░░░ 65% ↻ 2h0m', '→ 100% in ~1h36m (before reset)', 'weekly █████████████████░░░ 86% ↻ 3d0h']);
+    });
+
+    it('puts projectedFullAt in the json snapshot', async () => {
+      const { out } = await runJson(ioAt(65), { DANDELION_ROUTES_FILE: ROUTES_FILE, ...GROK_ENV }, { now: NOW, zone: 'UTC' });
+      const codex = JSON.parse(out).providers.find((provider: { id: string }) => provider.id === 'codex');
+      expect(codex.windows[0]).toMatchObject({ label: '5h', kind: 'rolling', usedPct: 65, projectedFullAt: '2026-09-13T11:36:55.384Z' });
+    });
+
+    it.each([
+      ['headroom', false],
+      ['headroom', true],
+      ['high', false],
+      ['high', true]
+    ] as const)('leaves route %s (why: %s) unchanged by a codex 5h window at 95%%', async (mode, why) => {
+      const request = { mode, why, now: NOW, zone: 'UTC' };
+      const env = { DANDELION_ROUTES_FILE: ROUTES_FILE, ...GROK_ENV };
+      const calm = await runRoute(ioAt(10), env, request);
+      expect(await runRoute(ioAt(95), env, request)).toEqual(calm);
+    });
+  });
+
   it('renders the API-key caption instead of rows without starting app-server', async () => {
     const spawned: string[][] = [];
     const io = codexIo(CODEX_API_KEY, codexSpawner(codexLines(), spawned));
