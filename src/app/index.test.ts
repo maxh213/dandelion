@@ -1279,7 +1279,7 @@ describe('cursor panel', () => {
       expect(dashboard.writes.join('')).not.toContain('refreshing…');
       await vi.advanceTimersByTimeAsync(295000);
       expect(claudeRuns()).toBe(4);
-      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_NOTIFY', 'DANDELION_REFRESH_SECONDS', 'DANDELION_ROUTES_FILE'].sort());
+      expect(recorded.names()).toEqual([...SETTINGS, 'DANDELION_CLAUDE_STATUS_URL', 'DANDELION_NOTIFY', 'DANDELION_REFRESH_SECONDS', 'DANDELION_ROUTES_FILE'].sort());
       dashboard.press('q');
       await dashboard.finished;
     });
@@ -2732,3 +2732,87 @@ describe('live clipboard', () => {
   });
 });
 
+
+describe('claude status line wiring', () => {
+  const STATUS_URL = 'https://status.claude.com/api/v2/status.json';
+  const MAJOR_BODY = JSON.stringify({ status: { indicator: 'major', description: 'Partial System Outage' } });
+
+  function statusIo(answer: Awaited<ReturnType<Fetcher['get']>>, urls: string[] = []): ProbeIo {
+    const fetcher: Fetcher = {
+      get: async (url, headers, timeoutMs) => {
+        urls.push(url);
+        return url.includes('status') ? answer : KIMI_FETCHER.get(url, headers, timeoutMs);
+      },
+      post: KIMI_FETCHER.post
+    };
+    return { ...routedRunner(), fetcher };
+  }
+
+  function failingIo(): ProbeIo {
+    const get = (url: string, headers: Record<string, string>, timeoutMs: number) => {
+      if (url.includes('status')) throw new Error(`status url requested: ${url}`);
+      return KIMI_FETCHER.get(url, headers, timeoutMs);
+    };
+    return { ...routedRunner(), fetcher: { ...KIMI_FETCHER, get } };
+  }
+
+  async function settle(): Promise<void> {
+    for (let turn = 0; turn < 16; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  async function liveFrame(io: ProbeIo, env: Record<string, string> = {}): Promise<string[]> {
+    const dashboard = startDashboard(io, { NO_COLOR: '1', ...env });
+    await settle();
+    const lines = dashboard.lastFrame().split('\n');
+    dashboard.press('q');
+    await dashboard.finished;
+    return lines;
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date(NOW));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('puts the line under the three claude panels and no other', async () => {
+    const urls: string[] = [];
+    const lines = await liveFrame(statusIo({ status: 200, body: MAJOR_BODY }, urls));
+    for (const id of ['claude', 'claude-work', 'claude-deepseek']) expect(lines[lines.indexOf(id) + 1]).toBe('status: Partial System Outage');
+    expect(lines.filter((line) => line.startsWith('status:'))).toHaveLength(3);
+    expect(urls.filter((url) => url === STATUS_URL)).toHaveLength(1);
+  });
+
+  it('points at DANDELION_CLAUDE_STATUS_URL when set', async () => {
+    const urls: string[] = [];
+    await liveFrame(statusIo({ status: 200, body: MAJOR_BODY }, urls), { DANDELION_CLAUDE_STATUS_URL: 'http://127.0.0.1:1/status.json' });
+    expect(urls).toContain('http://127.0.0.1:1/status.json');
+    expect(urls).not.toContain(STATUS_URL);
+  });
+
+  it.each([
+    ['none', { status: 200, body: JSON.stringify({ status: { indicator: 'none', description: 'All Systems Operational' } }) }],
+    ['a timeout', { failure: 'timeout' }],
+    ['a network failure', { failure: 'network' }],
+    ['a 503', { status: 503, body: MAJOR_BODY }],
+    ['invalid json', { status: 200, body: '<html>' }]
+  ] as [string, Awaited<ReturnType<Fetcher['get']>>][])('shows no line for %s', async (_name, answer) => {
+    expect((await liveFrame(statusIo(answer))).filter((line) => line.includes('status:'))).toEqual([]);
+  });
+
+  it('never fetches the status url for route, route --high, run, --once or --json', async () => {
+    const request = { now: NOW, zone: 'UTC' };
+    const env = { DANDELION_ROUTES_FILE: ROUTES_FILE };
+    const expected = await routeWith(routedRunner(), {}, { mode: 'headroom', ...request });
+    expect(await routeWith(failingIo(), {}, { mode: 'headroom', ...request })).toEqual(expected);
+    expect(await routeWith(failingIo(), {}, { mode: 'high', ...request })).toEqual(await routeWith(routedRunner(), {}, { mode: 'high', ...request }));
+    const spawn = vi.fn<RunSpawner['spawn']>(async () => 0);
+    await runRun(failingIo(), env, { mode: 'headroom', ...request }, [], { spawn });
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(await runApp(failingIo(), { NO_COLOR: '1' }, NOW)).toBe(await runApp(routedRunner(), { NO_COLOR: '1' }, NOW));
+    expect((await runJson(failingIo(), env, request)).out).toBe((await runJson(routedRunner(), env, request)).out);
+  });
+});

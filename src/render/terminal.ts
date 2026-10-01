@@ -1,4 +1,4 @@
-import { HOT_PCT, formatCountdown, formatResetAt, isStale, projectFull, type Balance, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { HOT_PCT, formatCountdown, formatResetAt, isStale, projectFull, type Balance, type ClaudeStatus, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -17,7 +17,7 @@ const ROUTING_OFF = 'routing off';
 const HIDDEN = 'hidden';
 const MARKER = '▸ ';
 
-export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number };
+export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number; status?: ClaudeStatus };
 
 export type Layout = { width: number; label: number; gauge: number };
 
@@ -116,13 +116,19 @@ function headerLine(name: string, marks: PanelMarks, tag: (text: string) => stri
   return flags === '' ? lead : `${lead}${repeatChar(' ', widthOfMarks(marks) - cellCount(lead) - cellCount(flags))}${tag(flags)}`;
 }
 
+function statusRows(marks: PanelMarks, noColor: boolean): string[] {
+  if (marks.status === undefined) return [];
+  const text = cutCells(`status: ${marks.status.description}`, widthOfMarks(marks));
+  return [noColor ? text : `${STYLE_TOKENS[marks.status.severity]}${text}${RESET}`];
+}
+
 function dimPanel(lines: string[], marks: PanelMarks, noColor: boolean): string {
   if (!marks.selected) return dim([plainRule(noColor, marks.width), ...lines].join('\n'), noColor);
   return `${markedRule(marks, noColor)}\n${dim(lines.join('\n'), noColor)}`;
 }
 
 export function renderDimPanel(name: string, body: string[], noColor: boolean, marks: PanelMarks): string {
-  return dimPanel([headerLine(name, marks, String), ...body], marks, noColor);
+  return dimPanel([headerLine(name, marks, String), ...statusRows(marks, noColor), ...body], marks, noColor);
 }
 
 function gaugeCells(filledCells: number, noColor: boolean, cells: number): string {
@@ -260,11 +266,11 @@ function plainRows(usage: OkUsage, noColor: boolean, now: string, marks: PanelMa
 }
 
 function renderPanelStale(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
-  return dimPanel([headerLine(usage.displayName, marks, String), ...plainRows(usage, noColor, now, marks), ...snapshotLines(usage, now), captionLine(usage, marks)], marks, noColor);
+  return dimPanel([headerLine(usage.displayName, marks, String), ...statusRows(marks, noColor), ...plainRows(usage, noColor, now, marks), ...snapshotLines(usage, now), captionLine(usage, marks)], marks, noColor);
 }
 
 export function renderPanelRemembered(good: OkUsage, failed: FailedUsage, noColor: boolean, now: string, marks: PanelMarks): string {
-  const lines = [headerLine(good.displayName, marks, String), ...plainRows(good, noColor, now, marks), `last probe failed: ${failed.reason}`, captionLine(good, marks)];
+  const lines = [headerLine(good.displayName, marks, String), ...statusRows(marks, noColor), ...plainRows(good, noColor, now, marks), `last probe failed: ${failed.reason}`, captionLine(good, marks)];
   return dimPanel(lines, marks, noColor);
 }
 
@@ -272,6 +278,7 @@ function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, marks: 
   return [
     markedRule(marks, noColor),
     headerLine(usage.displayName, marks, (text) => dim(text, noColor)),
+    ...statusRows(marks, noColor),
     ...panelBody(usage, noColor, (window) => pacedRow(window, noColor, now, marks.absoluteZone, marks.width), usageStyle(noColor), layoutOf(marks.width)),
     ...snapshotLines(usage, now).map((line) => dim(line, noColor)),
     dim(captionLine(usage, marks), noColor)
@@ -283,7 +290,7 @@ export function renderPanelOk(usage: OkUsage, noColor: boolean, now: string, mar
 }
 
 export function renderPanelUnavailable(usage: FailedUsage, noColor: boolean, marks: PanelMarks): string {
-  return dimPanel([headerLine(usage.displayName, marks, String), usage.reason, captionLine(usage, marks)], marks, noColor);
+  return dimPanel([headerLine(usage.displayName, marks, String), ...statusRows(marks, noColor), usage.reason, captionLine(usage, marks)], marks, noColor);
 }
 
 function assertNever(value: never): never {

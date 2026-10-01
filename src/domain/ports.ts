@@ -11,6 +11,8 @@ export interface FileReader {
   isDirectory(path: string): Promise<boolean>;
 }
 
+export type ClaudeStatus = { severity: 'warm' | 'hot'; description: string };
+
 export const USAGE_PARSE_FAILURE = 'Could not parse usage from response';
 
 export type Fix = { command: string; args: string[]; env?: Record<string, string> };

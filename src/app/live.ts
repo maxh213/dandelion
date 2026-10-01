@@ -1,5 +1,5 @@
 import type { ProviderProbe } from '../probes/index.ts';
-import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
+import { NO_ROUTE, ROUTE_FLASH, currentRouteLines, dueReprobes, passedResets, resetKey, isRoutable, nextLocalMidnight, nextSortOrder, notificationEvents, orderPanels, renderLiveFrame, type SortOrder, type ClaudeStatus, type Eligibility, type Fix, type Flash, type Hidden, type History, type LiveSlot, type LiveView, type Notification, type Routes } from '../render/index.ts';
 
 export interface Screen {
   write(text: string): unknown;
@@ -42,6 +42,7 @@ type LiveOptions = {
   notifier: Notifier;
   clipboard: Clipboard;
   spawner: FixRunner;
+  statusProbe?: () => Promise<ClaudeStatus | undefined>;
   clock?: () => string;
 };
 
@@ -73,6 +74,7 @@ type Session = LiveOptions & {
   graphing: boolean;
   notified: Set<string>;
   reprobed: Set<string>;
+  status?: ClaudeStatus;
   flash?: Flash;
   frameTimer?: Timer;
   refreshTimer?: Timer;
@@ -129,6 +131,7 @@ function viewOf(session: Session): LiveView {
     routes: session.routes,
     settled: session.settled,
     selected: session.selected,
+    status: session.status,
     flash: session.flash,
     rows: session.screen.rows,
     columns: session.screen.columns,
@@ -210,7 +213,15 @@ function endRound(session: Session): void {
   draw(session);
 }
 
+function fetchStatus(session: Session): void {
+  void session.statusProbe?.().then((status) => {
+    session.status = status;
+    draw(session);
+  });
+}
+
 function startRound(session: Session): void {
+  fetchStatus(session);
   session.running = true;
   session.rounds += 1;
   const now = session.clock();

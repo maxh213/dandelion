@@ -1455,3 +1455,55 @@ describe('remembered panel', () => {
     expect(lines.join('\n')).not.toContain('last probe failed');
   });
 });
+
+describe('claude status line in the live frame', () => {
+  const ids = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi'];
+  const usages: ProviderUsage[] = ids.map((id) => ({ id, displayName: id, planLabel: 'plan', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 10 }], fetchedAt: NOW, status: 'ok' }));
+  const unavailable: ProviderUsage = { id: 'claude', displayName: 'claude', windows: [], fetchedAt: NOW, status: 'unavailable', reason: 'claude CLI not found in PATH' };
+  const frameOf = (status: LiveView['status'], noColor: boolean, slots: (ProviderUsage | undefined)[] = usages) =>
+    renderLiveFrame(
+      { slots: slots.map((usage, index) => ({ id: usage?.id ?? ids[index], usage })), spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: LINES }, rows: 80, status },
+      noColor,
+      NOW
+    );
+  const MAJOR = { severity: 'hot', description: 'Partial System Outage' } as const;
+
+  it('sits directly under the header of the three claude panels and no other panel', () => {
+    const lines = frameOf(MAJOR, true).split('\n');
+    for (const id of ['claude', 'claude-work', 'claude-deepseek']) expect(lines[lines.indexOf(id) + 1]).toBe('status: Partial System Outage');
+    for (const id of ['agy', 'kimi']) expect(lines[lines.indexOf(id) + 1]).not.toContain('status:');
+    expect(lines.filter((line) => line.startsWith('status:'))).toHaveLength(3);
+  });
+
+  it('shows nothing without a status', () => {
+    expect(frameOf(undefined, true)).not.toContain('status:');
+  });
+
+  it('is warm for minor and hot for major outside NO_COLOR', () => {
+    expect(frameOf({ severity: 'warm', description: 'Degraded' }, false)).toContain(`${STYLE_TOKENS.warm}status: Degraded${RESET}`);
+    expect(frameOf(MAJOR, false)).toContain(`${STYLE_TOKENS.hot}status: Partial System Outage${RESET}`);
+  });
+
+  it('has no escape sequences under NO_COLOR', () => {
+    expect(frameOf(MAJOR, true)).not.toContain(ESCAPE);
+  });
+
+  it('shows on unavailable and still-probing claude panels too', () => {
+    expect(frameOf(MAJOR, true, [unavailable]).split('\n')).toContain('status: Partial System Outage');
+    expect(frameOf(MAJOR, true, [undefined]).split('\n')).toContain('status: Partial System Outage');
+  });
+
+  it('is cut to the panel width', () => {
+    const long = { severity: 'hot', description: 'x'.repeat(100) } as const;
+    const line = frameOf(long, true).split('\n').find((candidate) => candidate.startsWith('status:')) ?? '';
+    expect(cellCount(line)).toBe(72);
+  });
+
+  it('shows on remembered and stale panels', () => {
+    const good = usages[0];
+    const view = { slots: [{ id: 'claude', usage: unavailable, lastGood: good as Extract<ProviderUsage, { status: 'ok' }> }], spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: LINES }, rows: 80, status: MAJOR };
+    expect(renderLiveFrame(view, true, NOW).split('\n')).toContain('status: Partial System Outage');
+    const stale = { ...good, snapshotAt: '2026-09-01T00:00:00.000Z' } as ProviderUsage;
+    expect(renderLiveFrame({ ...view, slots: [{ id: 'claude', usage: stale }] }, true, NOW).split('\n')).toContain('status: Partial System Outage');
+  });
+});

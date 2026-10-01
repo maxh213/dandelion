@@ -8,6 +8,7 @@ import {
   routeLine,
   sortSuffix,
   summariseFleet,
+  type ClaudeStatus,
   type HistorySample,
   type ProviderUsage,
   type RouteLines,
@@ -46,6 +47,7 @@ const NO_SUBSCRIPTION = 'no subscription available';
 const PROBING = 'probing…';
 const ROUTES_FILE_ERROR = 'routes file error';
 const FALLBACK_ROWS = 24;
+const STATUS_IDS = new Set(['claude', 'claude-work', 'claude-deepseek']);
 
 export type LiveSlot = { id: string; usage: ProviderUsage | undefined; probing?: boolean; lastGood?: Extract<ProviderUsage, { status: 'ok' }> };
 
@@ -71,6 +73,7 @@ export type LiveView = {
   flash?: Flash;
   rows?: number;
   columns?: number;
+  status?: ClaudeStatus;
   graph?: { id: string; samples: HistorySample[]; usage: ProviderUsage | undefined };
 };
 
@@ -140,7 +143,7 @@ function isHidden(view: LiveView, slot: LiveSlot): boolean {
 
 function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   const caption = view.flash?.index === index ? view.flash.message : undefined;
-  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view) };
+  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view), status: STATUS_IDS.has(slot.id) ? view.status : undefined };
 }
 
 function settledMarks(slot: LiveSlot, usage: ProviderUsage, spinner: number, now: string, marks: PanelMarks): PanelMarks {

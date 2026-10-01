@@ -16,6 +16,7 @@ export {
   unavailableFix,
   unavailableReason,
   validInstant,
+  type ClaudeStatus,
   type FetchOutcome,
   type Fix,
   type Fetcher,

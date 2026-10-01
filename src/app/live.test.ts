@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderProbe } from '../probes/index.ts';
-import { openEligibility, openHidden, openHistory, type Routes } from '../render/index.ts';
+import { openEligibility, openHidden, openHistory, type ClaudeStatus, type Routes } from '../render/index.ts';
 import { startLive } from './live.ts';
 
 const LINES = {
@@ -56,10 +56,11 @@ type SessionOverrides = {
   copy?: (text: string) => Promise<boolean>;
   spawn?: () => Promise<number | 'missing'>;
   routes?: Routes;
+  statusProbe?: () => Promise<ClaudeStatus | undefined>;
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier, copy, spawn, routes } = { spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { env, stopChildren, state, zone, rows, hiddenText, hiddenSaves, historyText, historyWrites, notifier, copy, spawn, routes, statusProbe } = { spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async () => true, historyText: '[]', historyWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
   const spawner = { spawn: vi.fn(spawn) };
   const writes: string[] = [];
@@ -80,7 +81,7 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: hiddenReplace
   });
   const hiddenSaved = () => hiddenReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes, zone, notifier, clipboard, spawner });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, keyboard, screen, stopChildren, eligibility, hidden, history, routes, zone, notifier, clipboard, spawner, statusProbe });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
@@ -1509,6 +1510,41 @@ describe('fix key', () => {
       const samples = JSON.parse(session.historyReplace.mock.calls.at(-1)?.[1] ?? '[]');
       expect(samples.filter((sample: { id: string }) => sample.id === 'claude')).toHaveLength(1);
       expect(samples.filter((sample: { id: string; at: string }) => sample.id === 'claude' && sample.at !== START)).toEqual([]);
+      session.press('q');
+      await session.finished;
+    });
+  });
+
+  describe('claude status line', () => {
+    const MAJOR: ClaudeStatus = { severity: 'hot', description: 'Partial System Outage' };
+
+    it('fetches once per full round and not on a single-panel refresh', async () => {
+      const statusProbe = vi.fn(async () => MAJOR);
+      const session = startSession({ statusProbe });
+      expect(statusProbe).toHaveBeenCalledTimes(1);
+      await session.settleRound(0);
+      session.press('j');
+      session.press('R');
+      session.press('\r');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(statusProbe).toHaveBeenCalledTimes(1);
+      session.press('r');
+      expect(statusProbe).toHaveBeenCalledTimes(2);
+      session.press('q');
+      await session.finished;
+    });
+
+    it('shows the line under claude only and drops it when the next round finds none', async () => {
+      let status: ClaudeStatus | undefined = MAJOR;
+      const session = startSession({ statusProbe: async () => status });
+      await session.settleRound(0);
+      const lines = session.lastFrame().split('\n');
+      expect(lines[lines.indexOf('claude') + 1]).toBe('status: Partial System Outage');
+      expect(lines.filter((line) => line.startsWith('status:'))).toHaveLength(1);
+      status = undefined;
+      session.press('r');
+      await session.settleRound(1);
+      expect(session.lastFrame()).not.toContain('status:');
       session.press('q');
       await session.finished;
     });

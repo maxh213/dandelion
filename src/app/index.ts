@@ -8,6 +8,7 @@ import { createInterface } from 'node:readline';
 import { PassThrough, pipeline, type Readable, type Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import {
+  probeClaudeStatus,
   providerProbes,
   type CommandRunner,
   type CommandRunnerResult,
@@ -358,6 +359,7 @@ export function runLive(
     zone: processZone(),
     notifier: realNotifier,
     spawner: realRunSpawner,
+    statusProbe: () => probeClaudeStatus(io, env),
     clipboard: openClipboard({ tryCommand: realCommandTry, write: screen.write.bind(screen) }),
     clock
   });

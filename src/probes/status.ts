@@ -1,0 +1,36 @@
+import { fieldOf, isFilled, isSuccess, parseJson, type ClaudeStatus, type Fetcher } from '../domain/index.ts';
+
+export type StatusIo = { fetcher: Pick<Fetcher, 'get'> };
+
+const DEFAULT_URL = 'https://status.claude.com/api/v2/status.json';
+const TIMEOUT_MS = 10000;
+const NONE = 'none';
+
+function urlOf(env: Record<string, string | undefined>): string {
+  return env['DANDELION_CLAUDE_STATUS_URL'] || DEFAULT_URL;
+}
+
+function severityOf(indicator: unknown): ClaudeStatus['severity'] | undefined {
+  if (!isFilled(indicator) || indicator === NONE) return undefined;
+  return indicator === 'minor' ? 'warm' : 'hot';
+}
+
+function statusOf(body: string): ClaudeStatus | undefined {
+  const status = fieldOf(parseJson(body), 'status');
+  const severity = severityOf(fieldOf(status, 'indicator'));
+  const description = fieldOf(status, 'description');
+  return severity !== undefined && isFilled(description) ? { severity, description } : undefined;
+}
+
+function parsed(body: string): ClaudeStatus | undefined {
+  try {
+    return statusOf(body);
+  } catch {
+    return undefined;
+  }
+}
+
+export async function probeClaudeStatus(io: StatusIo, env: Record<string, string | undefined>): Promise<ClaudeStatus | undefined> {
+  const outcome = await io.fetcher.get(urlOf(env), {}, TIMEOUT_MS);
+  return isSuccess(outcome) ? parsed(outcome.body) : undefined;
+}
