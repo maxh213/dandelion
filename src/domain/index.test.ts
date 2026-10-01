@@ -956,6 +956,11 @@ describe('usage snapshot', () => {
     expect(snapshot.fresh(IDS, '2026-09-13T10:01:00.001Z', 60)).toBeUndefined();
   });
 
+  it('treats a future fetchedAt as fresh', () => {
+    const future = '2026-09-13T11:00:00.000Z';
+    expect(opens(stored(usage('claude', future), usage('kilo', AT))).snapshot.fresh(IDS, '2026-09-13T10:00:30.000Z', 60)).toEqual([usage('claude', future), usage('kilo', AT)]);
+  });
+
   it('keeps the reason of unavailable and error entries', () => {
     const failed: ProviderUsage[] = [{ ...usage('claude', AT), status: 'unavailable', reason: 'no cli' }, { ...usage('kilo', AT), status: 'error', reason: 'boom' }];
     expect(opens(stored(...failed)).snapshot.fresh(IDS, AT, 1)).toEqual(failed);
