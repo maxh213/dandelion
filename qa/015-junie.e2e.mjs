@@ -248,7 +248,7 @@ function assertAge(line, hours) {
 }
 
 function startLive(env) {
-  const child = spawn('/usr/bin/script', ['-qfec', `stty rows 60 cols 80; '${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env: { ...env, PATH: `${env.PATH}:/usr/bin` }, timeout: OUTER_TIMEOUT_MS });
+  const child = spawn('/usr/bin/script', ['-qfec', `stty rows 80 cols 80; '${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env: { ...env, PATH: `${env.PATH}:/usr/bin` }, timeout: OUTER_TIMEOUT_MS });
   const run = { child, output: '', stderr: '', frameStarts: [], started: Date.now(), closed: once(child, 'close') };
   child.stdout.setEncoding('utf8').on('data', (chunk) => {
     run.output += chunk;
@@ -353,7 +353,7 @@ async function balancesFallbackAndStale(ctx) {
   assert.equal(staleLines[1], creditsRow(30), describe('stale row', stale));
   assertAge(staleLines[2], 72);
   const staleColour = await run(ctx, '--once', {}, { color: true });
-  assert.ok(staleColour.stdout.includes(`${DIM}${'━'.repeat(72)}\njunie\n`), `stale panel is not dim:\n${staleColour.stdout}`);
+  assert.ok(staleColour.stdout.includes(`${DIM}${'━'.repeat(72)}\x1b[0m\n${DIM}junie\x1b[0m\n`), `stale panel is not dim:\n${staleColour.stdout}`);
   const junieBlock = staleColour.stdout.slice(staleColour.stdout.indexOf('\njunie\n'), staleColour.stdout.indexOf('\nhermes\n'));
   assert.ok(!junieBlock.includes(CALM), `stale gauge still has a ramp escape:\n${junieBlock}`);
   await writeJunieHome(ctx.junie, 701512.73275);
@@ -409,9 +409,9 @@ async function liveToggleAndFlash(ctx) {
     session.child.stdin.write('k');
     await waitFor(session, () => panelLines(lastFrame(session), 'junie')[0].startsWith('▸ junie'), 10000, 'selected junie');
     session.child.stdin.write(' ');
-    const off = `▸ junie${' '.repeat(54)}routing off`;
+    const off = `▸ junie${' '.repeat(62)}routing off`;
     await waitFor(session, () => panelLines(lastFrame(session), 'junie')[0] === off, 10000, 'junie routing off');
-    assert.equal([...off].length, 72);
+    assert.equal([...off].length, 80);
     assert.ok(lastFrame(session).includes('model-e xhigh'), lastFrame(session));
     assert.deepEqual(JSON.parse(await readFile(env.DANDELION_STATE_FILE, 'utf8')), { junie: false });
     await quit(session);
@@ -433,7 +433,7 @@ async function liveToggleAndFlash(ctx) {
     const firstAfter = flash.frameStarts.length;
     flash.child.stdin.write(' ');
     const caption = (frame) => panelLines(frame, 'junie').at(-1);
-    const indexWhere = (from, text) => frames(flash).findIndex((frame, index) => index >= from && caption(frame) === text);
+    const indexWhere = (from, text) => frames(flash).findIndex((frame, index) => index >= from && (caption(frame) ?? '').startsWith(text));
     await waitFor(flash, () => indexWhere(firstAfter, NOT_ROUTABLE) >= 0, 10000, 'junie not routable flash');
     const flashed = indexWhere(firstAfter, NOT_ROUTABLE);
     await waitFor(flash, () => indexWhere(flashed, '701513 credits · junie') >= 0, 10000, 'junie caption back');
@@ -457,7 +457,7 @@ async function fleetSummary(ctx) {
   try {
     await waitSettled(hot);
     const settled = frames(hot).find((frame) => !frame.includes('probing…'));
-    assert.equal(panelLines(settled, 'junie')[1], creditsRow(85), settled);
+    assert.match(panelLines(settled, 'junie')[1] ?? '', /^credits +[#|-]+ +85%/, settled);
     assert.equal(settled.split('\n')[1], '1/1 windows above 80% · next reset: none', settled);
     await quit(hot);
   } finally {
@@ -480,7 +480,7 @@ async function fleetSummary(ctx) {
 async function readmeDocumentsJunie() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
   assert.match(readme, /^- `junie` - reads the newest completion snapshot from `<junie home>\/sessions\/<id>\/events\.jsonl`/m);
-  assert.ok(readme.includes('All eleven probes run in parallel'));
+  assert.ok(readme.includes('All twelve probes run in parallel'));
   assert.match(readme, /^- `DANDELION_JUNIE_HOME` - .*Defaults to `~\/\.junie`.*never writes to it/m);
   assert.match(readme, /^- `DANDELION_JUNIE_REFERENCE` - .*Defaults to `1000000`.*empty string, there is no reference/m);
   assert.ok(readme.includes('| junie | `route.junie.standard` | `route.junie.max` |'));

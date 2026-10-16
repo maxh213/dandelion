@@ -52,7 +52,7 @@ const ROUTE_ROWS = [
   ['later arguments are ignored', 'route extra', { claude: [0, 86, 2] }, 'model-a max claude']
 ];
 
-const DASHBOARD_ARGS = ['--once route', 'routes'];
+const DASHBOARD_ARGS = ['--once route'];
 
 const temps = [];
 
@@ -182,6 +182,10 @@ async function routeAnywhereButFirstKeepsTheDashboard(ctx) {
     assert.match(first, /^DANDELION +\d{2}:\d{2}:\d{2}$/, describe(args, result));
     assert.ok(!result.stdout.includes('model-a'), describe(args, result));
   }
+  const unknown = await run(ctx, 'routes', { claude: [0, 86, 2] }, { NO_COLOR: '1' });
+  assert.equal(unknown.status, 2, describe('routes', unknown));
+  assert.ok(unknown.stderr.startsWith('dandelion: unknown command routes\n'), describe('routes', unknown));
+  assert.equal(unknown.stdout, '', describe('routes', unknown));
 }
 
 async function assertNoQaProcessLeft() {

@@ -98,8 +98,8 @@ function assertKimiOnDefaultPort(kimi, defaultPortFree) {
     console.log('  note: port 59177 is busy, so the 003 kimi rows are not checked; --port 59177 is');
     return;
   }
-  assert.match(kimi[1], /^weekly +#+-+ +59%/);
-  assert.match(kimi[2], /^5h +#+-+ +42% ↻ (5d0h|4d23h)$/);
+  assert.match(kimi.find((line) => line.startsWith('weekly')) ?? '', /^weekly +[#|-]+ +59%/);
+  assert.match(kimi.find((line) => line.startsWith('5h')) ?? '', /^5h +[#|-]+ +42% ↻ (5d0h|4d23h)$/);
 }
 
 function cleanEnv() {
@@ -199,7 +199,7 @@ async function newNamesWork(bin) {
   };
   const run = await exec(NPM, ['start', '--silent', '--', '--once'], env);
   assertDandelionDashboard(run);
-  assert.match(panel(run, 'kilo')[1], /^\$5\.00 #{10}-{10} /);
+  assert.match(panel(run, 'kilo')[1], /^balance \$5\.00 +#{10}-{10} /);
   assert.equal(panel(run, 'kimi')[1], BAD_PORT);
   await assert.rejects(readFile(join(dir, 'kimi.args')), 'kimi was started');
   assert.equal(panel(run, 'grok')[1], NO_GROK);
@@ -256,7 +256,7 @@ async function oldNamesAreIgnored(bin) {
     };
     const run = await exec(NPM, ['start', '--silent', '--', '--once'], env);
     assertDandelionDashboard(run);
-    assert.match(panel(run, 'kilo')[1], /^\$5\.00 #{5}-{15} /);
+    assert.match(panel(run, 'kilo')[1], /^balance \$5\.00 +#{5}-{15} /);
     assert.match(await readFile(join(dir, 'kimi.args'), 'utf8'), /--port 59177\b/);
     assertKimiOnDefaultPort(panel(run, 'kimi'), defaultPortFree);
     assert.equal(panel(run, 'grok')[1], NO_GROK);

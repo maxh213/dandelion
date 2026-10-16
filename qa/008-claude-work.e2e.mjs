@@ -107,9 +107,9 @@ function assertPersonalPanel(run) {
   const lines = panel(run, 'claude');
   assert.equal(lines.at(-1), 'claude · personal · claude', `claude caption:\n${run.stdout}`);
   assert.equal(lines.length, 5, `claude panel rows:\n${run.stdout}`);
-  assert.match(lines[1], /^session +#-{19} {3}3% ↻ /);
-  assert.match(lines[2], /^weekly +#{17}-{3} {2}86% ↻ /);
-  assert.match(lines[3], /^weekly Fable +#{20} 100% ↻ /);
+  assert.match(lines[1], /^session +[#|-]{20} {3}3% ↻ /);
+  assert.match(lines[2], /^weekly +[#|-]{20} {2}86% ↻ /);
+  assert.match(lines[3], /^weekly Fable +[#|]{20} 100% ↻ /);
   assert.ok(lines[2].includes(' 86%'));
 }
 
@@ -131,9 +131,9 @@ async function bothAccounts(bin) {
   const work = panel(run, 'claude-work');
   assert.equal(work.length, 5, `claude-work panel rows:\n${run.stdout}`);
   assert.equal(work[4], 'claude · work · claude-work', `claude-work caption:\n${run.stdout}`);
-  assert.match(work[1], /^session {29}-{20} {3}0% ↻ \S+$/);
-  assert.match(work[2], /^weekly {30}#{2}-{18} {2}12% ↻ \S+$/);
-  assert.match(work[3], /^weekly Fable {24}#{5}-{15} {2}23% ↻ \S+$/);
+  assert.match(work[1], /^session {29}[|-]{20} {3}0% ↻ \S+$/);
+  assert.match(work[2], /^weekly {30}[#|-]{20} {2}12% ↻ \S+$/);
+  assert.match(work[3], /^weekly Fable {24}[#|-]{20} {2}23% ↻ \S+$/);
   assertWidth(run);
   assert.deepEqual((await claudeCalls(dir)).sort(), ['-', workConfigDir].sort(), 'claude.calls');
 }

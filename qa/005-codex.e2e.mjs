@@ -15,8 +15,8 @@ const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\
 const KIMI_FIXTURE = '#!/bin/sh\nexit 0\n';
 const KILO_FIXTURE = "#!/bin/sh\n[ \"$1\" = \"profile\" ] || exit 2\necho 'Balance: $14.15'\n";
 const PANEL_ORDER = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
-const FIVE_HOUR_ROW = /^5h {34}#{8}-{12} {2}42% ↻ (2h30m|2h29m)$/;
-const WEEKLY_ROW = /^weekly {30}#{17}-{3} {2}86% ↻ (3d0h|2d23h)$/;
+const FIVE_HOUR_ROW = /^5h {34}[#|-]{20} {2}42% ↻ (2h30m|2h29m)$/;
+const WEEKLY_ROW = /^weekly {30}[#|-]{20} {2}86% ↻ (3d0h|2d23h)$/;
 
 const CODEX_FIXTURE = `#!/usr/bin/env node
 const fs = require('node:fs'), path = require('node:path'), dir = __dirname;
@@ -78,7 +78,7 @@ let workConfigDir = '';
 
 function startApp(pathDir, bin, grokHome, extraEnv) {
   const { NO_COLOR, DANDELION_KILO_REFERENCE, DANDELION_KIMI_PORT, DANDELION_GROK_HOME, DANDELION_CURSOR_API_BASE, CODEX_FIXTURE_MODE, CLAUDE_CONFIG_DIR, ...inherited } = process.env;
-  const env = { ...inherited, PATH: `${pathDir}:${bin}`, DANDELION_KIMI_HOME: grokHome, DANDELION_GROK_HOME: grokHome, DANDELION_JUNIE_HOME: workConfigDir, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(grokHome, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(workConfigDir, 'no-deepseek'), DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
+  const env = { ...inherited, PATH: `${pathDir}:${bin}`, DANDELION_KIMI_HOME: grokHome, DANDELION_GROK_HOME: grokHome, DANDELION_CODEX_ANIMUS_HOME: join(grokHome, 'no-animus'), DANDELION_JUNIE_HOME: workConfigDir, DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'no-cursor-auth.json'), DANDELION_HERMES_AUTH_FILE: join(grokHome, 'no-hermes-auth.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(workConfigDir, 'no-deepseek'), DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json'), ...extraEnv };
   const started = performance.now();
   const result = spawnSync(join(NODE_DIR, 'npm'), ['start', '--silent', '--', '--once'], { cwd: rootDir, env, encoding: 'utf8', timeout: OUTER_TIMEOUT_MS });
   const elapsedMs = performance.now() - started;
@@ -134,7 +134,8 @@ async function chatGptShowsWindows(bin) {
   const codex = lineIndex(run.lines, /^codex$/);
   assert.match(run.lines[codex + 1], FIVE_HOUR_ROW, `5h row:\n${run.stdout}`);
   assert.match(run.lines[codex + 2], WEEKLY_ROW, `weekly row:\n${run.stdout}`);
-  assert.equal(run.lines[codex + 3], 'codex · codex');
+  assert.match(run.lines[codex + 3], /^  → 100% in ~\d+h\d+m \(before reset\)$/, `pace line:\n${run.stdout}`);
+  assert.equal(run.lines[codex + 4], 'codex · codex');
   assertPanelOrder(run.lines, run.stdout);
   for (const line of run.lines) assert.ok([...line].length <= 72, `line over 72 columns: ${line}`);
   assert.deepEqual(await codexCalls(run.dir), ['login status', 'app-server']);
@@ -144,8 +145,8 @@ async function chatGptShowsWindows(bin) {
 
 async function chatGptColours(bin) {
   const run = await runMode(bin, 'chatgpt', { color: true });
-  assert.ok(run.lines.some((line) => /^5h +\x1b\[32m█{8}░{12}\x1b\[0m \x1b\[32m 42%\x1b\[0m ↻ /.test(line)), `5h is not calm:\n${run.stdout}`);
-  assert.ok(run.lines.some((line) => /^weekly +\x1b\[31m█{17}░{3}\x1b\[0m \x1b\[31m 86%\x1b\[0m ↻ /.test(line)), `weekly is not hot:\n${run.stdout}`);
+  assert.ok(run.lines.some((line) => /^5h +\x1b\[32m(?:[█░│]|\x1b\[[0-9;]*m)+\x1b\[0m \x1b\[32m 42%\x1b\[0m ↻ /.test(line)), `5h is not calm:\n${run.stdout}`);
+  assert.ok(run.lines.some((line) => /^weekly +\x1b\[31m(?:[█░│]|\x1b\[[0-9;]*m)+\x1b\[0m \x1b\[31m 86%\x1b\[0m ↻ /.test(line)), `weekly is not hot:\n${run.stdout}`);
   assert.ok(run.lines.includes('\x1b[90mcodex · codex\x1b[0m'), `codex caption is not dim:\n${run.stdout}`);
   await assertAppServerGone(run.dir);
 }

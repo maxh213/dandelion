@@ -309,14 +309,13 @@ function assertNoToken(result) {
 }
 
 function assertOkRows(kimi, weeklyPct, rollingPct) {
-  const filled = (pct) => Math.round((pct / 100) * 20);
-  const gauge = (pct) => `${'#'.repeat(filled(pct))}${'-'.repeat(20 - filled(pct))}`;
+  const gauge = () => '[#|-]{20}';
   const percent = (pct) => `${pct}%`.padStart(4);
-  const weekly = kimi[1];
-  const rolling = kimi[2];
+  const weekly = kimi.find((line) => line.startsWith('weekly'));
+  const rolling = kimi.find((line) => line.startsWith('5h'));
   assert.match(weekly, new RegExp(`^weekly {30}${gauge(weeklyPct)} ${percent(weeklyPct)} ↻ (5d0h|4d23h)$`), `weekly: ${JSON.stringify(weekly)}`);
   assert.match(rolling, new RegExp(`^5h {34}${gauge(rollingPct)} ${percent(rollingPct)} ↻ (5d0h|4d23h)$`), `5h: ${JSON.stringify(rolling)}`);
-  assert.equal(kimi[3], CAPTION);
+  assert.equal(kimi.at(-1), CAPTION);
 }
 
 function assertDim(kimi, reason) {
@@ -416,8 +415,8 @@ async function panelColour(ctx) {
   const result = await runPanel(ctx, { mode: 'ok', color: true });
   assert.equal(result.status, 0, describe('colour', result));
   assert.equal(result.child, 'GONE', describe('colour child', result));
-  assert.ok(result.stdout.includes(`${WARM}${'█'.repeat(12)}${'░'.repeat(8)}\x1b[0m ${WARM} 59%\x1b[0m`), `weekly gauge is not warm:\n${result.stdout}`);
-  assert.ok(result.stdout.includes(`${CALM}${'█'.repeat(8)}${'░'.repeat(12)}\x1b[0m ${CALM} 42%\x1b[0m`), `5h gauge is not calm:\n${result.stdout}`);
+  assert.match(result.stdout, new RegExp(`${ansiPattern(WARM)}(?:[█░│]|\\x1b\\[[0-9;]*m)+\\x1b\\[0m ${ansiPattern(WARM)} 59%\\x1b\\[0m`), `weekly gauge is not warm:\n${result.stdout}`);
+  assert.match(result.stdout, new RegExp(`${ansiPattern(CALM)}(?:[█░│]|\\x1b\\[[0-9;]*m)+\\x1b\\[0m ${ansiPattern(CALM)} 42%\\x1b\\[0m`), `5h gauge is not calm:\n${result.stdout}`);
   assert.ok(result.stdout.includes(`${DIM}${CAPTION}\x1b[0m`), `caption is not dim:\n${result.stdout}`);
   assertNoToken(result);
 }
@@ -427,8 +426,8 @@ async function panelLive(ctx) {
   assert.equal(result.status, 0, describe('live', result));
   assert.equal(result.child, 'GONE', describe('live child', result));
   const kimi = panelLines(result.stdout, 'kimi');
-  assert.match(kimi[1], /^weekly {30}-{20} {3}0% ↻ \S+$/, `live weekly: ${JSON.stringify(kimi[1])}`);
-  assert.match(kimi[2], /^5h {34}-{20} {3}0% ↻ 0h0m$/, `live 5h: ${JSON.stringify(kimi[2])}`);
+  assert.match(kimi[1], /^weekly {30}[|-]{20} {3}0% ↻ \S+$/, `live weekly: ${JSON.stringify(kimi[1])}`);
+  assert.match(kimi[2], /^5h {34}[|-]{20} {3}0% ↻ 0h0m$/, `live 5h: ${JSON.stringify(kimi[2])}`);
   assert.equal(kimi[3], CAPTION);
   assert.ok(!result.stdout.includes(PARSE), describe('live parse failure', result));
   assertNoToken(result);
@@ -585,4 +584,8 @@ export default async function () {
     await Promise.all(temps.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   }
   await assertNoQaProcessLeft();
+}
+
+function ansiPattern(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

@@ -14,15 +14,17 @@ export const RESTORE = '\x1b[?25h\x1b[?1049l';
 export const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 export const KIMI_EXITS = '#!/bin/sh\nexit 0\n';
 export const OTHER_PANELS = [
-  /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude · personal · claude\n/,
-  /\nclaude-work\nweekly +#+-* +86%( ↻ \S+)?\nclaude · work · claude-work\n/,
-  /\nagy\nGemini Models · Weekly Limit +-+ +0%( ↻ \S+)?\nagy · agy\n/,
-  /\nkimi\nkimi web exited without printing a token\nkimi code · kimi\n/,
-  /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok\n/,
-  /\ncodex\napi-key billing · no usage windows\ncodex · codex\n/,
-  /\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor\n/,
-  /\njunie\nno junie quota snapshot — run junie once\njunie · junie\n/,
-  /\nhermes\nno hermes auth — run hermes portal login\nhermes · hermes\n/
+  /\nclaude\nweekly +[#|-]+ +86%( ↻ \S+)?\nclaude · personal · claude( · [^\n]*)?\n/,
+  /\nclaude-work\nweekly +[#|-]+ +86%( ↻ \S+)?\nclaude · work · claude-work( · [^\n]*)?\n/,
+  /\nclaude-deepseek\nno deepseek config — CLAUDE_CONFIG_DIR=~\/.claude-deepseek claude\nclaude · deepseek · claude-deepseek( · [^\n]*)?\n/,
+  /\nagy\nGemini · weekly +[|-]+ +0%( ↻ \S+)?\nagy · agy( · [^\n]*)?\n/,
+  /\nkimi\nkimi web exited without printing a token\nkimi code · kimi( · [^\n]*)?\n/,
+  /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok( · [^\n]*)?\n/,
+  /\ncodex\napi-key billing · no usage windows\ncodex · codex( · [^\n]*)?\n/,
+  /\ncodex-animus\nno animus codex home — CODEX_HOME=~\/.codex-animus codex login\ncodex · animus · codex-animus( · [^\n]*)?\n/,
+  /\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor( · [^\n]*)?\n/,
+  /\njunie\nno junie quota snapshot — run junie once\njunie · junie( · [^\n]*)?\n/,
+  /\nhermes\nno hermes auth — run hermes portal login\nhermes · hermes( · [^\n]*)?\n/
 ];
 const OUTER_TIMEOUT_MS = 60000;
 const PREFIX = 'dandelion-qa-007-';
@@ -71,6 +73,7 @@ export async function appEnv(pathDir) {
     DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir,
     DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(grokHome, 'no-deepseek'),
+    DANDELION_CODEX_ANIMUS_HOME: join(grokHome, 'no-animus'),
     DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json')
   };
 }
@@ -84,13 +87,13 @@ export function launch(command, args, env) {
   return run;
 }
 
-export function startLive(env, rows = 60, cols = 80) {
+export function startLive(env, rows = 80, cols = 80) {
   const path = env.PATH ? `${env.PATH}:/usr/bin` : '/usr/bin';
   return launch('/usr/bin/script', ['-qfec', `stty rows ${rows} cols ${cols}; '${NPM}' start --silent`, '/dev/null'], { ...env, PATH: path });
 }
 
 export function completeFrames(run) {
-  return run.output.replaceAll('\r\n', '\n').split(CLEAR).slice(1, -1);
+  return run.output.replaceAll('\r\n', '\n').split(CLEAR).slice(1, -1).map((frame) => frame.replace(/^\x1b\[0m/, ''));
 }
 
 export async function waitWithin(run, predicate, boundMs, what) {

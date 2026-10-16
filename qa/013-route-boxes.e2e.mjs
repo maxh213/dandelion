@@ -41,23 +41,18 @@ setTimeout(() => console.log('Balance: $14.15'), 3000);
 const FULL = { claude: [3, 86, 100], work: [0, 12, 23], agy: [50, 50, 72], kimi: [85, 85, 72], grok: [90, 72], cursor: [80, 80, 80, 72] };
 const ENV_NAMES = { claude: 'H_CLAUDE', work: 'H_WORK', agy: 'Q_AGY', kimi: 'Q_KIMI' };
 
-const BOX_TOP = '+- route -------------------------+  +- route --high ------------------+';
-const BOX_BOTTOM = '+---------------------------------+  +---------------------------------+';
+const BOX_TOP = `+- route ${'-'.repeat(29)}+  +- route --high ${'-'.repeat(22)}+`;
+const BOX_BOTTOM = `+${'-'.repeat(37)}+  +${'-'.repeat(37)}+`;
 const block = (model, account, highModel, highAccount) =>
-  [BOX_TOP, `| ${model.padEnd(31)} |  | ${highModel.padEnd(31)} |`, `| ${account.padEnd(31)} |  | ${highAccount.padEnd(31)} |`, BOX_BOTTOM].join('\n');
+  [BOX_TOP, `| ${model.padEnd(35)} |  | ${highModel.padEnd(35)} |`, `| ${account.padEnd(35)} |  | ${highAccount.padEnd(35)} |`, BOX_BOTTOM].join('\n');
 
-const SETTLED_BLOCK = [
-  BOX_TOP,
-  '| model-b high                    |  | model-h1 max                    |',
-  '| claude-work                     |  | claude-work                     |',
-  BOX_BOTTOM
-].join('\n');
+const SETTLED_BLOCK = block('model-b high', 'claude-work', 'model-h1 max', 'claude-work');
 const TOGGLED_BLOCK = block('model-c high', 'agy', 'model-h2', 'cursor');
 const NONE_BLOCK = block('none', 'no subscription available', 'none', 'no subscription available');
-const KIMI_BLOCK = block('vendor/model-d-for-coding-high…', 'kimi', 'none', 'no subscription available');
+const KIMI_BLOCK = block('vendor/model-d-for-coding-highspee…', 'kimi', 'none', 'no subscription available');
 const probingBlock = (spinner) => block(`${spinner} probing…`, '', `${spinner} probing…`, '');
 
-const ESCAPES_ONLY = ['\x1b[2J', '\x1b[H', '\x1b[?1049h', '\x1b[?1049l', '\x1b[?25h', '\x1b[?25l'];
+const ESCAPES_ONLY = ['\x1b[0m', '\x1b[2J', '\x1b[H', '\x1b[?1049h', '\x1b[?1049l', '\x1b[?25h', '\x1b[?25l'];
 
 const temps = [];
 
@@ -79,7 +74,7 @@ async function fixtureDir() {
 
 async function longRoutesFile() {
   const routes = JSON.parse(await readFile(ROUTES_FILE, 'utf8'));
-  routes.route.kimi.standard = 'vendor/model-d-for-coding-highspeed';
+  routes.route.kimi.standard = 'vendor/model-d-for-coding-highspeed-plus';
   const file = join(await tempDir(), 'routes.json');
   await writeFile(file, JSON.stringify(routes));
   return file;
@@ -179,7 +174,7 @@ function lastFrame(run) {
 }
 
 function rowText(row, box) {
-  return row.slice(box * 37 + 2, box * 37 + 33).trimEnd();
+  return row.slice(box * 41 + 2, box * 41 + 37).trimEnd();
 }
 
 async function cli(env, args) {
@@ -189,7 +184,7 @@ async function cli(env, args) {
 }
 
 async function probingSettleAndRefresh(ctx) {
-  const run = startLive(await envFor(ctx, FULL, { slowKilo: await slowKiloDir() }));
+  const run = startLive(await envFor(ctx, FULL, { slowKilo: await slowKiloDir() }), 80);
   await waitWithin(run, () => completeFrames(run).length > 0, 20000, 'first frame');
   assert.equal(boxLinesOf(completeFrames(run)[0]), probingBlock('⠋'), 'first frame shows probing boxes');
   const kiloPending = (frame) => /\nkilo\n\S probing…/.test(frame) && frame.includes('claude · personal · claude');
@@ -199,7 +194,7 @@ async function probingSettleAndRefresh(ctx) {
   assert.ok(pendingFrames.every((frame) => boxLinesOf(frame).includes('probing…')), 'boxes probe while kilo does');
   assert.ok(new Set(pendingFrames.map(boxLinesOf)).size > 1, 'box spinner advances while kilo is pending');
   const settled = completeFrames(run).find((frame) => boxLinesOf(frame) === SETTLED_BLOCK);
-  assert.equal(settled.split('\n')[6], '='.repeat(72), 'the first panel rule follows the boxes');
+  assert.equal(settled.split('\n')[6], '='.repeat(80), 'the first panel rule follows the boxes');
   assert.equal(settled.split('\n')[7], 'claude', 'the claude panel follows the boxes');
   send(run, 'r');
   await waitWithin(run, () => lastFrame(run).split('\n')[0].includes('refreshing…'), 20000, 'refreshing banner');
@@ -255,14 +250,14 @@ async function kimiTruncation(ctx) {
 
 async function colourSpans(ctx) {
   const run = startLive(await envFor(ctx, FULL, { color: true }));
-  const boldModel = `\x1b[1m model-b high${' '.repeat(20)}\x1b[0m`;
+  const boldModel = `\x1b[1m model-b high${' '.repeat(24)}\x1b[0m`;
   await waitWithin(run, () => run.output.includes(boldModel), 20000, 'coloured settled boxes');
   const output = run.output;
-  assert.ok(output.includes(`\x1b[90m┌─ route ${'─'.repeat(25)}┐\x1b[0m`), 'dim top border with title');
+  assert.ok(output.includes(`\x1b[90m┌─ route ${'─'.repeat(29)}┐\x1b[0m`), 'dim top border with title');
   assert.ok(output.includes(`\x1b[90m│\x1b[0m${boldModel}\x1b[90m│\x1b[0m`), 'bold route model line');
-  assert.ok(output.includes(`\x1b[1m model-h1 max${' '.repeat(20)}\x1b[0m`), 'bold route --high model line');
-  assert.ok(output.includes(`\x1b[90m│\x1b[0m claude-work${' '.repeat(21)}\x1b[90m│\x1b[0m`), 'plain account row');
-  assert.ok(output.includes(`\x1b[90m└${'─'.repeat(33)}┘\x1b[0m`), 'dim bottom border');
+  assert.ok(output.includes(`\x1b[1m model-h1 max${' '.repeat(24)}\x1b[0m`), 'bold route --high model line');
+  assert.ok(output.includes(`\x1b[90m│\x1b[0m claude-work${' '.repeat(25)}\x1b[90m│\x1b[0m`), 'plain account row');
+  assert.ok(output.includes(`\x1b[90m└${'─'.repeat(37)}┘\x1b[0m`), 'dim bottom border');
   send(run, 'q');
   await assertClosed(run);
 }

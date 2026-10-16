@@ -205,8 +205,9 @@ async function argumentsPickTheMode(ctx) {
     assert.deepEqual(result, { stdout: `${line}\n`, stderr: '', status: 0 }, describe(args, result));
   }
   const dashboard = await run(ctx, '--once route --high', ARGUMENT_USAGES, { extraEnv: { NO_COLOR: '1' } });
-  assert.equal(dashboard.status, 0, describe('--once route --high', dashboard));
-  assert.ok(dashboard.stdout.split('\n')[0].startsWith('DANDELION'), describe('--once route --high', dashboard));
+  assert.equal(dashboard.status, 2, describe('--once route --high', dashboard));
+  assert.ok(dashboard.stderr.startsWith('dandelion: unknown option --high\n'), describe('--once route --high', dashboard));
+  assert.equal(dashboard.stdout, '', describe('--once route --high', dashboard));
 }
 
 async function plainRoutePrintsTheToken(ctx) {

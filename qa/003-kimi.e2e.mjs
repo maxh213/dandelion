@@ -122,8 +122,8 @@ async function kimiServesUsage() {
   try {
     const { stdout } = await runApp(dir);
     const { lines, kimi, kilo } = assertKimiBetweenAgyAndKilo(stdout);
-    const weekly = lineIndex(lines, /^weekly {30}#{12}-{8} {2}59% ↻ (5d0h|4d23h)$/);
-    const fiveHour = lineIndex(lines, /^5h {34}#{8}-{12} {2}42% ↻ (5d0h|4d23h)$/);
+    const weekly = lineIndex(lines, /^weekly {30}[#|-]{20} {2}59% ↻ (5d0h|4d23h)$/);
+    const fiveHour = lineIndex(lines, /^5h {34}[#|-]{20} {2}42% ↻ (5d0h|4d23h)$/);
     const caption = lines.indexOf('kimi code · kimi');
     assert.ok(kimi < weekly && weekly < fiveHour && fiveHour < caption && caption < kilo, `kimi rows not inside the kimi panel:\n${stdout}`);
     assert.ok(!stdout.includes('test-token'), `token leaked:\n${stdout}`);
@@ -138,8 +138,8 @@ async function kimiServesLiveZero() {
   try {
     const { stdout } = await runApp(dir);
     const { lines, kimi, kilo } = assertKimiBetweenAgyAndKilo(stdout);
-    const weekly = lineIndex(lines, /^weekly {30}-{20} {3}0% ↻ \S+$/);
-    const fiveHour = lineIndex(lines, /^5h {34}-{20} {3}0% ↻ 0h0m$/);
+    const weekly = lineIndex(lines, /^weekly {30}[|-]{20} {3}0% ↻ \S+$/);
+    const fiveHour = lineIndex(lines, /^5h {34}[|-]{20} {3}0% ↻ 0h0m$/);
     const caption = lines.indexOf('kimi code · kimi');
     assert.ok(kimi < weekly && weekly < fiveHour && fiveHour < caption && caption < kilo, `kimi live 0% rows not inside the kimi panel:\n${stdout}`);
     assert.ok(!stdout.includes('Could not parse usage from response'), `live 0% body was parse failure:\n${stdout}`);

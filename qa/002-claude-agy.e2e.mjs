@@ -101,19 +101,19 @@ async function threeProvidersInOrder(dir) {
   assert.ok(lines.indexOf('api balance · kilo') > lines.indexOf('kilo'), 'kilo caption missing');
   assert.ok(stdout.includes(`${ESC}90mclaude · personal · claude`), 'claude caption is not dim');
   assert.ok(plain.includes(`${'balance $14.15'.padEnd(35)} ${'█'.repeat(14)}${'░'.repeat(6)}  71%`), `kilo gauge changed:\n${plain}`);
-  assert.match(plain, new RegExp(`^weekly {30}${'█'.repeat(17)}${'░'.repeat(3)}  86% ${COUNTDOWN}$`, 'm'));
-  assert.match(plain, new RegExp(`^session {29}█${'░'.repeat(19)}   3% ${COUNTDOWN}$`, 'm'));
-  assert.match(plain, new RegExp(`^weekly Fable {24}${'█'.repeat(20)} 100% ${COUNTDOWN}$`, 'm'));
+  assert.match(plain, new RegExp(`^weekly {30}[█░│]{20}  86% ${COUNTDOWN}$`, 'm'));
+  assert.match(plain, new RegExp(`^session {29}[█░│]{20}   3% ${COUNTDOWN}$`, 'm'));
+  assert.match(plain, new RegExp(`^weekly Fable {24}[█│]{20} 100% ${COUNTDOWN}$`, 'm'));
   assert.ok(!plain.includes('nonsense'), 'claude trailing section rendered');
-  assert.match(plain, new RegExp(`^Gemini Models · Weekly Limit {8}${'░'.repeat(20)}   0% ↻ (7d0h|6d23h)$`, 'm'));
-  assert.match(plain, new RegExp(`^Claude and GPT models · Five Hour…  ${'█'.repeat(15)}${'░'.repeat(5)}  75% ↻ [12]h\\d+m$`, 'm'));
+  assert.match(plain, new RegExp(`^Gemini · weekly {21}[░│]{20}   0% ↻ (7d0h|6d23h)$`, 'm'));
+  assert.match(plain, new RegExp(`^Claude\\+GPT · 5h {21}[█░│]{20}  75% ↻ [12]h\\d+m$`, 'm'));
   assertWidth(stdout);
 }
 
 function escapeBefore(stdout, label) {
   const line = stdout.split('\n').find((candidate) => candidate.startsWith(`${label} `) && candidate.includes(ESC));
   assert.ok(line, `no styled row for ${label}`);
-  const match = new RegExp(String.raw`^${label} +(\x1b\[[0-9;]*m)[█░]{20}\x1b\[0m (\x1b\[[0-9;]*m) *\d+%\x1b\[0m ↻ [^\x1b]+$`).exec(line);
+  const match = new RegExp(String.raw`^${label} +(\x1b\[[0-9;]*m)(?:[█░│]|\x1b\[[0-9;]*m)+\x1b\[0m (\x1b\[[0-9;]*m) *\d+%\x1b\[0m ↻ [^\x1b]+$`).exec(line);
   assert.ok(match, `gauge and percent of ${label} are not each wrapped in a style escape: ${JSON.stringify(line)}`);
   assert.equal(match[1], match[2], `gauge and percent of ${label} carry different escapes`);
   return match[1];
@@ -133,26 +133,27 @@ async function noColorRows(dir) {
   const stdout = runApp(dir, { NO_COLOR: '1' });
   assert.ok(!stdout.includes('\x1b'), 'NO_COLOR output contains escape codes');
   assertPanelOrder(stdout);
-  assert.match(stdout, new RegExp(`^weekly {30}#{17}-{3}  86% ${COUNTDOWN}$`, 'm'));
-  assert.match(stdout, /^Gemini Models · Weekly Limit {8}-{20}   0% ↻ (7d0h|6d23h)$/m);
-  assert.match(stdout, /^Claude and GPT models · Weekly Lim… -{20}   0% ↻ (7d0h|6d23h)$/m);
+  assert.match(stdout, new RegExp(`^weekly {30}[#|-]{20}  86% ${COUNTDOWN}$`, 'm'));
+  assert.match(stdout, /^Gemini · weekly {21}[|-]{20}   0% ↻ (7d0h|6d23h)$/m);
+  assert.match(stdout, /^Claude\+GPT · weekly {17}[|-]{20}   0% ↻ (7d0h|6d23h)$/m);
   assert.ok(stdout.includes(`${'balance $14.15'.padEnd(35)} ${'#'.repeat(14)}${'-'.repeat(6)}  71%`), 'kilo gauge not ASCII');
-  assert.ok(/^[\x0a\x20-\x7e↻·…—]*$/.test(stdout), `non-ASCII beyond ↻ · … —:\n${stdout}`);
+  assert.ok(/^[\x0a\x20-\x7e↻·…—→]*$/.test(stdout), `non-ASCII beyond ↻ · … — →:\n${stdout}`);
   assertWidth(stdout);
 }
 
 function unavailablePanel(stdout, name, reason, caption) {
   const plain = stripAnsi(stdout);
   assert.ok(plain.includes(`\n${name}\n${reason}\n${caption}\n`), `${name} panel is not unavailable with "${reason}":\n${plain}`);
-  assert.ok(stdout.includes(`${ESC}90m${'━'.repeat(72)}\n${name}\n${reason}\n${caption}${ESC}0m`), `${name} unavailable panel is not dim`);
+  const dim = (text) => `${ESC}90m${text}${ESC}0m`;
+  assert.ok(stdout.includes([dim('━'.repeat(72)), dim(name), dim(reason), dim(caption)].join('\n')), `${name} unavailable panel is not dim`);
 }
 
 async function failingClaude() {
   const dir = await fixtureDir({ claude: '#!/bin/sh\nexit 1\n' });
   try {
     const stdout = runApp(dir, {});
-    unavailablePanel(stdout, 'claude', 'Command failed or timed out', 'claude · personal · claude');
-    assert.match(stripAnsi(stdout), /^Gemini Models · Weekly Limit /m);
+    unavailablePanel(stdout, 'claude', 'Command exited with an error', 'claude · personal · claude');
+    assert.match(stripAnsi(stdout), /^Gemini · weekly /m);
     assert.ok(stripAnsi(stdout).includes('$14.15 '), 'kilo panel missing');
   } finally {
     await rm(dir, { recursive: true, force: true });

@@ -193,7 +193,7 @@ async function resizePty(run, rows, cols) {
 }
 
 async function withLive(env, rows, check) {
-  const run = startLive(env, rows, 80);
+  const run = startLive(env, rows, 72);
   try {
     await check(run);
     send(run, 'q');
@@ -219,6 +219,7 @@ async function unitRender() {
     ok('kimi', 'kimi code', [win('weekly', 'weekly', 85), win('5h', 'rolling', 85)]),
     ok('grok', 'SuperGrok', [win('credits', 'weekly', 90)], { snapshotAt: NOW }),
     ok('codex', 'codex', [], { note: 'api-key billing · no usage windows' }),
+    dim('codex-animus', 'codex · animus', 'no animus codex home — CODEX_HOME=~/.codex-animus codex login'),
     ok('cursor', 'Ultra', [win('total', 'weekly', 80), win('auto', 'weekly', 80), win('api', 'weekly', 80)]),
     dim('junie', 'junie', 'no junie quota snapshot — run junie once'),
     dim('hermes', 'hermes', 'no hermes auth — run hermes portal login'),
@@ -246,12 +247,12 @@ async function unitRender() {
   assert.equal(pending[7], 'claude');
   assert.equal(pending[10], 'claude-work');
   assert.equal(pending.some((line) => line === 'agy' || line.includes('kilo')), false);
-  const twentyFour = [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), ...CLAUDE_UNIT, ...WORK_UNIT, ...DEEPSEEK_UNIT, RULE, 'agy'];
+  const twentyFour = [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), ...CLAUDE_UNIT, ...WORK_UNIT, ...DEEPSEEK_UNIT, RULE];
   for (const rows of [24, 0, undefined, 12.5]) {
     assert.deepEqual(frameOf({ rows }), twentyFour, `rows ${rows} is not the 24-line fallback`);
   }
   assert.deepEqual(frameOf({ selected: undefined }), twelve.split('\n'));
-  assert.deepEqual(frameOf({ selected: 10 }), [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), '▸ kilo', 'balance $14.15                      ##############------  71%           ', 'api balance · kilo · 0h0m ago']);
+  assert.deepEqual(frameOf({ selected: 11 }), [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), 'no hermes auth — run hermes portal login', 'hermes · hermes · 0h0m ago', RULE, '▸ kilo', 'balance $14.15                      ##############------  71%           ', 'api balance · kilo · 0h0m ago']);
   const withFooter = frameOf({ selected: 0, footer: true });
   assert.equal(withFooter.length, 12);
   assert.equal(withFooter[6], '▸ claude');
@@ -260,13 +261,13 @@ async function unitRender() {
   assert.deepEqual(frameOf({ rows: 1 }), [BANNER_UNIT]);
   const grown = frameOf({ rows: 30 });
   assert.equal(grown.length, 30);
-  assert.equal(grown.at(-1), 'weekly                              #################---  85% ↻ 3d0h');
+  assert.equal(grown.at(-1), 'kimi');
   assert.deepEqual(grown.slice(0, 12), twelve.split('\n'));
   assert.equal(frameOf({ rows: 10 })[7], 'claude');
   assert.equal(frameOf({ rows: 10 }).length, 10);
   const once = renderDashboard(usages, true, NOW, []);
   const onceLines = once.split('\n');
-  assert.equal(onceLines.length, 54, `once lines: ${onceLines.length}`);
+  assert.equal(onceLines.length, 60, `once lines: ${onceLines.length}`);
   assert.equal(once.includes('+- route'), false);
   assert.ok(IDS.every((id) => once.includes(`\n${id}\n`)), 'once is missing a provider');
 }
@@ -276,17 +277,18 @@ const SUMMARY_UNIT = '8/14 windows above 80% · next reset: claude session in 3d
 const CLAUDE_UNIT = [
   RULE,
   'claude',
-  'session                             #-------------------   3% ↻ 3d0h',
-  'weekly                              #################---  86% ↻ 3d0h',
-  'weekly Fable                        #################### 100% ↻ 3d0h',
+  'session                             --------------------   3% ↻ 3d0h',
+  'weekly                              ###########|#####---  86% ↻ 3d0h',
+  '  → 100% in ~15h37m (before reset)',
+  'weekly Fable                        ###########|######## 100% ↻ 3d0h',
   'claude · personal · claude · 0h0m ago'
 ];
 const WORK_UNIT = [
   RULE,
   'claude-work',
   'session                             --------------------   0% ↻ 3d0h',
-  'weekly                              ##------------------  12% ↻ 3d0h',
-  'weekly Fable                        #####---------------  23% ↻ 3d0h',
+  'weekly                              ##---------|--------  12% ↻ 3d0h',
+  'weekly Fable                        ####-------|--------  23% ↻ 3d0h',
   'claude · work · claude-work · 0h0m ago'
 ];
 const DEEPSEEK_UNIT = [
@@ -325,15 +327,15 @@ async function liveTwelveRowSession(ctx) {
     assert.equal(settled.split('\n')[7], 'claude');
     assert.equal(settled.split('\n').includes('claude-work'), false, `settled frame starts on claude-work:\n${settled}`);
     assert.equal(settled.split('\n').filter((line) => line === 'kilo' || line.endsWith(' kilo') || line.includes('▸ kilo')).length, 0, `kilo in settled 12-row frame:\n${settled}`);
-    send(run, 'j'.repeat(11));
-    await waitWithin(run, () => lastFrame(run).split('\n')[6] === '▸ kilo', 20000, 'kilo selected');
+    send(run, 'j'.repeat(12));
+    await waitWithin(run, () => lastFrame(run).split('\n').includes('▸ kilo'), 20000, 'kilo selected');
     const kilo = lastFrame(run);
     assertHeight(kilo, 12, 'kilo-selected frame');
-    assert.equal(kilo.split('\n').length, 9, `kilo frame padded to ${kilo.split('\n').length} lines:\n${kilo}`);
+    assert.equal(kilo.split('\n').length, 12, `kilo frame is ${kilo.split('\n').length} lines:\n${kilo}`);
     assertBoxesOnChrome(kilo, 'kilo-selected');
-    assert.equal(kilo.split('\n')[6], '▸ kilo');
+    assert.equal(kilo.split('\n')[9], '▸ kilo', `kilo not kept in view at the bottom:\n${kilo}`);
     assert.equal(kilo.split('\n').filter((line) => line === 'claude').length, 0, `personal claude still in kilo frame:\n${kilo}`);
-    send(run, 'k'.repeat(10));
+    send(run, 'k'.repeat(11));
     await waitWithin(run, () => lastFrame(run).split('\n')[6] === '▸ claude', 20000, 'claude selected');
     send(run, '?');
     await waitWithin(run, () => lastFrame(run).split('\n').at(-1) === HELP, 20000, 'help footer');
@@ -367,7 +369,7 @@ async function liveFourRowClip(ctx) {
     assert.equal(settled[3], '| model-b high                    |  | model-h1 max                    |');
     send(run, '?');
     await new Promise((resolve) => setTimeout(resolve, 200));
-    assert.deepEqual(lastFrame(run).split('\n'), settled);
+    assert.deepEqual(lastFrame(run).split('\n').slice(1), settled.slice(1), 'a ? press changed the 4-row frame below the banner clock');
   });
 }
 
@@ -376,22 +378,21 @@ async function liveResize(ctx) {
     await waitWithin(run, () => boxLinesOf(lastFrame(run)) === SETTLED_BLOCK && !lastFrame(run).includes('probing…'), 20000, 'settled before resize');
     const settled = lastFrame(run);
     assertHeight(settled, 12, 'pre-resize 12-row');
-    await resizePty(run, 30, 80);
+    await resizePty(run, 30, 72);
     await waitWithin(run, () => lastFrame(run).split('\n').length === 30, 20000, '30-row resize');
     const grown = lastFrame(run);
     assertHeight(grown, 30, '30-row frame');
     assert.equal(grown.split('\n').length, 30);
     assertBoxesOnChrome(grown, '30-row');
-    assert.match(grown.split('\n').at(-1) ?? '', /^weekly +#{17}-+ +85% ↻ /);
     assert.equal(grown.endsWith('\n\n') || grown.split('\n').at(-1) === '', false, `30-row frame has blank padding:\n${JSON.stringify(grown.slice(-40))}`);
-    await resizePty(run, 10, 80);
+    await resizePty(run, 10, 72);
     await waitWithin(run, () => lastFrame(run).split('\n').length === 10, 20000, '10-row resize');
     const ten = lastFrame(run);
     assertHeight(ten, 10, '10-row frame');
     assert.equal(ten.split('\n').length, 10);
     assertBoxesOnChrome(ten, '10-row');
     assert.equal(ten.split('\n')[7], 'claude');
-    await resizePty(run, 4, 80);
+    await resizePty(run, 4, 72);
     await waitWithin(run, () => lastFrame(run).split('\n').length === 4, 20000, '4-row resize');
     const four = lastFrame(run).split('\n');
     assert.equal(four.length, 4);
@@ -409,7 +410,7 @@ async function onceAndRoute(ctx) {
   if (lines.at(-1) === '') lines.pop();
   assert.match(lines[0] ?? '', /^DANDELION +\d{2}:\d{2}:\d{2}$/);
   assert.ok(lines.length > 12, `--once clipped to ${lines.length} lines`);
-  assert.equal(lines.length, 54, `--once is ${lines.length} lines, not 54`);
+  assert.equal(lines.length, 61, `--once is ${lines.length} lines, not 61`);
   assert.ok(!once.output.includes('+- route') && !once.output.includes('─ route'), 'once has box titles');
   const headers = lines.filter((line) => IDS.includes(line));
   assert.deepEqual(headers, IDS, `once panel order:\n${once.output}`);

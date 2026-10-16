@@ -215,7 +215,7 @@ async function onceShowsTagAndNeverWrites(ctx) {
 }
 
 function startLive(env) {
-  const child = spawn('/usr/bin/script', ['-qfec', `stty rows 60 cols 80; '${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env: { ...env, PATH: `${env.PATH}:/usr/bin` }, timeout: OUTER_TIMEOUT_MS });
+  const child = spawn('/usr/bin/script', ['-qfec', `stty rows 80 cols 80; '${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env: { ...env, PATH: `${env.PATH}:/usr/bin` }, timeout: OUTER_TIMEOUT_MS });
   const run = { child, output: '', stderr: '', frameStarts: [], started: Date.now(), closed: once(child, 'close') };
   child.stdout.setEncoding('utf8').on('data', (chunk) => {
     run.output += chunk;
@@ -286,11 +286,11 @@ async function toggleOffAndOn(ctx) {
     assert.equal(await exists(box.statePath), false, 'j wrote the state file');
     const claudeRows = rows(lastFrame(run), 'claude');
     run.child.stdin.write(' ');
-    const off = `▸ claude${' '.repeat(53)}${TAG}`;
+    const off = `▸ claude${' '.repeat(61)}${TAG}`;
     await waitFor(run, () => panelLines(lastFrame(run), 'claude')[0] === off, 10000, 'claude routing off tag');
-    assert.equal([...off].length, 72);
+    assert.equal([...off].length, 80);
     assert.deepEqual(JSON.parse(await readFile(box.statePath, 'utf8')), { claude: false });
-    assert.deepEqual(await readdir(box.stateDir), ['eligibility.json']);
+    assert.deepEqual(await readdir(box.stateDir), ['eligibility.json', 'history.json', 'snapshot.json']);
     assert.deepEqual(rows(lastFrame(run), 'claude'), claudeRows);
     const routed = await node(['route'], box.env);
     assert.deepEqual(routed, { stdout: 'model-c high agy\n', stderr: '', status: 0 }, describe('route while live', routed));
@@ -307,7 +307,7 @@ async function toggleOffAndOn(ctx) {
   try {
     await waitSettled(again);
     const settled = frames(again).find((frame) => !frame.includes('probing…'));
-    assert.equal(panelLines(settled, 'claude')[0], `claude${' '.repeat(55)}${TAG}`);
+    assert.equal(panelLines(settled, 'claude')[0], `claude${' '.repeat(63)}${TAG}`);
     assert.ok(!settled.includes('▸'), settled);
     await quit(again);
   } finally {
@@ -326,7 +326,7 @@ async function kiloFlashesAndWritesNothing(ctx) {
     const firstAfter = run.frameStarts.length;
     run.child.stdin.write(' ');
     const caption = (frame) => panelLines(frame, 'kilo')[2];
-    const indexWhere = (from, text) => frames(run).findIndex((frame, index) => index >= from && caption(frame) === text);
+    const indexWhere = (from, text) => frames(run).findIndex((frame, index) => index >= from && (caption(frame) ?? '').startsWith(text));
     await waitFor(run, () => indexWhere(firstAfter, NOT_ROUTABLE) >= 0, 10000, 'kilo not routable flash');
     const flashed = indexWhere(firstAfter, NOT_ROUTABLE);
     await waitFor(run, () => indexWhere(flashed, 'api balance · kilo') >= 0, 10000, 'kilo caption back');
@@ -336,12 +336,12 @@ async function kiloFlashesAndWritesNothing(ctx) {
     assert.ok(flashDelay < 1000, `the flash took ${flashDelay}ms to draw`);
     assert.ok(backDelay >= 1900 && backDelay <= 3000, `the caption came back after ${backDelay}ms`);
     assert.ok(frames(run).slice(firstAfter).every((frame) => !frame.includes(TAG)), 'a header shows routing off');
-    assert.equal(await exists(box.stateDir), false, 'the kilo toggle wrote state');
+    assert.equal(await exists(box.statePath), false, 'the kilo toggle wrote state');
     await quit(run);
   } finally {
     run.child.kill();
   }
-  assert.equal(await exists(box.stateDir), false, 'the kilo toggle wrote state');
+  assert.equal(await exists(box.statePath), false, 'the kilo toggle wrote state');
 }
 
 async function assertNoQaProcessLeft() {

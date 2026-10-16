@@ -328,7 +328,7 @@ function assertNoTokens(...texts) {
 }
 
 function assertCredits(line, pct) {
-  assert.match(line, new RegExp(`^${creditsRow(pct)} ↻ ${RESET.source}$`), `credits row: ${JSON.stringify(line)}`);
+  assert.match(line, new RegExp(`^credits +[#|-]+ +${pct}% ↻ ${RESET.source}$`), `credits row: ${JSON.stringify(line)}`);
 }
 
 function assertAccountGet(portal) {
@@ -348,10 +348,10 @@ function withoutClock(stdout) {
 
 function boxPair(leftModel, leftAccount, rightModel, rightAccount) {
   return [
-    `+- route -------------------------+  +- route --high ------------------+`,
-    `| ${leftModel.padEnd(31)} |  | ${rightModel.padEnd(31)} |`,
-    `| ${leftAccount.padEnd(31)} |  | ${rightAccount.padEnd(31)} |`,
-    `+---------------------------------+  +---------------------------------+`
+    `+- route ${'-'.repeat(29)}+  +- route --high ${'-'.repeat(22)}+`,
+    `| ${leftModel.padEnd(35)} |  | ${rightModel.padEnd(35)} |`,
+    `| ${leftAccount.padEnd(35)} |  | ${rightAccount.padEnd(35)} |`,
+    `+${'-'.repeat(37)}+  +${'-'.repeat(37)}+`
   ].join('\n');
 }
 
@@ -360,7 +360,7 @@ function boxLinesOf(frame) {
 }
 
 function startLive(env) {
-  const child = spawn('/usr/bin/script', ['-qfec', `stty rows 60 cols 80; '${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env: { ...env, PATH: `${env.PATH}:/usr/bin` }, timeout: OUTER_TIMEOUT_MS });
+  const child = spawn('/usr/bin/script', ['-qfec', `stty rows 80 cols 80; '${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env: { ...env, PATH: `${env.PATH}:/usr/bin` }, timeout: OUTER_TIMEOUT_MS });
   const run = { child, output: '', stderr: '', frameStarts: [], started: Date.now(), closed: once(child, 'close') };
   child.stdout.setEncoding('utf8').on('data', (chunk) => {
     run.output += chunk;
@@ -372,7 +372,7 @@ function startLive(env) {
 }
 
 function frames(run) {
-  return run.output.replaceAll('\r\n', '\n').split(CLEAR).slice(1, -1);
+  return run.output.replaceAll('\r\n', '\n').split(CLEAR).slice(1, -1).map((frame) => frame.replace(/^\x1b\[0m/, ''));
 }
 
 function lastFrame(run) {
@@ -474,7 +474,7 @@ async function routeCases(ctx) {
 }
 
 async function dashboardNotRoute(ctx) {
-  for (const args of ['--once route', 'routes']) {
+  for (const args of ['--once route']) {
     configure(ctx.portal);
     const result = await run(ctx, args, liveCase(100), { junieHome: ctx.junie });
     assert.equal(result.status, 0, describe(args, result));
@@ -504,7 +504,7 @@ async function liveBoxesKeysKiloAndClaude(ctx) {
     const firstAfter = session.frameStarts.length;
     session.child.stdin.write(' ');
     const caption = (frame) => panelLines(frame, 'kilo')[2];
-    const indexWhere = (from, text) => frames(session).findIndex((frame, index) => index >= from && caption(frame) === text);
+    const indexWhere = (from, text) => frames(session).findIndex((frame, index) => index >= from && (caption(frame) ?? '').startsWith(text));
     await waitFor(session, () => indexWhere(firstAfter, NOT_ROUTABLE) >= 0, 10000, 'kilo not routable flash');
     const flashed = indexWhere(firstAfter, NOT_ROUTABLE);
     await waitFor(session, () => indexWhere(flashed, 'api balance · kilo') >= 0, 10000, 'kilo caption back');
@@ -528,9 +528,9 @@ async function liveBoxesKeysKiloAndClaude(ctx) {
     toggle.child.stdin.write('j');
     await waitFor(toggle, () => panelLines(lastFrame(toggle), 'claude')[0] === '▸ claude', 10000, 'selected claude');
     toggle.child.stdin.write(' ');
-    const off = `▸ claude${' '.repeat(53)}routing off`;
+    const off = `▸ claude${' '.repeat(61)}routing off`;
     await waitFor(toggle, () => panelLines(lastFrame(toggle), 'claude')[0] === off, 10000, 'claude routing off');
-    assert.equal([...off].length, 72);
+    assert.equal([...off].length, 80);
     assert.deepEqual(JSON.parse(await readFile(toggleEnv.DANDELION_STATE_FILE, 'utf8')), { claude: false });
     await quit(toggle);
   } finally {
@@ -625,9 +625,9 @@ async function failuresExpiredMissing401(ctx) {
 
 async function readmeAndPackageJson() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
-  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|claude-deepseek|agy|kimi|grok|codex|cursor|junie|hermes|kilo)` /.test(line));
+  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|claude-deepseek|agy|kimi|grok|codex|codex-animus|cursor|junie|hermes|kilo)` /.test(line));
   assert.deepEqual(providers.map((line) => line.split('`')[1]), NAMES);
-  assert.ok(readme.includes('All eleven probes run in parallel'));
+  assert.ok(readme.includes('All twelve probes run in parallel'));
   assert.ok(readme.includes('`--high` does not use hermes'));
   const pkg = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8'));
   assert.equal(pkg.name, 'dandelion');

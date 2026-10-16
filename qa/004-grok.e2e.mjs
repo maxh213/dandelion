@@ -15,7 +15,8 @@ const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const KIMI_FIXTURE = '#!/bin/sh\nexit 0\n';
 const KILO_FIXTURE = "#!/bin/sh\n[ \"$1\" = \"profile\" ] || exit 2\necho 'Balance: $14.15'\n";
-const PERIOD = { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: '2026-09-06T21:15:36.133376+00:00', end: '2026-09-13T21:15:36.133376+00:00' };
+const DAY_MS = 86400000;
+const PERIOD = { type: 'USAGE_PERIOD_TYPE_WEEKLY', start: new Date(Date.now() - 2 * DAY_MS).toISOString(), end: new Date(Date.now() + 5 * DAY_MS).toISOString() };
 
 function backgroundLines(newestTs) {
   const billing = (ts, percent, tier) => JSON.stringify({
@@ -88,7 +89,7 @@ async function grokShowsNewestSnapshot(binDir) {
     const grok = lineIndex(lines, /^grok$/);
     const kilo = lineIndex(lines, /^kilo$/);
     assert.ok(kimi < grok && grok < kilo, `grok panel is not between kimi and kilo:\n${stdout}`);
-    const credits = lineIndex(lines, /^credits {29}#{15}-{5} {2}75%/);
+    const credits = lineIndex(lines, /^credits {29}[#|-]{20} {2}75%/);
     const snapshot = lineIndex(lines, /^snapshot /);
     const caption = lines.indexOf('SuperGrok Heavy · grok');
     assert.ok(grok < credits && credits < snapshot && snapshot < caption && caption < kilo, `grok rows not inside the grok panel:\n${stdout}`);

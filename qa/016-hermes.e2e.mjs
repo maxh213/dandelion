@@ -290,7 +290,7 @@ function panelLines(stdout, id) {
 
 function assertWidth(stdout) {
   for (const line of stdout.replaceAll(/\x1b\[[0-9;]*m/g, '').split('\n')) {
-    assert.ok([...line].length <= 72, `line wider than 72 columns: ${JSON.stringify(line)}`);
+    assert.ok([...line].length <= 80, `line wider than 80 columns: ${JSON.stringify(line)}`);
   }
 }
 
@@ -308,7 +308,7 @@ function assertNoTokens(...texts) {
 }
 
 function assertCredits(line, pct) {
-  assert.match(line, new RegExp(`^${creditsRow(pct)} ↻ (3d0h|2d23h)$`), `credits row: ${JSON.stringify(line)}`);
+  assert.match(line, new RegExp(`^credits +[#|-]+ +${pct}% ↻ (3d0h|2d23h)$`), `credits row: ${JSON.stringify(line)}`);
 }
 
 function assertAccountGet(portal) {
@@ -323,7 +323,7 @@ function configure(portal, remaining = 5.5, hours = 72, mode = 'ok') {
 }
 
 function startLive(env) {
-  const child = spawn('/usr/bin/script', ['-qfec', `stty rows 60 cols 80; '${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env: { ...env, PATH: `${env.PATH}:/usr/bin` }, timeout: OUTER_TIMEOUT_MS });
+  const child = spawn('/usr/bin/script', ['-qfec', `stty rows 80 cols 80; '${process.execPath}' src/main.ts`, '/dev/null'], { cwd: rootDir, env: { ...env, PATH: `${env.PATH}:/usr/bin` }, timeout: OUTER_TIMEOUT_MS });
   const run = { child, output: '', stderr: '', frameStarts: [], started: Date.now(), closed: once(child, 'close') };
   child.stdout.setEncoding('utf8').on('data', (chunk) => {
     run.output += chunk;
@@ -387,7 +387,7 @@ async function happyPathAndColour(ctx) {
   configure(ctx.portal);
   const colour = await run(ctx, '--once', {}, { color: true });
   assert.equal(colour.status, 0, describe('colour --once', colour));
-  assert.ok(colour.stdout.includes(`${WARM}${'█'.repeat(15)}${'░'.repeat(5)}\x1b[0m ${WARM} 75%\x1b[0m`), `hermes gauge is not warm:\n${colour.stdout}`);
+  assert.match(colour.stdout, new RegExp(`${ansiPattern(WARM)}(?:[█░│]|\\x1b\\[[0-9;]*m)+\\x1b\\[0m ${ansiPattern(WARM)} 75%\\x1b\\[0m`), `hermes gauge is not warm:\n${colour.stdout}`);
   assert.ok(colour.stdout.includes(`${DIM}${CAPTION}\x1b[0m`), `caption is not dim:\n${colour.stdout}`);
   assertNoTokens(colour.stdout, colour.stderr);
 }
@@ -427,9 +427,9 @@ async function liveToggleAndFlash(ctx) {
     session.child.stdin.write('k');
     await waitFor(session, () => panelLines(lastFrame(session), 'hermes')[0].startsWith('▸ hermes'), 10000, 'selected hermes');
     session.child.stdin.write(' ');
-    const off = `▸ hermes${' '.repeat(53)}routing off`;
+    const off = `▸ hermes${' '.repeat(61)}routing off`;
     await waitFor(session, () => panelLines(lastFrame(session), 'hermes')[0] === off, 10000, 'hermes routing off');
-    assert.equal([...off].length, 72);
+    assert.equal([...off].length, 80);
     assert.match(lastFrame(session), /\| none +\|/, lastFrame(session));
     assert.deepEqual(JSON.parse(await readFile(env.DANDELION_STATE_FILE, 'utf8')), { hermes: false });
     await quit(session);
@@ -450,7 +450,7 @@ async function liveToggleAndFlash(ctx) {
     const firstAfter = flash.frameStarts.length;
     flash.child.stdin.write(' ');
     const caption = (frame) => panelLines(frame, 'hermes').at(-1);
-    const indexWhere = (from, text) => frames(flash).findIndex((frame, index) => index >= from && caption(frame) === text);
+    const indexWhere = (from, text) => frames(flash).findIndex((frame, index) => index >= from && (caption(frame) ?? '').startsWith(text));
     await waitFor(flash, () => indexWhere(firstAfter, NOT_ROUTABLE) >= 0, 10000, 'hermes not routable flash');
     const flashed = indexWhere(firstAfter, NOT_ROUTABLE);
     await waitFor(flash, () => indexWhere(flashed, 'hermes · hermes') >= 0, 10000, 'hermes caption back');
@@ -526,11 +526,11 @@ async function failuresExpiredMissing401(ctx) {
 
 async function readmeDocumentsHermes() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
-  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|claude-deepseek|agy|kimi|grok|codex|cursor|junie|hermes|kilo)` /.test(line));
+  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|claude-deepseek|agy|kimi|grok|codex|codex-animus|cursor|junie|hermes|kilo)` /.test(line));
   assert.deepEqual(providers.map((line) => line.split('`')[1]), NAMES);
-  assert.match(providers[9], /Nous Portal tokens from the hermes auth file without running hermes/);
-  assert.match(providers[9], /GETs `\/api\/oauth\/account` \(15s timeout\)/);
-  assert.ok(readme.includes('All eleven probes run in parallel'));
+  assert.match(providers[10], /Nous Portal tokens from the hermes auth file without running hermes/);
+  assert.match(providers[10], /GETs `\/api\/oauth\/account` \(15s timeout\)/);
+  assert.ok(readme.includes('All twelve probes run in parallel'));
   assert.match(readme, /^- `DANDELION_HERMES_AUTH_FILE` - .*Defaults to `~\/\.hermes\/auth\.json`/m);
   assert.match(readme, /^- `DANDELION_HERMES_PORTAL_BASE` - .*Defaults to `https:\/\/portal\.nousresearch\.com`/m);
   assert.ok(readme.includes('| hermes | `route.hermes.standard` | `route.hermes.max` |'));
@@ -573,4 +573,8 @@ export default async function () {
     await Promise.all(temps.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   }
   await assertNoQaProcessLeft();
+}
+
+function ansiPattern(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
