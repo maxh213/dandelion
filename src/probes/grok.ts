@@ -3,12 +3,13 @@ import {
   isCount,
   isFilled,
   isRecord,
+  isStale,
   matchesOnJsonLine,
   newestLineMatch,
   parseJson,
-  isStale,
   validInstant,
   withReset,
+  type CommandRunner,
   type FetchOutcome,
   type Fetcher,
   type FileReader,
@@ -16,9 +17,9 @@ import {
   type ProviderUsage,
   type UsageWindow
 } from '../domain/index.ts';
-import type { CommandRunner } from './cli.ts';
+type Getter = Pick<Fetcher, 'get'>;
 
-export type GrokIo = { reader: FileReader; fetcher?: Pick<Fetcher, 'get'>; runner?: Pick<CommandRunner, 'run'> };
+export type GrokIo = { reader: FileReader; fetcher?: Getter; runner?: Pick<CommandRunner, 'run'> };
 
 type Env = Record<string, string | undefined>;
 type Snapshot = { window: UsageWindow; tier: string; ts: string; ended: boolean };
@@ -112,15 +113,19 @@ async function accountToken(io: GrokIo, env: Env): Promise<string | undefined> {
   }
 }
 
+function isOk(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
 function replyOf(outcome: FetchOutcome): BillingReply {
   if ('failure' in outcome) return {};
   if (outcome.status === 401) return { unauthorized: true };
-  return outcome.status >= 200 && outcome.status < 300 ? { body: outcome.body } : {};
+  return isOk(outcome.status) ? { body: outcome.body } : {};
 }
 
-async function requestBilling(io: GrokIo, env: Env, token: string): Promise<BillingReply> {
+async function requestBilling(fetcher: Getter, env: Env, token: string): Promise<BillingReply> {
   try {
-    return replyOf(await io.fetcher!.get(billingUrl(env), { Authorization: `Bearer ${token}`, Accept: 'application/json' }, REQUEST_TIMEOUT_MS));
+    return replyOf(await fetcher.get(billingUrl(env), { Authorization: `Bearer ${token}`, Accept: 'application/json' }, REQUEST_TIMEOUT_MS));
   } catch {
     return {};
   }
@@ -141,22 +146,30 @@ function snapshotOf(body: string, now: string): Snapshot | undefined {
   }
 }
 
-async function retriedBody(io: GrokIo, env: Env): Promise<string | undefined> {
+async function retriedBody(io: GrokIo, fetcher: Getter, env: Env): Promise<string | undefined> {
   if (io.runner === undefined) return undefined;
   await refreshLogin(io);
   const token = await accountToken(io, env);
   if (token === undefined) return undefined;
-  return (await requestBilling(io, env, token)).body;
+  return (await requestBilling(fetcher, env, token)).body;
+}
+
+async function billingBody(io: GrokIo, fetcher: Getter, env: Env, token: string): Promise<string | undefined> {
+  const reply = await requestBilling(fetcher, env, token);
+  return reply.unauthorized === true ? retriedBody(io, fetcher, env) : reply.body;
+}
+
+function usageOfBody(body: string, now: string): ProviderUsage | undefined {
+  const snapshot = snapshotOf(body, now);
+  return snapshot === undefined ? undefined : usageFrom(snapshot, now);
 }
 
 async function liveUsage(io: GrokIo, env: Env, now: string): Promise<ProviderUsage | undefined> {
   if (io.fetcher === undefined) return undefined;
   const token = await accountToken(io, env);
   if (token === undefined) return undefined;
-  const reply = await requestBilling(io, env, token);
-  const body = reply.unauthorized === true ? await retriedBody(io, env) : reply.body;
-  const snapshot = body === undefined ? undefined : snapshotOf(body, now);
-  return snapshot === undefined ? undefined : usageFrom(snapshot, now);
+  const body = await billingBody(io, io.fetcher, env, token);
+  return body === undefined ? undefined : usageOfBody(body, now);
 }
 
 export async function probeGrok(io: GrokIo, env: Env, now: string): Promise<ProviderUsage> {

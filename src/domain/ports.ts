@@ -17,6 +17,18 @@ export const USAGE_PARSE_FAILURE = 'Could not parse usage from response';
 
 export type Fix = { command: string; args: string[]; env?: Record<string, string> };
 
+export type RunFailure = 'missing' | 'timeout' | 'exit';
+
+export type CommandRunnerResult = {
+  stdout: string;
+  stderr: string;
+  failure?: RunFailure;
+};
+
+export interface CommandRunner {
+  run(command: string, args: string[], timeoutMs: number, env?: Record<string, string>): Promise<CommandRunnerResult>;
+}
+
 export class ProbeUnavailable extends Error {
   readonly fix?: Fix;
 

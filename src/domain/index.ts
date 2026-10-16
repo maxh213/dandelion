@@ -19,10 +19,13 @@ export {
   unavailableReason,
   validInstant,
   type ClaudeStatus,
+  type CommandRunner,
+  type CommandRunnerResult,
   type FetchOutcome,
   type Fix,
   type Fetcher,
-  type FileReader
+  type FileReader,
+  type RunFailure
 } from './ports.ts';
 
 export {

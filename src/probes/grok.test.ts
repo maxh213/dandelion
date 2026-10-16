@@ -218,6 +218,30 @@ describe('live grok billing', () => {
     expect(await probeGrok(io, HOME, NOW)).toMatchObject({ planLabel: 'SuperGrok Heavy', windows: [{ usedPct: 0 }], captionSuffix: ' · period ended since snapshot' });
   });
 
+  it.each([
+    ['an auth file that is a list', '[]'],
+    ['an auth file that is a string', '"token"'],
+    ['an empty auth object', '{}'],
+    ['accounts without a key', '{"a":1,"b":{"token":"x"}}'],
+    ['a key that is not a string', '{"a":{"key":5}}']
+  ])('never requests billing with %s and reads the log instead', async (_case, auth) => {
+    const { io, calls } = liveIo({ '/grok/auth.json': auth, '/grok/logs/unified.jsonl': BACKGROUND }, async () => ({ status: 200, body: LIVE }));
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ windows: [{ usedPct: 75 }] });
+    expect(calls).toEqual([]);
+  });
+
+  it('reads the log when the auth file is not JSON', async () => {
+    const { io, calls } = liveIo({ '/grok/auth.json': '{not json', '/grok/logs/unified.jsonl': BACKGROUND }, async () => ({ status: 200, body: LIVE }));
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ windows: [{ usedPct: 75 }] });
+    expect(calls).toEqual([]);
+  });
+
+  it('reads the log when the billing body is not JSON', async () => {
+    const { io, calls } = liveIo({ '/grok/auth.json': AUTH, '/grok/logs/unified.jsonl': BACKGROUND }, async () => ({ status: 200, body: '<html>' }));
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ windows: [{ usedPct: 75 }] });
+    expect(calls).toHaveLength(1);
+  });
+
   it('sends the billing url from the env and the first account that has a key', async () => {
     const auth = JSON.stringify({ empty: { key: '' }, second: { key: TOKEN } });
     const { io, calls } = liveIo({ '/grok/auth.json': auth }, async () => ({ status: 200, body: LIVE }));
@@ -253,9 +277,9 @@ describe('live grok billing', () => {
         calls.push(headers.Authorization ?? '');
         return calls.length === 1 ? { status: 401, body: 'no' } : { status: 200, body: LIVE };
       } },
-      runner: { run: async () => ({ stdout: 'You are not authenticated.', stderr: '' }) }
+      runner: { run: vi.fn(async () => ({ stdout: 'You are not authenticated.', stderr: '' })) }
     };
-    const run = vi.spyOn(io.runner!, 'run');
+    const run = io.runner?.run;
     expect(await probeGrok(io, HOME, NOW)).toMatchObject({ status: 'ok', windows: [{ usedPct: 12.5 }] });
     expect(run).toHaveBeenCalledTimes(1);
     expect(run).toHaveBeenCalledWith('grok', ['models'], 20000);

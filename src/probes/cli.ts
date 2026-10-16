@@ -1,16 +1,6 @@
-import { withReset, type Balance, type FileReader, type Fix, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
+import { withReset, type Balance, type CommandRunner, type FileReader, type Fix, type ProviderUsage, type RunFailure, type UsageWindow, type WindowKind } from '../domain/index.ts';
 
-export type RunFailure = 'missing' | 'timeout' | 'exit';
-
-export type CommandRunnerResult = {
-  stdout: string;
-  stderr: string;
-  failure?: RunFailure;
-};
-
-export interface CommandRunner {
-  run(command: string, args: string[], timeoutMs: number, env?: Record<string, string>): Promise<CommandRunnerResult>;
-}
+export type { CommandRunner, CommandRunnerResult, RunFailure } from '../domain/index.ts';
 
 export type CliIo = { runner: CommandRunner; reader: FileReader };
 
