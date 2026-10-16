@@ -135,10 +135,15 @@ async function refreshLogin(io: GrokIo): Promise<void> {
   await io.runner?.run('grok', ['models'], REFRESH_TIMEOUT_MS).catch(() => ({ stdout: '', stderr: '' }));
 }
 
+function withUnusedCredits(config: unknown): unknown {
+  if (!isRecord(config) || fieldOf(config, 'creditUsagePercent') !== undefined) return config;
+  return isRecord(fieldOf(config, 'currentPeriod')) ? { ...config, creditUsagePercent: 0 } : config;
+}
+
 function snapshotOf(body: string, now: string): Snapshot | undefined {
   try {
     const parsed = parseJson(body);
-    const config = fieldOf(parsed, 'config');
+    const config = withUnusedCredits(fieldOf(parsed, 'config'));
     const tier = fieldOf(config, 'subscriptionTier') ?? fieldOf(parsed, 'subscriptionTier');
     return usableSnapshots({ ts: now, ctx: { config, subscriptionTier: tier } }, now)[0];
   } catch {

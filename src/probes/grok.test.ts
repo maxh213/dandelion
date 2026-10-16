@@ -242,6 +242,19 @@ describe('live grok billing', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('reads a live period without a usage percent as 0% used, since the API leaves the field out at zero', async () => {
+    const end = '2026-09-18T21:15:36.133376+00:00';
+    const body = JSON.stringify({ config: { currentPeriod: { type: 'USAGE_PERIOD_TYPE_WEEKLY', end }, isUnifiedBillingUser: true } });
+    const { io } = liveIo({ '/grok/auth.json': AUTH, '/grok/logs/unified.jsonl': BACKGROUND }, async () => ({ status: 200, body }));
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ status: 'ok', snapshotAt: NOW, windows: [{ label: 'credits', usedPct: 0, resetsAt: end }] });
+  });
+
+  it('keeps a reported usage percent of zero as it is', async () => {
+    const body = JSON.stringify({ config: { creditUsagePercent: 0, currentPeriod: { end: '2026-09-18T21:15:36Z' } } });
+    const { io } = liveIo({ '/grok/auth.json': AUTH }, async () => ({ status: 200, body }));
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ windows: [{ usedPct: 0 }] });
+  });
+
   it('sends the billing url from the env and the first account that has a key', async () => {
     const auth = JSON.stringify({ empty: { key: '' }, second: { key: TOKEN } });
     const { io, calls } = liveIo({ '/grok/auth.json': auth }, async () => ({ status: 200, body: LIVE }));
