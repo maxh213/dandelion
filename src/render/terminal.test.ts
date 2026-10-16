@@ -1702,7 +1702,7 @@ describe('remembered panel', () => {
 });
 
 describe('claude status line in the live frame', () => {
-  const ids = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi'];
+  const ids = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi'];
   const usages: ProviderUsage[] = ids.map((id) => ({ id, displayName: id, planLabel: 'plan', windows: [{ label: 'weekly', kind: 'weekly', usedPct: 10 }], fetchedAt: NOW, status: 'ok' }));
   const unavailable: ProviderUsage = { id: 'claude', displayName: 'claude', windows: [], fetchedAt: NOW, status: 'unavailable', reason: 'claude CLI not found in PATH' };
   const frameOf = (status: LiveView['status'], noColor: boolean, slots: (ProviderUsage | undefined)[] = usages) =>

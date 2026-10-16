@@ -24,7 +24,7 @@ const ACCESS = 'qa-dummy-hermes-access-016';
 const CAPTION = 'Plus · $5.50 of $22 · hermes';
 const HELP = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
 const KILO_GAUGE = `${'balance $14.15'.padEnd(35)} ${'#'.repeat(14)}${'-'.repeat(6)}  71%`.padEnd(72);
-const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const QUOTA = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
 const ACCOUNT_GET = `GET /api/oauth/account Bearer ${AGENT} application/json`;
 const RESET = /(3d0h|2d23h)/;
@@ -625,9 +625,9 @@ async function failuresExpiredMissing401(ctx) {
 
 async function readmeAndPackageJson() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
-  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|claude-deepseek|agy|kimi|grok|codex|codex-animus|cursor|junie|hermes|kilo)` /.test(line));
+  const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|claude-deepseek|claude-ollama|agy|kimi|grok|codex|codex-animus|cursor|junie|hermes|kilo)` /.test(line));
   assert.deepEqual(providers.map((line) => line.split('`')[1]), NAMES);
-  assert.ok(readme.includes('All twelve probes run in parallel'));
+  assert.ok(readme.includes('All thirteen probes run in parallel'));
   assert.ok(readme.includes('`--high` does not use hermes'));
   const pkg = JSON.parse(await readFile(join(rootDir, 'package.json'), 'utf8'));
   assert.equal(pkg.name, 'dandelion');

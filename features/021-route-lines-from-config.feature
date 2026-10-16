@@ -29,6 +29,7 @@ Feature: 021 - read route lines from routes.json, and route claude as Opus 5.5
           "claude":      { "standard": "model-a high",         "max": "model-a max" },
           "claude-work": { "standard": "model-b high",         "max": "model-b max" },
           "claude-deepseek": { "standard": "vendor/model-o max", "max": "vendor/model-o max" },
+          "claude-ollama": { "standard": "vendor/model-p max", "max": "vendor/model-p max" },
           "agy":         { "standard": "model-c high",         "max": "model-c max" },
           "kimi":        { "standard": "model-d",              "max": "model-d max" },
           "grok":        { "standard": "model-e xhigh",        "max": "model-e xhigh" },
