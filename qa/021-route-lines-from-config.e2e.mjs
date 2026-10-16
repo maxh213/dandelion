@@ -75,10 +75,10 @@ const ROUTE_ROWS = [
 
 const HIGH_ROWS = [
   ['rank 1', { claude: high(3, 86, 10) }, 'model-h1 max claude', 0],
-  ['rank 2', { claude: high(95, 10, 10), cursor: cursor(60) }, 'model-h2 cursor', 0],
-  ['rank 3', { claude: high(10, 10, 95) }, 'model-h3 max claude', 0],
-  ['rank 4', { claude: high(95, 10, 10), cursor: cursor(95), grok: [60, 72] }, 'model-h4 xhigh grok', 0],
-  ['rank 5', { agy: [10, 10, 72] }, 'model-h5 high agy', 0],
+  ['rank 3', { claude: high(95, 10, 10), cursor: cursor(60) }, 'model-h2 cursor', 0],
+  ['rank 4', { claude: high(10, 10, 95) }, 'model-h3 max claude', 0],
+  ['rank 5', { claude: high(95, 10, 10), cursor: cursor(95), grok: [60, 72] }, 'model-h4 xhigh grok', 0],
+  ['rank 6', { agy: [10, 10, 72] }, 'model-h5 high agy', 0],
   ['nothing on the chain', {}, 'none', 1]
 ];
 
@@ -97,7 +97,7 @@ const KEY_FAULTS = [
   ['empty line', (f) => (f.route.kimi.standard = ''), 'kimi'],
   ['not a string', (f) => (f.high.grok = 4), 'grok'],
   ['provider typo', (f) => (f.route['claude-wrok'] = f.route.claude), 'claude-wrok'],
-  ['codex is not routed', (f) => (f.route.codex = f.route.cursor), 'codex'],
+  ['kilo is not routed', (f) => (f.route.kilo = f.route.cursor), 'kilo'],
   ['unknown high name', (f) => (f.high.sonnet = 'model-x'), 'sonnet'],
   ['unknown top-level key', (f) => (f.extra = {}), 'extra'],
   ['unknown entry key', (f) => (f.route.cursor.maxx = 'model-f'), 'maxx'],

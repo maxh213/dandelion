@@ -304,7 +304,7 @@ async function movedLines(ctx) {
   const rows = [
     ['kimi free on both', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'model-d kimi', 0],
     ['grok alone', 'route', { grok: [50, 72] }, 'model-e xhigh grok', 0],
-    ['--high rank 4 grok', 'route --high', { claude: [95, 10, 10], cursor: [95, 95, 95, 72], grok: [60, 72] }, 'model-h4 xhigh grok', 0],
+    ['--high rank 5 grok', 'route --high', { claude: [95, 10, 10], cursor: [95, 95, 95, 72], grok: [60, 72] }, 'model-h4 xhigh grok', 0],
     ['kimi 5h tripped', 'route', { kimi: [90, 10, 72], grok: [50, 72] }, 'model-e xhigh grok', 0],
     ['kimi weekly evaporates', 'route', { kimi: [0, 95, 2], agy: [0, 0, 72] }, 'model-d max kimi', 0]
   ];
@@ -362,7 +362,7 @@ async function readmePins() {
   assert.ok(readme.includes('| kimi | `route.kimi.standard` | `route.kimi.max` |'), 'README kimi row');
   assert.ok(readme.includes('| grok | `route.grok.standard` | `route.grok.max` |'), 'README grok row');
   assert.ok(readme.includes('| hermes | `route.hermes.standard` | `route.hermes.max` |'), 'README hermes row');
-  assert.ok(readme.includes('| 4 | grok | (all) | `high.grok` |'), 'README --high rank 4');
+  assert.ok(readme.includes('| 5 | grok | (all) | `high.grok` |'), 'README --high rank 5');
 }
 
 async function livingSurfacesUnderQa() {
