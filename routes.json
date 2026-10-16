@@ -3,7 +3,7 @@
     "claude":      { "standard": "claude-opus-5-5 high",       "max": "claude-opus-5-5 max" },
     "claude-work": { "standard": "claude-opus-5-5 high",       "max": "claude-opus-5-5 max" },
     "claude-deepseek": { "standard": "deepseek/deepseek-v4.1-flash max", "max": "deepseek/deepseek-v4.1-flash max" },
-    "agy":         { "standard": "gemini-3.8-flash-high high", "max": "gemini-3.1-pro-high high" },
+    "agy":         { "standard": "gemini-3.8-flash-high high", "max": "gemini-4-argon-high high" },
     "kimi":        { "standard": "kimi-code/k3 max",           "max": "kimi-code/k3 max" },
     "grok":        { "standard": "grok-4.7 xhigh",             "max": "grok-4.7 xhigh" },
     "codex":       { "standard": "gpt-6.1-sol high",           "max": "gpt-6.1-sol xhigh" },
@@ -18,6 +18,6 @@
     "cursor": "kimi-k3-max",
     "opus":   "claude-opus-5-5 max",
     "grok":   "grok-4.7 xhigh",
-    "agy":    "gemini-3.8-flash-high high"
+    "agy":    "gemini-4-argon-high high"
   }
 }
