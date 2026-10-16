@@ -286,6 +286,29 @@ describe('live grok billing', () => {
     expect(calls).toEqual([`Bearer ${TOKEN}`, `Bearer ${FRESH_TOKEN}`]);
   });
 
+  it('still retries with the token on disk when the login refresh itself fails', async () => {
+    const run = vi.fn(async () => {
+      throw new Error('grok exploded');
+    });
+    const statuses = [401, 200];
+    const { io, calls } = liveIo({ '/grok/auth.json': AUTH, '/grok/logs/unified.jsonl': BACKGROUND }, async () => ({ status: statuses.shift() ?? 200, body: LIVE }), run);
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ windows: [{ usedPct: 12.5 }] });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('falls back to the log when the auth file is gone after the refresh', async () => {
+    const { io: base } = readerOf({});
+    const reads = [AUTH, undefined];
+    const io: GrokIo = {
+      reader: { ...base.reader, read: async (path) => (path === '/grok/auth.json' ? reads.shift() : path === '/grok/logs/unified.jsonl' ? BACKGROUND : undefined) },
+      fetcher: { get: async () => ({ status: 401, body: '' }) },
+      runner: { run: vi.fn(async () => ({ stdout: '', stderr: '' })) }
+    };
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ windows: [{ usedPct: 75 }] });
+    expect(io.runner?.run).toHaveBeenCalledTimes(1);
+  });
+
   it('does not refresh twice when the retry is still unauthorized and falls back to the log', async () => {
     const run = vi.fn(async () => ({ stdout: '', stderr: '' }));
     const { io, runs } = liveIo({ '/grok/auth.json': AUTH, '/grok/logs/unified.jsonl': BACKGROUND }, async () => ({ status: 401, body: '' }), run);
