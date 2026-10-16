@@ -23,7 +23,7 @@ const HTTP_401 = 'hermes account request failed: HTTP 401';
 const AGENT = 'qa-dummy-hermes-agent-key-016';
 const ACCESS = 'qa-dummy-hermes-access-016';
 const CAPTION = 'Plus · $5.50 of $22 · hermes';
-const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const QUOTA = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
 const ACCOUNT_GET = `GET /api/oauth/account Bearer ${AGENT} application/json`;
 

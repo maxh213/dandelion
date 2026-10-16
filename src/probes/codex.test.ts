@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CommandRunnerResult } from './cli.ts';
-import { probeCodex, type CodexIo, type RpcChild } from './codex.ts';
+import { animusHome, probeCodex, probeCodexAnimus, type CodexIo, type RpcChild } from './codex.ts';
 
 const NOW = '2026-09-13T10:00:00Z';
 const CHATGPT: CommandRunnerResult = { stdout: '', stderr: 'Logged in using ChatGPT\n' };
@@ -215,5 +215,74 @@ describe('probeCodex rate limits', () => {
     child.stop = () => new Promise((resolve) => setTimeout(() => { stopped = true; resolve(); }, 5));
     await probeCodex(ioWith(CHATGPT, child).io, NOW);
     expect(stopped).toBe(true);
+  });
+});
+
+describe('probeCodexAnimus', () => {
+  const ANIMUS = { id: 'codex-animus', displayName: 'codex-animus', planLabel: 'codex · animus', fetchedAt: NOW };
+
+  function animusIo(login: CommandRunnerResult, homes: string[]) {
+    const runs: [string, string[], number, Record<string, string> | undefined][] = [];
+    const spawns: [string, string[], Record<string, string> | undefined][] = [];
+    const child = fakeChild(listOf(answerLines(HAPPY_LIMITS)));
+    const io = {
+      runner: {
+        run: async (command: string, args: string[], timeoutMs: number, env?: Record<string, string>) => {
+          runs.push([command, args, timeoutMs, env]);
+          return login;
+        }
+      },
+      spawner: {
+        spawn: (command: string, args: string[], env?: Record<string, string>) => {
+          spawns.push([command, args, env]);
+          return child;
+        }
+      },
+      reader: { homeDir: () => '/home/tester', read: async () => undefined, isDirectory: async (path: string) => homes.includes(path) }
+    };
+    return { io, runs, spawns };
+  }
+
+  it('is unavailable with a login fix and never runs codex when the animus home is missing', async () => {
+    const { io, runs, spawns } = animusIo(CHATGPT, []);
+    expect(await probeCodexAnimus(io, {}, NOW)).toStrictEqual({
+      ...ANIMUS,
+      windows: [],
+      status: 'unavailable',
+      reason: 'no animus codex home — CODEX_HOME=~/.codex-animus codex login',
+      fix: { command: 'codex', args: ['login'], env: { CODEX_HOME: '/home/tester/.codex-animus' } }
+    });
+    expect(runs).toEqual([]);
+    expect(spawns).toEqual([]);
+  });
+
+  it('runs login status and app-server with CODEX_HOME set to the animus home', async () => {
+    const { io, runs, spawns } = animusIo(CHATGPT, ['/cfg/animus']);
+    const usage = await probeCodexAnimus(io, { DANDELION_CODEX_ANIMUS_HOME: '/cfg/animus' }, NOW);
+    expect(runs).toEqual([['codex', ['login', 'status'], 15000, { CODEX_HOME: '/cfg/animus' }]]);
+    expect(spawns).toEqual([['codex', ['app-server'], { CODEX_HOME: '/cfg/animus' }]]);
+    expect(usage).toMatchObject({ ...ANIMUS, status: 'ok' });
+    expect(usage.windows.map((window) => window.usedPct)).toEqual([42, 86]);
+  });
+
+  it('reports an API-key animus login without app-server, under the animus identity', async () => {
+    const { io, spawns } = animusIo({ stdout: '', stderr: `${API_KEY_LINE}\n` }, ['/home/tester/.codex-animus']);
+    expect(await probeCodexAnimus(io, { DANDELION_CODEX_ANIMUS_HOME: '' }, NOW)).toStrictEqual({ ...ANIMUS, windows: [], status: 'ok', note: 'api-key billing · no usage windows' });
+    expect(spawns).toEqual([]);
+  });
+
+  it('leaves the personal probe without an env', async () => {
+    const { io, runs, spawns } = animusIo(CHATGPT, []);
+    await probeCodex(io, NOW);
+    expect(runs).toEqual([['codex', ['login', 'status'], 15000, undefined]]);
+    expect(spawns).toEqual([['codex', ['app-server'], undefined]]);
+  });
+
+  it.each([
+    [{ DANDELION_CODEX_ANIMUS_HOME: '/x' }, '/x'],
+    [{ DANDELION_CODEX_ANIMUS_HOME: '' }, '/h/.codex-animus'],
+    [{}, '/h/.codex-animus']
+  ])('resolves the animus home from %j', (env, home) => {
+    expect(animusHome(env, '/h')).toBe(home);
   });
 });

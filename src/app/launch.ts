@@ -4,7 +4,7 @@ export type RunSpawner = { spawn(launch: Launch): Promise<number | 'missing'> };
 
 type Env = Record<string, string | undefined>;
 
-type Target = { command: string; modelFlag: string; effortFlag?: string };
+type Target = { command: string; modelFlag: string; effortFlag?: string; effortConfig?: string };
 
 const TARGETS: Record<string, Target> = {
   claude: { command: 'claude', modelFlag: '--model', effortFlag: '--effort' },
@@ -13,25 +13,35 @@ const TARGETS: Record<string, Target> = {
   agy: { command: 'agy', modelFlag: '--model' },
   kimi: { command: 'kimi', modelFlag: '--model' },
   grok: { command: 'grok', modelFlag: '--model' },
+  codex: { command: 'codex', modelFlag: '--model', effortConfig: 'model_reasoning_effort' },
+  'codex-animus': { command: 'codex', modelFlag: '--model', effortConfig: 'model_reasoning_effort' },
   cursor: { command: 'cursor-agent', modelFlag: '--model' },
   junie: { command: 'junie', modelFlag: '--model' },
   hermes: { command: 'hermes', modelFlag: '--model' }
 };
 
-function claudeConfig(env: Env, homeDir: string, name: string, fallback: string): Record<string, string> {
-  return { CLAUDE_CONFIG_DIR: env[name] || `${homeDir}/${fallback}` };
-}
+type AccountHome = { variable: string; name: string; fallback: string };
+
+const ACCOUNT_HOMES: Record<string, AccountHome> = {
+  'claude-work': { variable: 'CLAUDE_CONFIG_DIR', name: 'DANDELION_CLAUDE_WORK_CONFIG_DIR', fallback: '.claude-work' },
+  'claude-deepseek': { variable: 'CLAUDE_CONFIG_DIR', name: 'DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR', fallback: '.claude-deepseek' },
+  'codex-animus': { variable: 'CODEX_HOME', name: 'DANDELION_CODEX_ANIMUS_HOME', fallback: '.codex-animus' }
+};
 
 function accountEnv(account: string, env: Env, homeDir: string): Record<string, string> {
-  if (account === 'claude-work') return claudeConfig(env, homeDir, 'DANDELION_CLAUDE_WORK_CONFIG_DIR', '.claude-work');
-  if (account === 'claude-deepseek') return claudeConfig(env, homeDir, 'DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR', '.claude-deepseek');
-  return {};
+  const home = ACCOUNT_HOMES[account];
+  if (home === undefined) return {};
+  return { [home.variable]: env[home.name] || `${homeDir}/${home.fallback}` };
 }
 
-function flagsOf({ modelFlag, effortFlag }: Target, model: string, effort: string | undefined): string[] {
-  const flags = [modelFlag, model];
-  if (effortFlag !== undefined && effort !== undefined) flags.push(effortFlag, effort);
-  return flags;
+function effortFlags({ effortFlag, effortConfig }: Target, effort: string | undefined): string[] {
+  if (effort === undefined) return [];
+  if (effortConfig !== undefined) return ['-c', `${effortConfig}=${effort}`];
+  return effortFlag === undefined ? [] : [effortFlag, effort];
+}
+
+function flagsOf(target: Target, model: string, effort: string | undefined): string[] {
+  return [target.modelFlag, model, ...effortFlags(target, effort)];
 }
 
 export function launchOf(routeLine: string, extra: string[], env: Env, homeDir: string): Launch {

@@ -14,7 +14,7 @@ const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const KIMI_FIXTURE = '#!/bin/sh\nexit 0\n';
 const KILO_FIXTURE = "#!/bin/sh\n[ \"$1\" = \"profile\" ] || exit 2\necho 'Balance: $14.15'\n";
-const PANEL_ORDER = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const PANEL_ORDER = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const FIVE_HOUR_ROW = /^5h {34}#{8}-{12} {2}42% ↻ (2h30m|2h29m)$/;
 const WEEKLY_ROW = /^weekly {30}#{17}-{3} {2}86% ↻ (3d0h|2d23h)$/;
 

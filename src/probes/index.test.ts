@@ -14,8 +14,8 @@ async function* noLines(): AsyncIterable<string> {
 }
 
 describe('providerProbes', () => {
-  it('lists the eleven probes in panel order', () => {
-    expect(providerProbes(IDLE_IO, {}).map(({ id }) => id)).toEqual(['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo']);
+  it('lists the twelve probes in panel order', () => {
+    expect(providerProbes(IDLE_IO, {}).map(({ id }) => id)).toEqual(['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo']);
   });
 
   it('probes junie from the junie home in env', async () => {
@@ -30,6 +30,13 @@ describe('providerProbes', () => {
     const hermes = providerProbes({ ...IDLE_IO, reader: { ...IDLE_IO.reader, read } }, { DANDELION_HERMES_AUTH_FILE: '/h' }).find(({ id }) => id === 'hermes');
     expect(await hermes?.probe('now')).toMatchObject({ id: 'hermes', status: 'unavailable', reason: 'no hermes auth — run hermes portal login' });
     expect(read).toHaveBeenCalledWith('/h');
+  });
+
+  it('never runs codex for the animus account without its home', async () => {
+    const run = vi.fn(IDLE_IO.runner.run);
+    const animus = providerProbes({ ...IDLE_IO, runner: { run } }, { DANDELION_CODEX_ANIMUS_HOME: '/animus' }).find(({ id }) => id === 'codex-animus');
+    expect(await animus?.probe('now')).toMatchObject({ id: 'codex-animus', status: 'unavailable', reason: 'no animus codex home — CODEX_HOME=~/.codex-animus codex login', fix: { command: 'codex', args: ['login'], env: { CODEX_HOME: '/animus' } } });
+    expect(run).not.toHaveBeenCalled();
   });
 
   it('never runs claude for the work account without its config dir', async () => {

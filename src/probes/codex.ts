@@ -1,4 +1,4 @@
-import { fieldOf, isCount, isFilled, isRecord, parseJson, withReset, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
+import { fieldOf, isCount, isFilled, isRecord, parseJson, withReset, type FileReader, type ProviderUsage, type UsageWindow, type WindowKind } from '../domain/index.ts';
 import type { CommandRunner, CommandRunnerResult, RunFailure } from './cli.ts';
 
 export type RpcChild = {
@@ -8,14 +8,24 @@ export type RpcChild = {
 };
 
 export interface RpcSpawner {
-  spawn(command: string, args: string[]): RpcChild;
+  spawn(command: string, args: string[], env?: Record<string, string>): RpcChild;
 }
 
 export type CodexIo = { runner: CommandRunner; spawner: RpcSpawner };
 
+type AnimusIo = CodexIo & { reader: FileReader };
+
+type Account = { id: string; planLabel: string; env?: Record<string, string> };
+
 type Deadline = { expired: Promise<never>; cancel(): void };
 
 const LOGIN_TIMEOUT_MS = 15000;
+const PERSONAL: Account = { id: 'codex', planLabel: 'codex' };
+const ANIMUS_ID = 'codex-animus';
+const ANIMUS_PLAN = 'codex · animus';
+const ANIMUS_HOME_VAR = 'DANDELION_CODEX_ANIMUS_HOME';
+const ANIMUS_HOME = '.codex-animus';
+const NO_ANIMUS_HOME = 'no animus codex home — CODEX_HOME=~/.codex-animus codex login';
 const ANSWER_TIMEOUT_MS = 30000;
 const ANSWER_ID = 2;
 const API_KEY_LINE = /^Logged in using an API key/m;
@@ -121,8 +131,8 @@ function startDeadline(): Deadline {
   return { expired, cancel: () => clearTimeout(timer) };
 }
 
-async function readRateLimits(spawner: RpcSpawner): Promise<UsageWindow[]> {
-  const child = spawner.spawn('codex', ['app-server']);
+async function readRateLimits(spawner: RpcSpawner, env: Record<string, string> | undefined): Promise<UsageWindow[]> {
+  const child = spawner.spawn('codex', ['app-server'], env);
   const deadline = startDeadline();
   try {
     REQUESTS.forEach((request) => child.send(JSON.stringify(request)));
@@ -139,19 +149,36 @@ function reasonOf(error: unknown): string {
 
 type CodexIdentity = Pick<ProviderUsage, 'id' | 'displayName' | 'planLabel' | 'fetchedAt'>;
 
-async function rateLimitUsage(spawner: RpcSpawner, usage: CodexIdentity): Promise<ProviderUsage> {
+async function rateLimitUsage(spawner: RpcSpawner, usage: CodexIdentity, env: Record<string, string> | undefined): Promise<ProviderUsage> {
   try {
-    return { ...usage, windows: await readRateLimits(spawner), status: 'ok' };
+    return { ...usage, windows: await readRateLimits(spawner, env), status: 'ok' };
   } catch (error) {
     return { ...usage, windows: [], status: 'error', reason: reasonOf(error) };
   }
 }
 
-export async function probeCodex(io: CodexIo, now: string): Promise<ProviderUsage> {
-  const usage = { id: 'codex', displayName: 'codex', planLabel: 'codex', fetchedAt: now };
-  const login = await io.runner.run('codex', ['login', 'status'], LOGIN_TIMEOUT_MS);
+async function probeAccount(io: CodexIo, account: Account, now: string): Promise<ProviderUsage> {
+  const usage = { id: account.id, displayName: account.id, planLabel: account.planLabel, fetchedAt: now };
+  const login = await io.runner.run('codex', ['login', 'status'], LOGIN_TIMEOUT_MS, account.env);
   const mode = loginMode(login);
   if (mode === 'apikey') return { ...usage, windows: [], status: 'ok', note: API_KEY_NOTE };
-  if (mode === 'chatgpt') return rateLimitUsage(io.spawner, usage);
+  if (mode === 'chatgpt') return rateLimitUsage(io.spawner, usage, account.env);
   return { ...usage, windows: [], status: 'unavailable', reason: LOGIN_FAILURES[login.failure ?? 'exit'] };
+}
+
+export function probeCodex(io: CodexIo, now: string): Promise<ProviderUsage> {
+  return probeAccount(io, PERSONAL, now);
+}
+
+export function animusHome(env: Record<string, string | undefined>, homeDir: string): string {
+  return env[ANIMUS_HOME_VAR] || `${homeDir}/${ANIMUS_HOME}`;
+}
+
+export async function probeCodexAnimus(io: AnimusIo, env: Record<string, string | undefined>, now: string): Promise<ProviderUsage> {
+  const home = animusHome(env, io.reader.homeDir());
+  const identity = { id: ANIMUS_ID, displayName: ANIMUS_ID, planLabel: ANIMUS_PLAN, fetchedAt: now };
+  if (!(await io.reader.isDirectory(home))) {
+    return { ...identity, windows: [], status: 'unavailable', reason: NO_ANIMUS_HOME, fix: { command: 'codex', args: ['login'], env: { CODEX_HOME: home } } };
+  }
+  return probeAccount(io, { id: ANIMUS_ID, planLabel: ANIMUS_PLAN, env: { CODEX_HOME: home } }, now);
 }

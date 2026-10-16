@@ -15,9 +15,11 @@ const LINES = {
     grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
     cursor: { standard: 'model-f', max: 'model-f' },
     junie: { standard: 'model-g high', max: 'model-g high' },
-    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' }
+    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' },
+    codex: { standard: 'model-i high', max: 'model-i xhigh' },
+    'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' }
   },
-  high: { fable: 'model-h1 max', cursor: 'model-f', opus: 'model-a max', grok: 'model-e xhigh', agy: 'model-c high' }
+  high: { fable: 'model-h1 max', codex: 'model-i xhigh', cursor: 'model-f', opus: 'model-a max', grok: 'model-e xhigh', agy: 'model-c high' }
 };
 
 type Usage = Awaited<ReturnType<ProviderProbe['probe']>>;
@@ -1303,7 +1305,7 @@ describe('route boxes', () => {
     expect(boxRowsOf(session.lastFrame())).toEqual(settled);
     session.probes[6].calls[1].resolve(usageOf('kilo', session.probes[6].calls[1].now));
     await vi.advanceTimersByTimeAsync(0);
-    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-f', 'cursor'));
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-i xhigh', 'codex'));
     session.press('q');
     await session.finished;
   });
@@ -1317,7 +1319,7 @@ describe('route boxes', () => {
     const down: Usage = { id: 'claude', displayName: 'claude', windows: [], fetchedAt: START, status: 'unavailable', reason: 'gone' };
     session.probes[0].calls[1].resolve(down);
     await vi.advanceTimersByTimeAsync(0);
-    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-f', 'cursor'));
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-i xhigh', 'codex'));
     session.press('q');
     await session.finished;
   });
@@ -1327,7 +1329,7 @@ describe('route boxes', () => {
     await session.settleRound(0);
     session.press('j');
     session.press(' ');
-    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-f', 'cursor'));
+    expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-c high', 'agy', 'model-i xhigh', 'codex'));
     expect(session.saved().at(-1)).toEqual({ claude: false });
     session.press(' ');
     expect(boxRowsOf(session.lastFrame())).toEqual(boxBlock('model-a high', 'claude', 'model-h1 max', 'claude'));

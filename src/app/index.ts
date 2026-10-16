@@ -200,7 +200,7 @@ function rpcChild(child: ChildProcessByStdio<Writable, Readable, null>): RpcChil
 }
 
 const realSpawner: RpcSpawner = {
-  spawn: (command, args) => rpcChild(spawn(command, args, { stdio: ['pipe', 'pipe', 'ignore'] }))
+  spawn: (command, args, env) => rpcChild(spawn(command, args, { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, ...env } }))
 };
 
 function isTimeout(error: unknown): boolean {
@@ -445,9 +445,20 @@ const realCommandTry: CommandTry = (command, args, input) =>
     child.stdin.end(input);
   });
 
+function sharedFetch<T>(fetch: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | undefined;
+  return () => {
+    pending ??= fetch().finally(() => {
+      pending = undefined;
+    });
+    return pending;
+  };
+}
+
 function providerStatusProbes(io: ProbeIo, env: Record<string, string | undefined>): Record<string, () => Promise<ClaudeStatus | undefined>> {
   const disabled = new Set(disabledIds(env));
-  const all = { codex: () => probeOpenAiStatus(io, env), cursor: () => probeCursorStatus(io, env) };
+  const openAi = sharedFetch(() => probeOpenAiStatus(io, env));
+  const all = { codex: openAi, 'codex-animus': openAi, cursor: () => probeCursorStatus(io, env) };
   return Object.fromEntries(Object.entries(all).filter(([id]) => !disabled.has(id)));
 }
 

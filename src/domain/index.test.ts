@@ -40,9 +40,11 @@ const LINES: RouteLines = {
     grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
     cursor: { standard: 'model-f', max: 'model-f' },
     junie: { standard: 'model-g high', max: 'model-g high' },
-    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' }
+    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' },
+    codex: { standard: 'model-i high', max: 'model-i xhigh' },
+    'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' }
   },
-  high: { fable: 'model-h1 max', cursor: 'model-f', opus: 'model-a max', grok: 'model-e xhigh', agy: 'model-c high' }
+  high: { fable: 'model-h1 max', codex: 'model-i xhigh', cursor: 'model-f', opus: 'model-a max', grok: 'model-e xhigh', agy: 'model-c high' }
 };
 
 describe('validInstant', () => {
@@ -95,9 +97,11 @@ const F: RouteLines = {
     grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
     cursor: { standard: 'model-f', max: 'model-f' },
     junie: { standard: 'model-g high', max: 'model-g high' },
-    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' }
+    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' },
+    codex: { standard: 'model-i high', max: 'model-i xhigh' },
+    'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' }
   },
-  high: { fable: 'model-h1 max', cursor: 'model-h2', opus: 'model-h3 max', grok: 'model-h4 xhigh', agy: 'model-h5 high' }
+  high: { fable: 'model-h1 max', codex: 'model-i xhigh', cursor: 'model-h2', opus: 'model-h3 max', grok: 'model-h4 xhigh', agy: 'model-h5 high' }
 };
 
 function reversedKeys<T>(record: Record<string, T>): Record<string, T> {
@@ -140,7 +144,7 @@ describe('routeLine', () => {
     expect(routeDecision(usages, NOW, MIDNIGHT, ['grok'])).toEqual({
       chosen: { rule: 'headroom', id: 'agy', left: 60 },
       rivals: [],
-      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'claude-deepseek', 'kimi', 'cursor', 'junie', 'hermes'] }
+      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'claude-deepseek', 'kimi', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes'] }
     });
     expect(routeLine(LINES, usages, NOW, MIDNIGHT, ['grok'])).toBe('model-c high agy');
   });
@@ -215,8 +219,10 @@ describe('routeLine', () => {
     ['only ok with zero windows', 'claude: no windows', 'none'],
     ['only other windows bind at 100', 'claude-work: other 99 @-; agy: rolling 1 @-', 'model-a high claude-work'],
     ['unavailable and error are excluded', 'claude: unavailable; claude-work: error; kimi: weekly 90 @2026-09-20T00:00:00.000Z', 'model-d max kimi'],
-    ['codex never routes, even evaporating', 'codex: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', 'model-c high agy'],
-    ['codex as the only ok provider', 'codex: weekly 10 @2026-09-20T00:00:00.000Z', 'none'],
+    ['codex routes, and its evaporating weekly picks its max line', 'codex: weekly 50 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', 'model-i xhigh codex'],
+    ['codex as the only ok provider', 'codex: weekly 10 @2026-09-20T00:00:00.000Z', 'model-i high codex'],
+    ['codex-animus as the only ok provider', 'codex-animus: weekly 10 @2026-09-20T00:00:00.000Z', 'model-i high codex-animus'],
+    ['an equal codex tie goes to codex', 'codex-animus: weekly 10 @2026-09-20T00:00:00.000Z; codex: weekly 10 @2026-09-20T00:00:00.000Z', 'model-i high codex'],
     ['kilo as the only ok provider', 'kilo: no windows', 'none']
   ])('%s', (_case, candidates, line) => {
     expect(routeOf(candidates)).toBe(line);
@@ -285,7 +291,7 @@ describe('routeLine', () => {
     ['a tripped evaporator is ignored', 'claude: rolling 90 @-, weekly 95 @2026-09-14T20:00:00.000Z; agy: rolling 80 @-', [], 'model-c high agy'],
     ['an other window never trips', 'agy: other 99 @-, weekly 50 @2026-09-20T00:00:00.000Z', [], 'model-c high agy'],
     ['ineligible and tripped leave nothing', 'claude: rolling 95 @-; claude-work: rolling 0 @-', ['claude-work'], 'none'],
-    ['tripped kimi and unroutable codex and kilo leave nothing', 'kimi: rolling 90 @-; codex: weekly 0 @-; kilo: no windows', [], 'none']
+    ['tripped kimi and codex and unroutable kilo leave nothing', 'kimi: rolling 90 @-; codex: rolling 95 @-; kilo: no windows', [], 'none']
   ])('trip: %s', (_case, candidates, ineligible, line) => {
     expect(routeOf(candidates, ineligible)).toBe(line);
   });
@@ -422,7 +428,7 @@ describe('highRouteLine', () => {
     return highRouteLine(lines, candidates.split('; ').map(usageOf), ineligible);
   }
 
-  it('offers rank 2 cursor at 89.5 used and skips it at 90', () => {
+  it('offers rank 3 cursor at 89.5 used and skips it at 90', () => {
     const claude = 'claude: session rolling 95, weekly weekly 10, Fable weekly 10';
     expect(highOf(`${claude}; cursor: total weekly 89.5`, [], F)).toBe('model-h2 cursor');
     expect(highOf(`${claude}; cursor: total weekly 90`, [], F)).not.toBe('model-h2 cursor');
@@ -454,10 +460,11 @@ describe('highRouteLine', () => {
   it('pins the chain entry by entry', () => {
     expect(HIGH_CHAIN).toEqual([
       { rank: 1, name: 'fable', providers: ['claude', 'claude-work'], matcher: 'fable' },
-      { rank: 2, name: 'cursor', providers: ['cursor'] },
-      { rank: 3, name: 'opus', providers: ['claude', 'claude-work'] },
-      { rank: 4, name: 'grok', providers: ['grok'] },
-      { rank: 5, name: 'agy', providers: ['agy'] }
+      { rank: 2, name: 'codex', providers: ['codex', 'codex-animus'] },
+      { rank: 3, name: 'cursor', providers: ['cursor'] },
+      { rank: 4, name: 'opus', providers: ['claude', 'claude-work'] },
+      { rank: 5, name: 'grok', providers: ['grok'] },
+      { rank: 6, name: 'agy', providers: ['agy'] }
     ]);
   });
 
@@ -474,7 +481,12 @@ describe('highRouteLine', () => {
     ['ok with no windows is skipped', 'cursor: ok with no windows; grok: credits weekly 50', [], 'model-e xhigh grok'],
     ['error and unavailable are skipped', 'claude: error; claude-work: unavailable; grok: credits weekly 89', [], 'model-e xhigh grok'],
     ['an ineligible account is skipped', 'claude-work: session rolling 0, weekly Fable weekly 0; cursor: total weekly 0', ['claude-work'], 'model-f cursor'],
-    ['kimi, codex and kilo are never in the chain', 'kimi: 5h rolling 0; codex: weekly weekly 0; kilo: no windows', [], 'none'],
+    ['kimi and kilo are never in the chain', 'kimi: 5h rolling 0; kilo: no windows', [], 'none'],
+    ['codex is rank 2, gated on every window', 'codex: 5h rolling 10, weekly weekly 50; cursor: total weekly 10', [], 'model-i xhigh codex'],
+    ['codex trips at 90 on its 5h and cursor takes rank 3', 'codex: 5h rolling 90, weekly weekly 10; cursor: total weekly 10', [], 'model-f cursor'],
+    ['codex-animus takes rank 2 when codex is tripped', 'codex: 5h rolling 95; codex-animus: 5h rolling 10, weekly weekly 20', [], 'model-i xhigh codex-animus'],
+    ['the less used codex account wins rank 2', 'codex: 5h rolling 60; codex-animus: 5h rolling 20', [], 'model-i xhigh codex-animus'],
+    ['an equal codex rank goes to codex', 'codex-animus: 5h rolling 20; codex: 5h rolling 20', [], 'model-i xhigh codex'],
     ['resetsAt is ignored', 'grok: credits weekly 50 resetting 1 h from now; cursor: total weekly 60', [], 'model-f cursor'],
     ['a missing Fable window counts as 0', 'claude: session rolling 10, weekly weekly 50', [], 'model-h1 max claude'],
     ['all-models does not gate fable', 'claude: session rolling 10, weekly weekly 95, weekly Fable weekly 10', [], 'model-h1 max claude'],
@@ -662,7 +674,7 @@ describe('openRoutes', () => {
     ['empty line', edited((value) => { (value.route.kimi as Record<string, string>).standard = ''; }), 'route.kimi.standard is not a non-empty string'],
     ['not a string', edited((value) => { value.high.grok = 4; }), 'high.grok is not a non-empty string'],
     ['provider typo', edited((value) => { value.route['claude-wrok'] = value.route.claude; }), 'unknown key route.claude-wrok'],
-    ['codex is not routed', edited((value) => { value.route.codex = value.route.cursor; }), 'unknown key route.codex'],
+    ['kilo is not routed', edited((value) => { value.route.kilo = value.route.cursor; }), 'unknown key route.kilo'],
     ['unknown high name', edited((value) => { value.high.sonnet = 'model-x'; }), 'unknown key high.sonnet'],
     ['unknown top-level key', edited((value) => { value.extra = {}; }), 'unknown key extra'],
     ['unknown entry key', edited((value) => { (value.route.cursor as Record<string, string>).maxx = 'model-f'; }), 'unknown key route.cursor.maxx'],

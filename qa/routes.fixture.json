@@ -5,7 +5,9 @@
     "agy":         { "standard": "model-c high",         "max": "model-c max" },
     "kimi":        { "standard": "model-d",              "max": "model-d max" },
     "grok":        { "standard": "model-e xhigh",        "max": "model-e xhigh" },
+    "codex":       { "standard": "model-i high",         "max": "model-i xhigh" },
+    "codex-animus": { "standard": "model-i high",        "max": "model-i xhigh" },
     "cursor":      { "standard": "model-f",              "max": "model-f" },
     "junie":       { "standard": "model-g high",         "max": "model-g high" },
     "hermes":      { "standard": "vendor/model-h xhigh", "max": "vendor/model-h xhigh" } },
-  "high": { "fable": "model-h1 max", "cursor": "model-h2", "opus": "model-h3 max", "grok": "model-h4 xhigh", "agy": "model-h5 high" } }
+  "high": { "fable": "model-h1 max", "codex": "model-i xhigh", "cursor": "model-h2", "opus": "model-h3 max", "grok": "model-h4 xhigh", "agy": "model-h5 high" } }

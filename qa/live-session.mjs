@@ -11,7 +11,7 @@ export const NPM = join(dirname(process.execPath), 'npm');
 export const ENTER = '\x1b[?1049h';
 export const CLEAR = '\x1b[H\x1b[2J';
 export const RESTORE = '\x1b[?25h\x1b[?1049l';
-export const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+export const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 export const KIMI_EXITS = '#!/bin/sh\nexit 0\n';
 export const OTHER_PANELS = [
   /\nclaude\nweekly +#+-* +86%( ↻ \S+)?\nclaude · personal · claude\n/,

@@ -25,6 +25,27 @@ describe('launchOf', () => {
   });
 });
 
+describe('launchOf codex', () => {
+  it('runs codex with the model and the effort as a config override', () => {
+    expect(launchOf('gpt-6.1-sol high codex', ['-C', '.'], {}, '/h')).toEqual({ command: 'codex', args: ['--model', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', '-C', '.'], env: {} });
+  });
+
+  it('omits the override when a codex line has no effort', () => {
+    expect(launchOf('gpt-6.1-sol codex', [], {}, '/h')).toEqual({ command: 'codex', args: ['--model', 'gpt-6.1-sol'], env: {} });
+  });
+
+  it('runs codex-animus with CODEX_HOME from the env var, else the default home', () => {
+    expect(launchOf('gpt-6-astra xhigh codex-animus', [], { DANDELION_CODEX_ANIMUS_HOME: '/cfg/animus' }, '/h')).toEqual({
+      command: 'codex',
+      args: ['--model', 'gpt-6-astra', '-c', 'model_reasoning_effort=xhigh'],
+      env: { CODEX_HOME: '/cfg/animus' }
+    });
+    const fallback = { command: 'codex', args: ['--model', 'gpt-6-astra'], env: { CODEX_HOME: '/h/.codex-animus' } };
+    expect(launchOf('gpt-6-astra codex-animus', [], {}, '/h')).toEqual(fallback);
+    expect(launchOf('gpt-6-astra codex-animus', [], { DANDELION_CODEX_ANIMUS_HOME: '' }, '/h')).toEqual(fallback);
+  });
+});
+
 describe('extraArgs', () => {
   it('drops --high before -- and keeps everything after it', () => {
     expect(extraArgs(['a', '--high', '--', '--high', 'b'])).toEqual(['a', '--high', 'b']);

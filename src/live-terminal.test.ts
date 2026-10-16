@@ -13,7 +13,7 @@ const PREFIX = 'dandelion-qa-007-';
 const ENTER = '\x1b[?1049h';
 const CLEAR = '\x1b[H\x1b[2J';
 const RESTORE = '\x1b[?25h\x1b[?1049l';
-const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'kilo'];
+const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'kilo'];
 const CLAUDE_FIXTURE = "#!/bin/sh\nprintf '%s\\n' 'Current week (all models): 86% used · resets Sep 13, 11pm (Europe/London)'\n";
 const AGY_FIXTURE = "#!/bin/sh\nprintf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'\n";
 const CODEX_FIXTURE = "#!/bin/sh\necho 'Logged in using an API key - sk-proj-***n5zQA' >&2\n";
@@ -31,6 +31,7 @@ const OTHER_PANELS = [
   /\nkimi\nkimi web exited without printing a token\nkimi code · kimi · \d+h\d+m ago\n/,
   /\ngrok\nno grok billing snapshot — run grok once\ngrok · grok · \d+h\d+m ago · x fix\n/,
   /\ncodex\napi-key billing · no usage windows\ncodex · codex · \d+h\d+m ago\n/,
+  /\ncodex-animus\nno animus codex home — CODEX_HOME=~\/.codex-animus codex login\ncodex · animus · codex-animus · \d+h\d+m ago · x fix\n/,
   /\ncursor\nno cursor auth — run cursor-agent login\ncursor · cursor · \d+h\d+m ago · x fix\n/
 ];
 const KILO_PENDING = /\nkilo\n\S probing…$/;
@@ -83,6 +84,7 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
     DANDELION_GROK_HOME: grokHome,
     DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome,
     DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(grokHome, 'no-deepseek'),
+    DANDELION_CODEX_ANIMUS_HOME: join(grokHome, 'no-animus'),
     DANDELION_CLAUDE_STATUS_URL: 'http://127.0.0.1:1/status.json',
     DANDELION_OPENAI_STATUS_URL: 'http://127.0.0.1:1/status.json',
     DANDELION_CURSOR_STATUS_URL: 'http://127.0.0.1:1/status.json',
@@ -102,7 +104,7 @@ function launch(command: string, args: string[], env: NodeJS.ProcessEnv): Run {
 }
 
 function startLive(env: NodeJS.ProcessEnv): Run {
-  return launch('/usr/bin/script', ['-qfec', `stty rows 60 cols 72; '${NPM}' start --silent`, '/dev/null'], env);
+  return launch('/usr/bin/script', ['-qfec', `stty rows 70 cols 72; '${NPM}' start --silent`, '/dev/null'], env);
 }
 
 function completeFrames(run: Run): string[] {

@@ -9,7 +9,7 @@ const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const NPM = join(dirname(process.execPath), 'npm');
 const OUTER_TIMEOUT_MS = 60000;
 const PREFIX = 'dandelion-qa-008-';
-const PANEL_ORDER = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const PANEL_ORDER = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
 const PERSONAL_LINES = [
   'Current session: 3% used · resets Sep 13, 7:40pm (Europe/London)',

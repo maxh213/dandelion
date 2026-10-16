@@ -33,9 +33,11 @@ const LINES: RouteLines = {
     grok: { standard: 'model-e xhigh', max: 'model-e xhigh' },
     cursor: { standard: 'model-f', max: 'model-f' },
     junie: { standard: 'model-g high', max: 'model-g high' },
-    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' }
+    hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' },
+    codex: { standard: 'model-i high', max: 'model-i xhigh' },
+    'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' }
   },
-  high: { fable: 'model-h1 max', cursor: 'model-f', opus: 'model-a max', grok: 'model-e xhigh', agy: 'model-c high' }
+  high: { fable: 'model-h1 max', codex: 'model-i xhigh', cursor: 'model-f', opus: 'model-a max', grok: 'model-e xhigh', agy: 'model-c high' }
 };
 
 vi.mock('../domain/index.ts', async (importOriginal) => {

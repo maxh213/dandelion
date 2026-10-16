@@ -3,7 +3,7 @@ import { agyProbe } from './agy.ts';
 import { probeClaudeDeepseek } from './claude-deepseek.ts';
 import { claudeProbe, claudeWorkProbe } from './claude.ts';
 import { probeCli, type CliProbe } from './cli.ts';
-import { probeCodex, type CodexIo } from './codex.ts';
+import { probeCodex, probeCodexAnimus, type CodexIo } from './codex.ts';
 import { probeCursor, type CursorIo } from './cursor.ts';
 import { probeGrok, type GrokIo } from './grok.ts';
 import { probeHermes, type HermesIo } from './hermes.ts';
@@ -35,6 +35,7 @@ export function providerProbes(io: ProbeIo, env: Record<string, string | undefin
     { id: 'kimi', probe: (now) => probeKimi(io, env, now) },
     { id: 'grok', probe: (now) => probeGrok(io, env, now) },
     { id: 'codex', probe: (now) => probeCodex(io, now) },
+    { id: 'codex-animus', probe: (now) => probeCodexAnimus(io, env, now) },
     { id: 'cursor', probe: (now) => probeCursor(io, env, now) },
     { id: 'junie', probe: (now) => probeJunie(io, env, now) },
     { id: 'hermes', probe: (now) => probeHermes(io, env, now) },

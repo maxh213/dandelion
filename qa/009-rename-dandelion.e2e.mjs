@@ -10,7 +10,7 @@ import { rootDir, NPM, startLive, completeFrames, waitWithin, assertClosed } fro
 
 const PREFIX = 'dandelion-qa-009-';
 const OUTER_TIMEOUT_MS = 60000;
-const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
 const NO_GROK = 'no grok billing snapshot — run grok once';
 const NO_CURSOR = 'no cursor auth — run cursor-agent login';

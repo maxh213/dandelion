@@ -16,7 +16,7 @@ export interface RoutesFile {
   read(path: string): string;
 }
 
-const ROUTED_IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'cursor', 'junie', 'hermes'];
+const ROUTED_IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes'];
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
 const FULL_LEFT = 100;
@@ -172,10 +172,11 @@ type ChainEntry = { rank: number; name: string; providers: readonly string[]; ma
 
 export const HIGH_CHAIN: readonly ChainEntry[] = [
   { rank: 1, name: 'fable', providers: ['claude', 'claude-work'], matcher: 'fable' },
-  { rank: 2, name: 'cursor', providers: ['cursor'] },
-  { rank: 3, name: 'opus', providers: ['claude', 'claude-work'] },
-  { rank: 4, name: 'grok', providers: ['grok'] },
-  { rank: 5, name: 'agy', providers: ['agy'] }
+  { rank: 2, name: 'codex', providers: ['codex', 'codex-animus'] },
+  { rank: 3, name: 'cursor', providers: ['cursor'] },
+  { rank: 4, name: 'opus', providers: ['claude', 'claude-work'] },
+  { rank: 5, name: 'grok', providers: ['grok'] },
+  { rank: 6, name: 'agy', providers: ['agy'] }
 ] satisfies readonly ChainEntry[];
 
 type Account = { id: string; used: number };

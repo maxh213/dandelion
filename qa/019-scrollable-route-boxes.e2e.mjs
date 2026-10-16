@@ -11,7 +11,7 @@ import { rootDir, launch, startLive, waitWithin, assertClosed, ENTER, CLEAR, RES
 
 const PREFIX = 'dandelion-qa-019-';
 const HOUR_MS = 3600000;
-const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
+const IDS = ['claude', 'claude-work', 'claude-deepseek', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const HELP = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
 const BOX_TOP = '+- route -------------------------+  +- route --high ------------------+';
 const BOX_BOTTOM = '+---------------------------------+  +---------------------------------+';
