@@ -159,7 +159,7 @@ function statusOf(view: LiveView, slot: LiveSlot): ClaudeStatus | undefined {
 
 function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   const caption = view.flash?.index === index ? view.flash.message : undefined;
-  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view), status: statusOf(view, slot), samples: samplesOf(view, slot) };
+  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), zone: view.zone, caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view), status: statusOf(view, slot), samples: samplesOf(view, slot) };
 }
 
 function settledMarks(slot: LiveSlot, usage: ProviderUsage, spinner: number, now: string, marks: PanelMarks): PanelMarks {

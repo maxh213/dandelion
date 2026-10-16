@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { FileReader, UsageWindow } from '../domain/index.ts';
+import { describe, expect, it, vi } from 'vitest';
+import type { FetchOutcome, Fetcher, FileReader, UsageWindow } from '../domain/index.ts';
+import type { CommandRunner } from './cli.ts';
 import { probeGrok, type GrokIo } from './grok.ts';
 
 const NOW = '2026-09-13T10:00:00Z';
@@ -163,5 +164,121 @@ describe('probeGrok', () => {
     ['a date-like but invalid ts',{ '/grok/logs/unified.jsonl': '{"ts":"2026-02-30T99:00:00Z","msg":"billing: fetched credits config","ctx":{"config":{"creditUsagePercent":5}}}' }]
   ])('is unavailable with %s', async (_case, files) => {
     expect(await probeGrok(readerOf(files).io, HOME, NOW)).toStrictEqual(UNAVAILABLE);
+  });
+});
+
+const BILLING_URL = 'https://cli-chat-proxy.grok.com/v1/billing?format=credits';
+const TOKEN = 'grok-access-token-not-for-logs';
+const FRESH_TOKEN = 'grok-access-token-after-refresh';
+const AUTH = JSON.stringify({ 'https://auth.x.ai::account': { key: TOKEN, expires_at: '2026-09-13T18:00:00Z' } });
+const FRESH_AUTH = JSON.stringify({ 'https://auth.x.ai::account': { key: FRESH_TOKEN } });
+const LIVE = JSON.stringify({
+  config: {
+    creditUsagePercent: 12.5,
+    currentPeriod: { end: '2026-09-13T21:15:36.133376+00:00' },
+    subscriptionTier: 'SuperGrok'
+  }
+});
+
+function liveIo(files: Record<string, string>, get: Fetcher['get'], run?: CommandRunner['run']) {
+  const { io, reads } = readerOf(files);
+  const calls: { url: string; headers: Record<string, string> }[] = [];
+  const runs: [string, string[], number][] = [];
+  const fetcher: Pick<Fetcher, 'get'> = {
+    get: (url, headers, timeoutMs) => {
+      calls.push({ url, headers });
+      return get(url, headers, timeoutMs);
+    }
+  };
+  const runner = run === undefined ? undefined : { run: (command: string, args: string[], timeoutMs: number) => {
+    runs.push([command, args, timeoutMs]);
+    return run(command, args, timeoutMs);
+  } };
+  return { io: { ...io, fetcher, runner } satisfies GrokIo, reads, calls, runs };
+}
+
+describe('live grok billing', () => {
+  it('uses the credits endpoint when the log has no usable snapshot', async () => {
+    const { io, calls } = liveIo({ '/grok/auth.json': AUTH, '/grok/logs/unified.jsonl': '' }, async () => ({ status: 200, body: LIVE }));
+    const usage = await probeGrok(io, HOME, NOW);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok', snapshotAt: NOW, windows: [{ label: 'credits', kind: 'weekly', usedPct: 12.5, resetsAt: '2026-09-13T21:15:36.133376+00:00' }] });
+    expect(usage.fix).toBeUndefined();
+    expect(calls).toEqual([{ url: BILLING_URL, headers: { Authorization: `Bearer ${TOKEN}`, Accept: 'application/json' } }]);
+    expect(JSON.stringify(usage)).not.toContain(TOKEN);
+  });
+
+  it('prefers the live percent over an older log snapshot', async () => {
+    const { io } = liveIo({ '/grok/auth.json': AUTH, '/grok/logs/unified.jsonl': BACKGROUND }, async () => ({ status: 200, body: LIVE }));
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ snapshotAt: NOW, windows: [{ usedPct: 12.5 }] });
+  });
+
+  it('reads the tier from the top of the response and zeroes a period that has ended', async () => {
+    const body = JSON.stringify({ subscriptionTier: 'SuperGrok Heavy', config: { creditUsagePercent: 96, currentPeriod: { end: NOW } } });
+    const { io } = liveIo({ '/grok/auth.json': AUTH }, async () => ({ status: 200, body }));
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ planLabel: 'SuperGrok Heavy', windows: [{ usedPct: 0 }], captionSuffix: ' · period ended since snapshot' });
+  });
+
+  it('sends the billing url from the env and the first account that has a key', async () => {
+    const auth = JSON.stringify({ empty: { key: '' }, second: { key: TOKEN } });
+    const { io, calls } = liveIo({ '/grok/auth.json': auth }, async () => ({ status: 200, body: LIVE }));
+    await probeGrok(io, { ...HOME, DANDELION_GROK_BILLING_URL: 'https://billing.test/credits' }, NOW);
+    expect(calls.map(({ url, headers }) => [url, headers.Authorization])).toEqual([['https://billing.test/credits', `Bearer ${TOKEN}`]]);
+  });
+
+  it.each<[string, FetchOutcome | 'throw']>([
+    ['a network failure', { failure: 'network' }],
+    ['a response with no usage percent', { status: 200, body: '{"config":{}}' }],
+    ['an HTTP error', { status: 500, body: `leaked ${TOKEN}` }],
+    ['a request that throws', 'throw']
+  ])('falls back to the log after %s and does not refresh', async (_case, outcome) => {
+    const get = vi.fn(async () => {
+      if (outcome === 'throw') throw new Error(`leaked ${TOKEN}`);
+      return outcome;
+    });
+    const run = vi.fn(async () => ({ stdout: '', stderr: '' }));
+    const { io, runs } = liveIo({ '/grok/auth.json': AUTH, '/grok/logs/unified.jsonl': BACKGROUND }, get, run);
+    const usage = await probeGrok(io, HOME, NOW);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: 'SuperGrok Heavy', windows: [{ usedPct: 75 }] });
+    expect(runs).toEqual([]);
+    expect(JSON.stringify(usage)).not.toContain(TOKEN);
+  });
+
+  it('refreshes the login once on 401 and retries with the new token', async () => {
+    const reads = [AUTH, FRESH_AUTH];
+    const { io: base } = readerOf({});
+    const calls: string[] = [];
+    const io: GrokIo = {
+      reader: { ...base.reader, read: async (path) => (path === '/grok/auth.json' ? reads.shift() : undefined) },
+      fetcher: { get: async (_url, headers) => {
+        calls.push(headers.Authorization ?? '');
+        return calls.length === 1 ? { status: 401, body: 'no' } : { status: 200, body: LIVE };
+      } },
+      runner: { run: async () => ({ stdout: 'You are not authenticated.', stderr: '' }) }
+    };
+    const run = vi.spyOn(io.runner!, 'run');
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ status: 'ok', windows: [{ usedPct: 12.5 }] });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith('grok', ['models'], 20000);
+    expect(calls).toEqual([`Bearer ${TOKEN}`, `Bearer ${FRESH_TOKEN}`]);
+  });
+
+  it('does not refresh twice when the retry is still unauthorized and falls back to the log', async () => {
+    const run = vi.fn(async () => ({ stdout: '', stderr: '' }));
+    const { io, runs } = liveIo({ '/grok/auth.json': AUTH, '/grok/logs/unified.jsonl': BACKGROUND }, async () => ({ status: 401, body: '' }), run);
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ windows: [{ usedPct: 75 }] });
+    expect(runs).toEqual([['grok', ['models'], 20000]]);
+  });
+
+  it('does not run grok when there is no login to refresh', async () => {
+    const run = vi.fn(async () => ({ stdout: '', stderr: '' }));
+    const { io, runs } = liveIo({ '/grok/logs/unified.jsonl': '' }, async () => ({ status: 401, body: '' }), run);
+    expect(await probeGrok(io, HOME, NOW)).toStrictEqual(UNAVAILABLE);
+    expect(runs).toEqual([]);
+  });
+
+  it('falls back to the log when a 401 cannot be refreshed', async () => {
+    const { io, calls } = liveIo({ '/grok/auth.json': AUTH, '/grok/logs/unified.jsonl': JSON.stringify(EVENT_60) }, async () => ({ status: 401, body: '' }));
+    expect(await probeGrok(io, HOME, NOW)).toMatchObject({ windows: [{ usedPct: 60 }] });
+    expect(calls).toHaveLength(1);
   });
 });

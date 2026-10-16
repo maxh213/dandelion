@@ -21,7 +21,8 @@ import {
   type PanelMarks
 } from './terminal.ts';
 import { renderLiveFrame, type LiveView } from './live-frame.ts';
-import { highRouteLine, nextLocalMidnight, routeLine, usageClass, type HistorySample, type ProviderUsage, type RouteLines, type UsageWindow } from '../domain/index.ts';
+import { formatResetAt, highRouteLine, nextLocalMidnight, routeLine, usageClass, type HistorySample, type ProviderUsage, type RouteLines, type UsageWindow } from '../domain/index.ts';
+import { renderRoute } from './route.ts';
 
 const LINES: RouteLines = {
   route: {
@@ -1953,5 +1954,57 @@ describe('usage sparkline', () => {
     const marks: PanelMarks = { selected: false, ineligible: false };
     const ok = usage as Extract<ProviderUsage, { status: 'ok' }>;
     expect(renderPanelOk(ok, true, NOW, { ...marks, samples: [] })).toBe(renderPanelOk(ok, true, NOW, marks));
+  });
+});
+
+describe('tripped badge', () => {
+  const RESET_AT = '2026-09-13T12:30:00.000Z';
+  const session = (usedPct: number, resetsAt?: string): UsageWindow => ({ label: 'session', kind: 'rolling', usedPct, ...(resetsAt === undefined ? {} : { resetsAt }) });
+  const claude = (...windows: UsageWindow[]): ProviderUsage => ({ id: 'claude', displayName: 'claude', planLabel: 'claude · personal', windows, fetchedAt: NOW, status: 'ok' });
+  const once = (usage: ProviderUsage, noColor: boolean, ineligible: string[] = []) => renderDashboard([usage], noColor, NOW, ineligible, 'UTC').split('\n')[2];
+  const live = (usage: ProviderUsage, noColor: boolean) => renderLiveFrame({ slots: [{ id: 'claude', usage }], spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: LINES } }, noColor, NOW).split('\n').find((line) => line.startsWith('claude')) ?? '';
+  const backText = formatResetAt(RESET_AT, NOW, 'UTC');
+  const badge = `tripped · back ${backText}`;
+
+  it('shows the route --why back time in --once and the live full view', () => {
+    const usage = claude(session(92, RESET_AT));
+    expect(once(usage, true)).toBe(`claude${' '.repeat(72 - 6 - badge.length)}${badge}`);
+    expect(live(usage, true)).toBe(`claude${' '.repeat(72 - 6 - badge.length)}${badge}`);
+    expect(renderRoute(LINES, [usage], [], { mode: 'headroom', now: NOW, zone: 'UTC', why: true }).out).toContain(`back ${backText}`);
+  });
+
+  it('trips at exactly 90% and not at 89.9%', () => {
+    expect(once(claude(session(90, RESET_AT)), true)).toContain('tripped');
+    expect(once(claude(session(89.9, RESET_AT)), true)).not.toContain('tripped');
+  });
+
+  it('shows routing off and not tripped for an ineligible panel', () => {
+    const line = once(claude(session(92, RESET_AT)), true, ['claude']);
+    expect(line).toContain('routing off');
+    expect(line).not.toContain('tripped');
+  });
+
+  it.each<[string, string | undefined]>([['no reset', undefined], ['a past reset', '2026-09-13T09:00:00.000Z']])('leaves out back with %s', (_case, resetsAt) => {
+    expect(once(claude(session(95, resetsAt)), true)).toBe(`claude${' '.repeat(59)}tripped`);
+  });
+
+  it('does not trip on weekly windows', () => {
+    expect(once(claude({ label: 'weekly', kind: 'weekly', usedPct: 95, resetsAt: RESET_AT }), true)).toBe('claude');
+  });
+
+  it('colours the badge hot and the rest of the tag dim', () => {
+    expect(once(claude(session(92, RESET_AT)), false)).toBe(`claude${' '.repeat(72 - 6 - badge.length)}\x1b[31m${badge}\x1b[0m`);
+    expect(live(claude(session(92, RESET_AT)), false)).toContain(`\x1b[31m${badge}\x1b[0m`);
+  });
+
+  it('keeps the hidden tag dim ahead of the badge and every line within the frame', () => {
+    const frame = renderLiveFrame({ slots: [{ id: 'claude', usage: claude(session(92, RESET_AT)) }], spinner: 0, refreshing: false, footer: false, ineligible: [], hidden: ['claude'], showHidden: true, zone: 'UTC', routes: { lines: LINES } }, false, NOW);
+    expect(frame).toContain(`\x1b[90mhidden · \x1b[0m\x1b[31m${badge}\x1b[0m`);
+    renderLiveFrame({ slots: [{ id: 'claude', usage: claude(session(92, RESET_AT)) }], spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: LINES } }, true, NOW).split('\n').forEach((line) => expect([...line].length).toBeLessThanOrEqual(72));
+  });
+
+  it('leaves the compact row without the badge', () => {
+    const view = { slots: [{ id: 'claude', usage: claude(session(92, RESET_AT)) }], spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: LINES }, compact: true } as LiveView;
+    expect(renderLiveFrame(view, true, NOW)).not.toContain('tripped');
   });
 });

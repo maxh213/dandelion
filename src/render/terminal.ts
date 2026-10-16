@@ -1,4 +1,4 @@
-import { elapsedFraction, formatCountdown, formatResetAt, isStale, printable, projectFull, usageClass, type Balance, type ClaudeStatus, type HistorySample, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { elapsedFraction, formatCountdown, formatResetAt, isStale, printable, projectFull, routeDecision, usageClass, type Balance, type ClaudeStatus, type HistorySample, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -15,6 +15,7 @@ const FIX_HINT = ' · x fix';
 const TITLE = 'DANDELION';
 const ROUTING_OFF = 'routing off';
 const HIDDEN = 'hidden';
+const TRIPPED = 'tripped';
 const MARKER = '▸ ';
 const COMPACT_LEAD_CELLS = 20;
 const SPARK_BUCKETS = 8;
@@ -24,7 +25,7 @@ const SPARK_MIN_SAMPLES = 2;
 const SPARK_BLOCKS = [...'▁▂▃▄▅▆▇█'];
 const SPARK_ASCII = [...'_.-=#'];
 
-export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number; status?: ClaudeStatus; samples?: HistorySample[] };
+export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; zone?: string; tripped?: string; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number; status?: ClaudeStatus; samples?: HistorySample[] };
 
 export type Layout = { width: number; label: number; gauge: number };
 
@@ -196,7 +197,24 @@ function markedRule(marks: PanelMarks, noColor: boolean): string {
 }
 
 function flagsOf(marks: PanelMarks): string {
-  return [...(marks.hidden ? [HIDDEN] : []), ...(marks.ineligible ? [ROUTING_OFF] : [])].join(' · ');
+  return [...(marks.hidden ? [HIDDEN] : []), ...(marks.ineligible ? [ROUTING_OFF] : []), ...(marks.tripped === undefined ? [] : [marks.tripped])].join(' · ');
+}
+
+function trippedLabel(backAt: string | undefined, now: string, zone: string): string {
+  return backAt === undefined ? TRIPPED : `${TRIPPED} · back ${formatResetAt(backAt, now, zone)}`;
+}
+
+function trippedFlag(usage: OkUsage, now: string, marks: PanelMarks): string | undefined {
+  const [tripped] = routeDecision([usage], now, now, []).skipped.tripped;
+  return tripped === undefined || marks.ineligible || marks.zone === undefined ? undefined : trippedLabel(tripped.backAt, now, marks.zone);
+}
+
+function flagTag(marks: PanelMarks, noColor: boolean): (text: string) => string {
+  const hot = marks.tripped ?? '';
+  return (text) => {
+    const rest = text.slice(0, text.length - hot.length);
+    return (rest === '' ? '' : dim(rest, noColor)) + (hot === '' ? '' : styled(hot, STYLE_TOKENS.hot, noColor));
+  };
 }
 
 function widthOfMarks(marks: PanelMarks): number {
@@ -413,10 +431,11 @@ export function renderPanelRemembered(good: OkUsage, failed: FailedUsage, noColo
   return dimPanel(lines, marks, noColor);
 }
 
-function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, marks: PanelMarks): string {
+function renderPanelFresh(usage: OkUsage, noColor: boolean, now: string, plain: PanelMarks): string {
+  const marks = { ...plain, tripped: trippedFlag(usage, now, plain) };
   return [
     markedRule(marks, noColor),
-    headerLine(usage.displayName, marks, (text) => dim(text, noColor)),
+    headerLine(usage.displayName, marks, flagTag(marks, noColor)),
     ...statusRows(marks, noColor),
     ...panelBody(usage, noColor, (window, slot) => pacedRow(window, slot, noColor, now, marks), usageStyle(noColor), layoutOf(marks.width)),
     ...snapshotLines(usage, now).map((line) => dim(line, noColor)),
@@ -449,7 +468,7 @@ export function renderPanel(usage: ProviderUsage, noColor: boolean, now: string,
 }
 
 export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string, ineligible: string[], zone: string): string {
-  const panels = usages.map((usage) => renderPanel(usage, noColor, now, { selected: false, ineligible: ineligible.includes(usage.id) }));
+  const panels = usages.map((usage) => renderPanel(usage, noColor, now, { selected: false, ineligible: ineligible.includes(usage.id), zone }));
   return [renderBanner(now, zone, noColor), ...panels].join('\n');
 }
 
