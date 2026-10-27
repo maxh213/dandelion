@@ -87,7 +87,7 @@ function grokReader(log: string | undefined): FileReader {
 }
 
 const LONG_UNUSABLE = Array.from({ length: 50000 }, () => '{"msg":"billing: fetched credits config","ts":"x"}').join('\n');
-const GROK_ENV = { DANDELION_GROK_HOME: '/grok', DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: '/no-claude-deepseek', DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: '/no-claude-ollama' };
+const GROK_ENV = { DANDELION_GROK_HOME: '/grok', DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: '/no-claude-deepseek', DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: '/no-claude-ollama', DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: '/no-claude-animus' };
 const NO_GROK = grokReader(undefined);
 
 const CODEX_CHATGPT: CommandRunnerResult = { stdout: '', stderr: 'Logged in using ChatGPT\n' };
@@ -212,8 +212,8 @@ describe('claude and agy windows', () => {
     const output = await runApp(routedRunner(), GROK_ENV, NOW);
     const lines = plain(output).split('\n');
     expect(lines[0]).toMatch(/^DANDELION +10:00:00$/);
-    expect(lines.filter((line) => line === RULE)).toHaveLength(13);
-    expect(['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 18, 22, 29, 35, 40, 46, 50, 54, 58, 62]);
+    expect(lines.filter((line) => line === RULE)).toHaveLength(14);
+    expect(['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 18, 22, 26, 33, 39, 44, 50, 54, 58, 62, 66]);
     expect(lines[1]).toBe(RULE);
     expect(panelOf(output, 'claude').at(-1)).toBe('claude · personal · claude');
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
@@ -342,6 +342,7 @@ describe('claude and agy windows', () => {
       [
         'claude\nCommand timed out after 90s\nclaude · personal · claude',
         'claude-work\nCommand timed out after 90s\nclaude · work · claude-work',
+        'claude-animus\nno animus config — CLAUDE_CONFIG_DIR=~/.claude-animus claude\nclaude · animus · claude-animus',
         'claude-deepseek\nno deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude\nclaude · deepseek · claude-deepseek',
         'claude-ollama\nno ollama config — CLAUDE_CONFIG_DIR=~/.claude-ollama claude\nclaude · ollama · claude-ollama',
         'agy\nCommand timed out after 60s\nagy · agy',
@@ -357,12 +358,13 @@ describe('claude and agy windows', () => {
     );
   });
 
-  it('renders thirteen unavailable panels when no CLI is on the PATH, grok and junie homes are empty and cursor has no auth', async () => {
+  it('renders fourteen unavailable panels when no CLI is on the PATH, grok and junie homes are empty and cursor has no auth', async () => {
     const output = await runApp(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, NOW);
     expect(output).toContain(
       [
         `${DIM}${RULE}\x1b[0m\n${DIM}claude\x1b[0m\n${DIM}claude CLI not found in PATH\x1b[0m\n${DIM}claude · personal · claude\x1b[0m`,
         `${DIM}${RULE}\x1b[0m\n${DIM}claude-work\x1b[0m\n${DIM}claude CLI not found in PATH\x1b[0m\n${DIM}claude · work · claude-work\x1b[0m`,
+        `${DIM}${RULE}\x1b[0m\n${DIM}claude-animus\x1b[0m\n${DIM}no animus config — CLAUDE_CONFIG_DIR=~/.claude-animus claude\x1b[0m\n${DIM}claude · animus · claude-animus\x1b[0m`,
         `${DIM}${RULE}\x1b[0m\n${DIM}claude-deepseek\x1b[0m\n${DIM}no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude\x1b[0m\n${DIM}claude · deepseek · claude-deepseek\x1b[0m`,
         `${DIM}${RULE}\x1b[0m\n${DIM}claude-ollama\x1b[0m\n${DIM}no ollama config — CLAUDE_CONFIG_DIR=~/.claude-ollama claude\x1b[0m\n${DIM}claude · ollama · claude-ollama\x1b[0m`,
         `${DIM}${RULE}\x1b[0m\n${DIM}agy\x1b[0m\n${DIM}agy CLI not found in PATH\x1b[0m\n${DIM}agy · agy\x1b[0m`,
@@ -389,7 +391,7 @@ describe('claude-work panel', () => {
   const PERSONAL_CAPTION = 'claude · personal · claude';
   const PERSONAL_ROW = 'weekly                              #################-|-  86% ↻ 12h0m';
   const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
-  const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'kilo'];
+  const NAMES = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'kilo'];
   const OTHERS = NAMES.filter((name) => name !== 'claude-work');
 
   function recordingIo(overrides: Record<string, CommandRunnerResult> = {}, isDirectory: FileReader['isDirectory'] = hasWorkConfig) {
@@ -486,8 +488,8 @@ describe('claude-work panel', () => {
       const { io, configDirs } = recordingIo();
       const real = { ...io, reader: realIo.reader };
       const stateFile = join(scratch, 'eligibility.json');
-      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: scratch, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_STATE_FILE: stateFile, NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, NOW), 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
-      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: file, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_STATE_FILE: stateFile, NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, NOW), 'claude-work')[1]).toBe(NO_WORK_CONFIG);
+      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: scratch, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(scratch, 'no-animus'), DANDELION_STATE_FILE: stateFile, NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, NOW), 'claude-work').slice(1, 4)).toEqual(WORK_ROWS);
+      expect(panelOf(await runApp(real, { DANDELION_CLAUDE_WORK_CONFIG_DIR: file, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(scratch, 'no-animus'), DANDELION_STATE_FILE: stateFile, NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, NOW), 'claude-work')[1]).toBe(NO_WORK_CONFIG);
       expect(configDirs.sort()).toEqual(['-', '-', scratch]);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
@@ -805,15 +807,15 @@ describe('real grok reader', () => {
     writeLog(home, grokLog());
     const io = { ...routedRunner(), reader: realIo.reader };
     const before = tree(home);
-    const output = await runApp(io, { DANDELION_GROK_HOME: home, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(home, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(home, 'no-ollama'), NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW);
+    const output = await runApp(io, { DANDELION_GROK_HOME: home, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(home, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(home, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(home, 'no-animus'), NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW);
     expect(output).toContain('\ngrok\ncredits                             ###############-----  75% ↻ 11h15m\n');
     expect(tree(home)).toEqual(before);
     const empty = join(home, 'empty');
     mkdirSync(empty);
     const emptyBefore = tree(empty);
-    expect(plain(await runApp(io, { DANDELION_GROK_HOME: empty, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(home, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(home, 'no-ollama'), DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW))).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(plain(await runApp(io, { DANDELION_GROK_HOME: empty, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(home, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(home, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(home, 'no-animus'), DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW))).toContain('grok\nno grok billing snapshot — run grok once');
     expect(tree(empty)).toEqual(emptyBefore);
-    expect(plain(await runApp(io, { DANDELION_GROK_HOME: join(home, 'missing'), DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(home, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(home, 'no-ollama'), DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW))).toContain('grok\nno grok billing snapshot — run grok once');
+    expect(plain(await runApp(io, { DANDELION_GROK_HOME: join(home, 'missing'), DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(home, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(home, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(home, 'no-animus'), DANDELION_HERMES_AUTH_FILE: join(home, 'missing-hermes.json') }, NOW))).toContain('grok\nno grok billing snapshot — run grok once');
     expect(readdirSync(home).sort()).toEqual(['empty', 'logs']);
   });
 });
@@ -826,8 +828,8 @@ describe('codex panel', () => {
     const spawned: string[][] = [];
     const output = await runApp(codexIo(CODEX_CHATGPT, codexSpawner(codexLines(), spawned)), { ...GROK_ENV, NO_COLOR: '1' }, NOW);
     const lines = output.split('\n');
-    expect(['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 18, 22, 29, 35, 40, 46, 50, 54, 58, 62]);
-    expect(lines.slice(39, 46)).toEqual([
+    expect(['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'].map((name) => lines.indexOf(name))).toEqual([2, 8, 14, 18, 22, 26, 33, 39, 44, 50, 54, 58, 62, 66]);
+    expect(lines.slice(43, 50)).toEqual([
       '='.repeat(72),
       'codex',
       '5h                                  ########--|---------  42% ↻ 2h30m',
@@ -1218,7 +1220,7 @@ describe('cursor panel', () => {
       writeFileSync(authFile, AUTH);
       const before = readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs]);
       const io = { ...cursorIo(), reader: realIo.reader };
-      const output = await runApp(io, { DANDELION_CURSOR_AUTH_FILE: authFile, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, NOW);
+      const output = await runApp(io, { DANDELION_CURSOR_AUTH_FILE: authFile, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(scratch, 'no-animus'), NO_COLOR: '1', DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, NOW);
       expect(panelOf(output, 'cursor')).toEqual(['cursor', ...ROWS, 'Ultra · $200/mo · cursor']);
       expect(readdirSync(scratch, { recursive: true, encoding: 'utf8' }).map((name) => [name, statSync(join(scratch, name)).mtimeMs])).toEqual(before);
       expect(readFileSync(authFile, 'utf8')).toBe(AUTH);
@@ -1275,7 +1277,7 @@ describe('cursor panel', () => {
       return { env, names: () => [...names].sort() };
     }
 
-    const SETTINGS = ['DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR', 'DANDELION_CLAUDE_OLLAMA_CONFIG_DIR', 'DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CODEX_ANIMUS_HOME', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_HERMES_AUTH_FILE', 'DANDELION_JUNIE_HOME', 'DANDELION_KIMI_HOME', 'DANDELION_KIMI_PORT', 'DANDELION_STATE_FILE', 'NO_COLOR', 'XDG_STATE_HOME'];
+    const SETTINGS = ['DANDELION_CLAUDE_ANIMUS_CONFIG_DIR', 'DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR', 'DANDELION_CLAUDE_OLLAMA_CONFIG_DIR', 'DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CODEX_ANIMUS_HOME', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_HERMES_AUTH_FILE', 'DANDELION_JUNIE_HOME', 'DANDELION_KIMI_HOME', 'DANDELION_KIMI_PORT', 'DANDELION_STATE_FILE', 'NO_COLOR', 'XDG_STATE_HOME'];
 
     it('applies every setting under its DANDELION_* name', async () => {
       const launch = vi.fn(HAPPY_KIMI.launch);
@@ -1360,7 +1362,7 @@ describe('cursor panel', () => {
       expect(lines.at(-1)).toBe('\x1b[90m↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?\x1b[0m');
       const once = await runApp(cursorIo(), CURSOR_ENV, LATER);
       const panels = lines.slice(6, -3).join('\n');
-      expect(panels.match(SPINNER_TAIL)).toHaveLength(13);
+      expect(panels.match(SPINNER_TAIL)).toHaveLength(14);
       expect(panels.replace(SPINNER_TAIL, '').replace(/ · \d+h\d+m ago/g, '').replace(/ · x fix/g, '')).toBe(once.split('\n').slice(1).join('\n'));
       dashboard.press('q');
       await dashboard.finished;
@@ -1393,7 +1395,7 @@ describe('cursor panel', () => {
       const run = vi.spyOn(io.runner, 'run');
       const claudeRuns = () => run.mock.calls.filter(([command]) => command === 'claude').map(([, , , env]) => env?.CLAUDE_CONFIG_DIR ?? '-');
       const dashboard = startDashboard(io, LIVE_ENV);
-      const names = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'kilo'];
+      const names = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'kilo'];
       expect(dashboard.frames()[0].split('\n').filter((line) => names.includes(line))).toEqual(names);
       await settleProbes();
       expect(claudeRuns().sort()).toEqual(['-', WORK_CONFIG_DIR]);
@@ -2082,7 +2084,7 @@ describe('runRoute', () => {
 });
 
 describe('runJson', () => {
-  const ORDER = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+  const ORDER = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
   let scratch = '';
 
   beforeEach(() => {
@@ -2128,7 +2130,7 @@ describe('runJson', () => {
     const { snapshot, err } = await snapshotOf({ DANDELION_ROUTES_FILE: path });
     expect([snapshot.route, snapshot.routeHigh, snapshot.routesError]).toEqual([null, null, `${path}: is not valid JSON`]);
     expect(err).toBe(`dandelion: routes file ${path}: is not valid JSON\n`);
-    expect(snapshot.providers).toHaveLength(13);
+    expect(snapshot.providers).toHaveLength(14);
   });
 });
 
@@ -2212,7 +2214,7 @@ describe('route eligibility state file', () => {
   });
 
   describe('snapshot.json', () => {
-    const IDS = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+    const IDS = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
     const requestOf = (mode: 'headroom' | 'high', extra: { why?: boolean; maxAge?: number; now?: string } = {}) => ({ mode, now: NOW, zone: 'UTC', ...extra });
     const snapshotPath = () => join(scratch, 'state', 'snapshot.json');
 
@@ -2833,7 +2835,7 @@ describe('junie panel', () => {
   it('renders the newest session snapshot between cursor and kilo, leaving the other panels unchanged', async () => {
     const output = await runApp(junieIo(), { ...JUNIE_ENV, NO_COLOR: '1' }, JUNIE_NOW);
     const lines = output.split('\n');
-    const names = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+    const names = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
     expect(lines.filter((line) => names.includes(line))).toEqual(names);
     const junie = lines.indexOf('junie');
     expect(lines.slice(junie - 1, junie + 5)).toEqual(['='.repeat(72), 'junie', ROW_30, 'snapshot 6h6m old', '701513 credits · junie', '='.repeat(72)]);
@@ -2917,19 +2919,19 @@ describe('junie panel', () => {
       mkdirSync(empty);
       const io = { ...routedRunner(), reader: realIo.reader };
       const before = snapshotOf(scratch);
-      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: home, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie').slice(1)).toEqual([ROW_30, 'snapshot 6h6m old', '701513 credits · junie']);
-      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: empty, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
+      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: home, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(scratch, 'no-animus'), DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie').slice(1)).toEqual([ROW_30, 'snapshot 6h6m old', '701513 credits · junie']);
+      expect(panelOf(await runApp(io, { NO_COLOR: '1', DANDELION_JUNIE_HOME: empty, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(scratch, 'no-animus'), DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
       expect(snapshotOf(scratch)).toEqual(before);
     });
 
     it('is unavailable when the index is a directory or unreadable', async () => {
       const io = { ...routedRunner(), reader: realIo.reader };
       mkdirSync(join(scratch, 'sessions', 'index.jsonl'), { recursive: true });
-      expect(panelOf(await runApp(io, { DANDELION_JUNIE_HOME: scratch, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
+      expect(panelOf(await runApp(io, { DANDELION_JUNIE_HOME: scratch, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(scratch, 'no-animus'), DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie')[1]).toBe('no junie quota snapshot — run junie once');
       const locked = join(scratch, 'locked');
       writeTree(locked, junieTree());
       chmodSync(join(locked, 'sessions', 'index.jsonl'), 0o000);
-      const reason = panelOf(await runApp(io, { DANDELION_JUNIE_HOME: locked, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie')[1];
+      const reason = panelOf(await runApp(io, { DANDELION_JUNIE_HOME: locked, DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(scratch, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(scratch, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(scratch, 'no-animus'), DANDELION_HERMES_AUTH_FILE: join(scratch, 'missing-hermes.json') }, JUNIE_NOW), 'junie')[1];
       expect(reason === 'no junie quota snapshot — run junie once' || process.getuid?.() === 0).toBe(true);
     });
   });
@@ -3094,7 +3096,7 @@ describe('hermes panel', () => {
     const { io } = hermesIo();
     const output = await runApp(io, { ...HERMES_ENV, NO_COLOR: '1' }, HERMES_NOW);
     const lines = output.split('\n');
-    const names = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+    const names = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
     expect(lines.filter((line) => names.includes(line))).toEqual(names);
     const hermes = lines.indexOf('hermes');
     expect(lines.slice(hermes - 1, hermes + 4)).toEqual(['='.repeat(72), 'hermes', ROW_75, 'Plus · $5.50 of $22 · hermes', '='.repeat(72)]);
@@ -3125,7 +3127,7 @@ describe('hermes panel', () => {
     });
     const output = await runApp(io, { ...HERMES_ENV, DANDELION_JUNIE_HOME: '/junie', NO_COLOR: '1' }, HERMES_NOW);
     const lines = output.split('\n');
-    const names = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+    const names = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
     expect(lines[0]).toMatch(/^DANDELION +19:00:00$/);
     expect(lines.filter((line) => names.includes(line))).toEqual(names);
     expect(panelOf(output, 'junie').slice(1)).toEqual(['credits                             ######--------------  30%', 'snapshot 6h6m old', '701513 credits · junie']);
@@ -3443,11 +3445,11 @@ describe('claude status line wiring', () => {
     vi.useRealTimers();
   });
 
-  it('puts the line under the three claude panels, plus codex and cursor when their urls answer too', async () => {
+  it('puts the line under the four claude panels, plus codex and cursor when their urls answer too', async () => {
     const urls: string[] = [];
     const lines = await liveFrame(statusIo({ status: 200, body: MAJOR_BODY }, urls));
-    for (const id of ['claude', 'claude-work', 'claude-deepseek', 'codex', 'codex-animus', 'cursor']) expect(lines[lines.indexOf(id) + 1]).toBe('status: Partial System Outage');
-    expect(lines.filter((line) => line.startsWith('status:'))).toHaveLength(6);
+    for (const id of ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'codex', 'codex-animus', 'cursor']) expect(lines[lines.indexOf(id) + 1]).toBe('status: Partial System Outage');
+    expect(lines.filter((line) => line.startsWith('status:'))).toHaveLength(7);
     expect(urls.filter((url) => url === STATUS_URL)).toHaveLength(1);
   });
 

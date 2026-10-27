@@ -34,6 +34,7 @@ const LINES: RouteLines = {
   route: {
     claude: { standard: 'model-a high', max: 'model-a max' },
     'claude-work': { standard: 'model-a high', max: 'model-a max' },
+    'claude-animus': { standard: 'model-a high', max: 'model-a max' },
     'claude-deepseek': { standard: 'vendor/model-o max', max: 'vendor/model-o max' },
     'claude-ollama': { standard: 'vendor/model-p max', max: 'vendor/model-p max' },
     agy: { standard: 'model-c high', max: 'model-c max' },
@@ -93,6 +94,7 @@ const F: RouteLines = {
   route: {
     claude: { standard: 'model-a high', max: 'model-a max' },
     'claude-work': { standard: 'model-b high', max: 'model-b max' },
+    'claude-animus': { standard: 'model-b high', max: 'model-b max' },
     'claude-deepseek': { standard: 'vendor/model-o max', max: 'vendor/model-o max' },
     'claude-ollama': { standard: 'vendor/model-p max', max: 'vendor/model-p max' },
     agy: { standard: 'model-c high', max: 'model-c max' },
@@ -191,7 +193,7 @@ describe('routeLine', () => {
     expect(routeDecision(usages, NOW, MIDNIGHT, ['grok'])).toEqual({
       chosen: { rule: 'headroom', id: 'agy', left: 60 },
       rivals: [],
-      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'claude-deepseek', 'claude-ollama', 'kimi', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'] }
+      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'kimi', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'] }
     });
     expect(routeLine(LINES, usages, NOW, MIDNIGHT, ['grok'])).toBe('model-c high agy');
   });
@@ -425,6 +427,8 @@ describe('routeLine', () => {
     ['claude evaporates', `claude: rolling 0 @-, weekly 86 @${IN_2H}; agy: rolling 0 @-, weekly 0 @${IN_72H}`, 'model-a max claude'],
     ['claude headroom', `claude: rolling 0 @-, weekly 3 @${IN_2H}; agy: rolling 10 @-, weekly 10 @${IN_72H}`, 'model-a high claude'],
     ['claude-work headroom', `claude: rolling 20 @-, weekly 30 @${IN_72H}; claude-work: rolling 10 @-, weekly 5 @${IN_72H}; agy: rolling 15 @-, weekly 20 @${IN_72H}`, 'model-b high claude-work'],
+    ['claude-animus headroom', `claude: rolling 20 @-, weekly 30 @${IN_72H}; claude-work: rolling 30 @-, weekly 30 @${IN_72H}; claude-animus: rolling 10 @-, weekly 5 @${IN_72H}`, 'model-b high claude-animus'],
+    ['claude-animus session at 90% trips', `claude-animus: rolling 90 @-, weekly 0 @${IN_72H}; agy: rolling 50 @-, weekly 50 @${IN_72H}`, 'model-c high agy'],
     ['claude-deepseek headroom at 5% used', `claude: rolling 20 @-, weekly 30 @${IN_72H}; claude-deepseek: weekly 5 @${IN_72H}`, 'vendor/model-o max claude-deepseek'],
     ['claude-deepseek weekly at 95% does not trip', 'claude-deepseek: weekly 95 @2026-09-20T00:00:00.000Z', 'vendor/model-o max claude-deepseek'],
     ['claude-ollama headroom', `claude: rolling 20 @-, weekly 30 @${IN_72H}; claude-ollama: rolling 5 @-, weekly 10 @${IN_72H}`, 'vendor/model-p max claude-ollama'],
@@ -524,10 +528,10 @@ describe('highRouteLine', () => {
 
   it('pins the chain entry by entry', () => {
     expect(HIGH_CHAIN).toEqual([
-      { rank: 1, name: 'fable', providers: ['claude', 'claude-work'], matcher: 'fable' },
+      { rank: 1, name: 'fable', providers: ['claude', 'claude-work', 'claude-animus'], matcher: 'fable' },
       { rank: 2, name: 'codex', providers: ['codex'] },
       { rank: 3, name: 'cursor', providers: ['cursor'] },
-      { rank: 4, name: 'opus', providers: ['claude', 'claude-work'] },
+      { rank: 4, name: 'opus', providers: ['claude', 'claude-work', 'claude-animus'] },
       { rank: 5, name: 'grok', providers: ['grok'] },
       { rank: 6, name: 'agy', providers: ['agy'] }
     ]);
@@ -557,6 +561,7 @@ describe('highRouteLine', () => {
     ['all-models does not gate fable', 'claude: session rolling 10, weekly weekly 95, weekly Fable weekly 10', [], 'model-h1 max claude'],
     ['session gates fable', 'claude: session rolling 90, weekly weekly 10, weekly Fable weekly 10; cursor: total weekly 10', [], 'model-f cursor'],
     ['higher left on gating windows wins', 'claude: session rolling 85, weekly weekly 10, weekly Fable weekly 40; claude-work: session rolling 10, weekly weekly 10, weekly Fable weekly 70', [], 'model-h1 max claude-work'],
+    ['fable goes to the animus account with the most left', 'claude: session rolling 85, weekly weekly 10, weekly Fable weekly 40; claude-work: session rolling 10, weekly weekly 10, weekly Fable weekly 70; claude-animus: session rolling 0, weekly weekly 0, weekly Fable weekly 5', [], 'model-h1 max claude-animus'],
     ['equal left goes to personal', 'claude-work: session rolling 20, weekly weekly 60, weekly Fable weekly 0; claude: session rolling 20, weekly weekly 10, weekly Fable weekly 20', [], 'model-h1 max claude'],
     ['opus: higher left wins', 'claude: session rolling 10, weekly weekly 70, weekly Fable weekly 95; claude-work: session rolling 10, weekly weekly 40, weekly Fable weekly 90; cursor: total weekly 90', [], 'model-a max claude-work'],
     ['an (all) entry of a provider with no matcher is gated on a Fable-named window', 'claude: session rolling 95; cursor: total weekly 10, Fable weekly 95; grok: credits weekly 50', [], 'model-e xhigh grok'],

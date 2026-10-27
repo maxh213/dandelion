@@ -15,7 +15,7 @@ async function* noLines(): AsyncIterable<string> {
 
 describe('providerProbes', () => {
   it('lists the twelve probes in panel order', () => {
-    expect(providerProbes(IDLE_IO, {}).map(({ id }) => id)).toEqual(['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo']);
+    expect(providerProbes(IDLE_IO, {}).map(({ id }) => id)).toEqual(['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo']);
   });
 
   it('turns a probe that throws into an error usage without the message', async () => {
@@ -58,5 +58,20 @@ describe('providerProbes', () => {
     const [, work] = providerProbes(io, { DANDELION_CLAUDE_WORK_CONFIG_DIR: '/work' });
     expect(await work.probe('now')).toMatchObject({ id: 'claude-work', status: 'unavailable', reason: 'claude CLI not found in PATH' });
     expect(run).toHaveBeenCalledWith('claude', ['-p', '/usage'], 90000, { CLAUDE_CONFIG_DIR: '/work' });
+  });
+
+  it('never runs claude for the animus account without its config dir', async () => {
+    const run = vi.fn(IDLE_IO.runner.run);
+    const [, , animus] = providerProbes({ ...IDLE_IO, runner: { run } }, { DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: '/animus' });
+    expect(await animus.probe('now')).toMatchObject({ id: 'claude-animus', status: 'unavailable', reason: 'no animus config — CLAUDE_CONFIG_DIR=~/.claude-animus claude', fix: { command: 'claude', args: [], env: { CLAUDE_CONFIG_DIR: '/animus' } } });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('runs claude for the animus account with CLAUDE_CONFIG_DIR once its config dir exists, defaulting to ~/.claude-animus', async () => {
+    const run = vi.fn(IDLE_IO.runner.run);
+    const io = { ...IDLE_IO, runner: { run }, reader: { ...IDLE_IO.reader, isDirectory: async (path: string) => path === `${IDLE_IO.reader.homeDir()}/.claude-animus` } };
+    const [, , animus] = providerProbes(io, { DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: '' });
+    expect(await animus.probe('now')).toMatchObject({ id: 'claude-animus', status: 'unavailable', reason: 'claude CLI not found in PATH' });
+    expect(run).toHaveBeenCalledWith('claude', ['-p', '/usage'], 90000, { CLAUDE_CONFIG_DIR: `${IDLE_IO.reader.homeDir()}/.claude-animus` });
   });
 });

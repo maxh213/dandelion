@@ -83,7 +83,7 @@ function appEnv(pathDir: string): NodeJS.ProcessEnv {
     DANDELION_KIMI_HOME: grokHome,
     DANDELION_GROK_HOME: grokHome,
     DANDELION_CLAUDE_WORK_CONFIG_DIR: grokHome,
-    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(grokHome, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(grokHome, 'no-ollama'),
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(grokHome, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(grokHome, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(grokHome, 'no-animus'),
     DANDELION_CODEX_ANIMUS_HOME: join(grokHome, 'no-animus'),
     DANDELION_CLAUDE_STATUS_URL: 'http://127.0.0.1:1/status.json',
     DANDELION_OPENAI_STATUS_URL: 'http://127.0.0.1:1/status.json',

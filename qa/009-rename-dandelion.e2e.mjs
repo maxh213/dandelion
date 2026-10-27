@@ -10,7 +10,7 @@ import { rootDir, NPM, startLive, completeFrames, waitWithin, assertClosed } fro
 
 const PREFIX = 'dandelion-qa-009-';
 const OUTER_TIMEOUT_MS = 60000;
-const IDS = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+const IDS = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
 const NO_GROK = 'no grok billing snapshot — run grok once';
 const NO_CURSOR = 'no cursor auth — run cursor-agent login';
@@ -164,7 +164,7 @@ async function everyEntryRunsTheDashboard(bin) {
     DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir(),
-    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(dir, 'no-ollama')
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(dir, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(dir, 'no-animus')
   };
   const npm = await exec(NPM, ['start', '--silent', '--', '--once'], env);
   assertDandelionDashboard(npm);
@@ -195,7 +195,7 @@ async function newNamesWork(bin) {
     DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'no-such-dir'),
-    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(dir, 'no-ollama')
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(dir, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(dir, 'no-animus')
   };
   const run = await exec(NPM, ['start', '--silent', '--', '--once'], env);
   assertDandelionDashboard(run);
@@ -285,7 +285,7 @@ async function liveIgnoresOldRefreshName(bin) {
     DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'),
     DANDELION_STATE_FILE: join(dir, 'no-state', 'eligibility.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: await tempDir(),
-    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(dir, 'no-ollama')
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(dir, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(dir, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(dir, 'no-animus')
   };
   const run = startLive(env);
   const settled = () => completeFrames(run).some((frame) => !frame.includes('probing…'));

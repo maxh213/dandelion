@@ -27,6 +27,13 @@ describe('launchOf', () => {
     expect(launchOf('glm-5.3-flash max claude-ollama', [], { DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: '' }, '/h')).toEqual(launch('/h/.claude-ollama'));
   });
 
+  it('runs claude-animus with the model, effort and config dir, defaulting the dir when unset or empty', () => {
+    const launch = (dir: string) => ({ command: 'claude', args: ['--model', 'model-a', '--effort', 'high'], env: { CLAUDE_CONFIG_DIR: dir } });
+    expect(launchOf('model-a high claude-animus', [], { DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: '/cfg/animus' }, '/h')).toEqual(launch('/cfg/animus'));
+    expect(launchOf('model-a high claude-animus', [], {}, '/h')).toEqual(launch('/h/.claude-animus'));
+    expect(launchOf('model-a high claude-animus', [], { DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: '' }, '/h')).toEqual(launch('/h/.claude-animus'));
+  });
+
   it.each([['cursor', 'cursor-agent'], ['agy', 'agy'], ['kimi', 'kimi'], ['grok', 'grok'], ['junie', 'junie'], ['hermes', 'hermes']])('runs %s as %s with the model only', (account, command) => {
     expect(launchOf(`model-x high ${account}`, [], {}, '/h')).toEqual({ command, args: ['--model', 'model-x'], env: {} });
   });

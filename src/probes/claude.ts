@@ -1,8 +1,22 @@
 import type { CliProbe, ReadWindow, Reading } from './cli.ts';
 
-const WORK_ID = 'claude-work';
-const WORK_PLAN = 'claude · work';
-const NO_WORK_CONFIG = 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude';
+type Account = { id: string; planLabel: string; dirVariable: string; fallback: string; missingReason: string };
+
+const WORK: Account = {
+  id: 'claude-work',
+  planLabel: 'claude · work',
+  dirVariable: 'DANDELION_CLAUDE_WORK_CONFIG_DIR',
+  fallback: '.claude-work',
+  missingReason: 'no work claude config — log in with CLAUDE_CONFIG_DIR=~/.claude-work claude'
+};
+
+const ANIMUS: Account = {
+  id: 'claude-animus',
+  planLabel: 'claude · animus',
+  dirVariable: 'DANDELION_CLAUDE_ANIMUS_CONFIG_DIR',
+  fallback: '.claude-animus',
+  missingReason: 'no animus config — CLAUDE_CONFIG_DIR=~/.claude-animus claude'
+};
 
 const WINDOW_LINE = /^Current (session|week \(([^)]+)\)): (\d+)% used/;
 const RESET_TEXT = /^ · resets (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (\d{1,2}), (\d{1,2})(?::(\d{2}))?(am|pm)(?: \((.+)\))?$/;
@@ -110,14 +124,22 @@ export const claudeProbe: CliProbe = {
   read: readClaudeUsage
 };
 
-export function claudeWorkProbe(env: Record<string, string | undefined>, homeDir: string): CliProbe {
-  const configDir = env['DANDELION_CLAUDE_WORK_CONFIG_DIR'] || `${homeDir}/.claude-work`;
+function accountProbe(account: Account, env: Record<string, string | undefined>, homeDir: string): CliProbe {
+  const configDir = env[account.dirVariable] || `${homeDir}/${account.fallback}`;
   return {
     ...claudeProbe,
-    id: WORK_ID,
+    id: account.id,
     command: claudeProbe.id,
-    planLabel: WORK_PLAN,
+    planLabel: account.planLabel,
     env: { CLAUDE_CONFIG_DIR: configDir },
-    requiresDirectory: { path: configDir, missingReason: NO_WORK_CONFIG, missingFix: { command: 'claude', args: [], env: { CLAUDE_CONFIG_DIR: configDir } } }
+    requiresDirectory: { path: configDir, missingReason: account.missingReason, missingFix: { command: 'claude', args: [], env: { CLAUDE_CONFIG_DIR: configDir } } }
   };
+}
+
+export function claudeWorkProbe(env: Record<string, string | undefined>, homeDir: string): CliProbe {
+  return accountProbe(WORK, env, homeDir);
+}
+
+export function claudeAnimusProbe(env: Record<string, string | undefined>, homeDir: string): CliProbe {
+  return accountProbe(ANIMUS, env, homeDir);
 }

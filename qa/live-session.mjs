@@ -11,7 +11,7 @@ export const NPM = join(dirname(process.execPath), 'npm');
 export const ENTER = '\x1b[?1049h';
 export const CLEAR = '\x1b[H\x1b[2J';
 export const RESTORE = '\x1b[?25h\x1b[?1049l';
-export const IDS = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+export const IDS = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 export const KIMI_EXITS = '#!/bin/sh\nexit 0\n';
 export const OTHER_PANELS = [
   /\nclaude\nweekly +[#|-]+ +86%( ↻ \S+)?\nclaude · personal · claude( · [^\n]*)?\n/,
@@ -72,7 +72,7 @@ export async function appEnv(pathDir) {
     DANDELION_CURSOR_AUTH_FILE: join(grokHome, 'missing-auth.json'),
     DANDELION_HERMES_AUTH_FILE: join(grokHome, 'missing-hermes.json'),
     DANDELION_CLAUDE_WORK_CONFIG_DIR: workConfigDir,
-    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(grokHome, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(grokHome, 'no-ollama'),
+    DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: join(grokHome, 'no-deepseek'), DANDELION_CLAUDE_OLLAMA_CONFIG_DIR: join(grokHome, 'no-ollama'), DANDELION_CLAUDE_ANIMUS_CONFIG_DIR: join(grokHome, 'no-animus'),
     DANDELION_CODEX_ANIMUS_HOME: join(grokHome, 'no-animus'),
     DANDELION_STATE_FILE: join(workConfigDir, 'no-state', 'eligibility.json')
   };

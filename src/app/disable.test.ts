@@ -11,7 +11,7 @@ const NOW = '2026-09-13T10:00:00.000Z';
 const ROUTES_FILE = fileURLToPath(new URL('../routes.fixture.json', import.meta.url));
 const LIVE_CLEAR = '\x1b[H\x1b[2J\x1b[0m';
 const OFF = { DANDELION_DISABLE: 'hermes,junie' };
-const IDS = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+const IDS = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 
 type Touched = { reads: string[]; urls: string[]; commands: string[] };
 

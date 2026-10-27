@@ -6,6 +6,7 @@ const LINES: RouteLines = {
   route: {
     claude: { standard: 'model-a high', max: 'model-a max' },
     'claude-work': { standard: 'model-a high', max: 'model-a max' },
+    'claude-animus': { standard: 'model-a high', max: 'model-a max' },
     'claude-deepseek': { standard: 'vendor/model-o max', max: 'vendor/model-o max' },
     agy: { standard: 'model-c high', max: 'model-c max' },
     kimi: { standard: 'model-d max', max: 'model-d max' },
@@ -75,7 +76,7 @@ describe('renderRoute', () => {
 
     it('names the evaporating window and its local reset time', () => {
       const usages = [usage('kimi', ['weekly', 'weekly', 59, SOON]), usage('claude', ['weekly', 'weekly', 10, LATER])];
-      expect(why(usages, [], 'headroom')).toEqual({ out: 'model-d max kimi\nevaporation: kimi weekly 41% left resets 20:00 before midnight\nunavailable: claude-work, claude-deepseek, claude-ollama, agy, grok, codex, codex-animus, cursor, junie, hermes, kilo (balance unavailable)\n', err: '', code: 0 });
+      expect(why(usages, [], 'headroom')).toEqual({ out: 'model-d max kimi\nevaporation: kimi weekly 41% left resets 20:00 before midnight\nunavailable: claude-work, claude-animus, claude-deepseek, claude-ollama, agy, grok, codex, codex-animus, cursor, junie, hermes, kilo (balance unavailable)\n', err: '', code: 0 });
     });
 
     it('leads with headroom when the only evaporating-looking weekly is fully used', () => {
@@ -87,21 +88,21 @@ describe('renderRoute', () => {
     it('names the binding headroom, the other accounts and every skipped account', () => {
       const usages = [usage('claude', ['weekly', 'weekly', 37, LATER]), usage('claude-work', ['session', 'rolling', 92], ['weekly', 'weekly', 10, LATER]), usage('agy', ['weekly', 'weekly', 78, LATER]), usage('grok', ['weekly', 'weekly', 1, LATER]), DOWN];
       expect(why(usages, ['grok'], 'headroom').out).toBe(
-        'model-a high claude\nheadroom: claude binding 63% left (agy 22%)\ntripped: claude-work (session 92%); ineligible: grok; unavailable: claude-deepseek, claude-ollama, kimi, codex, codex-animus, cursor, junie, hermes, kilo (balance unavailable)\n'
+        'model-a high claude\nheadroom: claude binding 63% left (agy 22%)\ntripped: claude-work (session 92%); ineligible: grok; unavailable: claude-animus, claude-deepseek, claude-ollama, kimi, codex, codex-animus, cursor, junie, hermes, kilo (balance unavailable)\n'
       );
     });
 
     it('omits the others when the chosen account stands alone and the skipped line when nothing was skipped', () => {
-      const all = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes'].map((id) => usage(id, ['weekly', 'weekly', 50, LATER]));
+      const all = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes'].map((id) => usage(id, ['weekly', 'weekly', 50, LATER]));
       const kilo: ProviderUsage = { id: 'kilo', displayName: 'kilo', fetchedAt: NOW, status: 'ok', windows: [], balance: { amount: 14.15, currency: '$' } };
       expect(why([all[0]], [], 'headroom').out).toContain('headroom: claude binding 50% left\n');
-      expect(why([...all, kilo], [], 'headroom').out).toBe('model-a high claude\nheadroom: claude binding 50% left (claude-work 50%, claude-deepseek 50%, claude-ollama 50%, agy 50%, kimi 50%, grok 50%, codex 50%, codex-animus 50%, cursor 50%, junie 50%, hermes 50%)\n');
+      expect(why([...all, kilo], [], 'headroom').out).toBe('model-a high claude\nheadroom: claude binding 50% left (claude-work 50%, claude-animus 50%, claude-deepseek 50%, claude-ollama 50%, agy 50%, kimi 50%, grok 50%, codex 50%, codex-animus 50%, cursor 50%, junie 50%, hermes 50%)\n');
     });
 
     it('uses Kilo only as the dollar-balance fallback and explains the strict floor', () => {
       const kilo = (amount: number): ProviderUsage => ({ id: 'kilo', displayName: 'kilo', fetchedAt: NOW, status: 'ok', windows: [], balance: { amount, currency: '$' } });
-      expect(why([kilo(14.15)], [], 'headroom').out).toBe('deepseek/deepseek-v4.1-flash-1017 max kilo\nbalance: kilo $14.15 available; launch requires a fresh balance above $10.00\nunavailable: claude, claude-work, claude-deepseek, claude-ollama, agy, kimi, grok, codex, codex-animus, cursor, junie, hermes\n');
-      expect(why([kilo(10)], [], 'headroom').out).toContain('unavailable: claude, claude-work, claude-deepseek, claude-ollama, agy, kimi, grok, codex, codex-animus, cursor, junie, hermes, kilo (balance $10.00; requires dollar balance above $10.00)\n');
+      expect(why([kilo(14.15)], [], 'headroom').out).toBe('deepseek/deepseek-v4.1-flash-1017 max kilo\nbalance: kilo $14.15 available; launch requires a fresh balance above $10.00\nunavailable: claude, claude-work, claude-animus, claude-deepseek, claude-ollama, agy, kimi, grok, codex, codex-animus, cursor, junie, hermes\n');
+      expect(why([kilo(10)], [], 'headroom').out).toContain('unavailable: claude, claude-work, claude-animus, claude-deepseek, claude-ollama, agy, kimi, grok, codex, codex-animus, cursor, junie, hermes, kilo (balance $10.00; requires dollar balance above $10.00)\n');
       expect(why([kilo(14.15), usage('claude', ['weekly', 'weekly', 50, LATER])], [], 'headroom').out).toContain('model-a high claude\nheadroom:');
       expect(why([kilo(14.15)], [], 'high').out).toBe('none\nnone: no chain entry is open\nskipped: rank 1 fable no open account; rank 2 codex no open account; rank 3 cursor no open account; rank 4 opus no open account; rank 5 grok no open account; rank 6 agy no open account\n');
     });
@@ -109,7 +110,7 @@ describe('renderRoute', () => {
     it('lists the skipped accounts when nothing can be routed', () => {
       const usages = [usage('claude', ['session', 'rolling', 90])];
       expect(why(usages, [], 'headroom')).toEqual({
-        out: 'none\nnone: no account can take the work\ntripped: claude (session 90%); unavailable: claude-work, claude-deepseek, claude-ollama, agy, kimi, grok, codex, codex-animus, cursor, junie, hermes, kilo (balance unavailable)\n',
+        out: 'none\nnone: no account can take the work\ntripped: claude (session 90%); unavailable: claude-work, claude-animus, claude-deepseek, claude-ollama, agy, kimi, grok, codex, codex-animus, cursor, junie, hermes, kilo (balance unavailable)\n',
         err: '',
         code: 1
       });
@@ -120,7 +121,7 @@ describe('renderRoute', () => {
       const bare = usage('claude', ['session', 'rolling', 91]);
       const past = usage('agy', ['session', 'rolling', 91, '2026-09-14T00:00:00.000Z']);
       expect(why([work, bare, past], [], 'headroom')).toEqual({
-        out: 'none\nnone: no account can take the work\ntripped: claude (session 91%), claude-work (other 95%, back Sat 17:00), agy (session 91%); unavailable: claude-deepseek, claude-ollama, kimi, grok, codex, codex-animus, cursor, junie, hermes, kilo (balance unavailable)\n',
+        out: 'none\nnone: no account can take the work\ntripped: claude (session 91%), claude-work (other 95%, back Sat 17:00), agy (session 91%); unavailable: claude-animus, claude-deepseek, claude-ollama, kimi, grok, codex, codex-animus, cursor, junie, hermes, kilo (balance unavailable)\n',
         err: '',
         code: 1
       });

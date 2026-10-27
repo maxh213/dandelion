@@ -16,7 +16,7 @@ export interface RoutesFile {
   read(path: string): string;
 }
 
-const ROUTED_IDS = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+const ROUTED_IDS = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const WINDOWED_IDS = ROUTED_IDS.filter((id) => id !== 'kilo');
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
@@ -204,10 +204,10 @@ export function routeLine(lines: RouteLines, usages: RoutableUsage[], now: strin
 type ChainEntry = { rank: number; name: string; providers: readonly string[]; matcher?: string };
 
 export const HIGH_CHAIN: readonly ChainEntry[] = [
-  { rank: 1, name: 'fable', providers: ['claude', 'claude-work'], matcher: 'fable' },
+  { rank: 1, name: 'fable', providers: ['claude', 'claude-work', 'claude-animus'], matcher: 'fable' },
   { rank: 2, name: 'codex', providers: ['codex'] },
   { rank: 3, name: 'cursor', providers: ['cursor'] },
-  { rank: 4, name: 'opus', providers: ['claude', 'claude-work'] },
+  { rank: 4, name: 'opus', providers: ['claude', 'claude-work', 'claude-animus'] },
   { rank: 5, name: 'grok', providers: ['grok'] },
   { rank: 6, name: 'agy', providers: ['agy'] }
 ] satisfies readonly ChainEntry[];

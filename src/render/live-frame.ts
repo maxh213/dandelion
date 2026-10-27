@@ -50,7 +50,7 @@ const NO_SUBSCRIPTION = 'no subscription available';
 const PROBING = 'probing…';
 const ROUTES_FILE_ERROR = 'routes file error';
 const FALLBACK_ROWS = 24;
-const STATUS_IDS = new Set(['claude', 'claude-work', 'claude-deepseek']);
+const STATUS_IDS = new Set(['claude', 'claude-work', 'claude-animus', 'claude-deepseek']);
 
 export type LiveSlot = { id: string; usage: ProviderUsage | undefined; probing?: boolean; seeded?: Extract<ProviderUsage, { status: 'ok' }>; lastGood?: Extract<ProviderUsage, { status: 'ok' }> };
 
