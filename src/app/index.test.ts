@@ -21,7 +21,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 });
 
 const NOW = '2026-09-13T10:00:00.000Z';
-const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
+const PROFILE = JSON.stringify({ name: 'Max', email: 'yeti213@googlemail.com', team: 'Personal', balance: 14.15 });
 const KIMI_BODY = JSON.stringify({
   code: 0,
   msg: 'success',
@@ -219,7 +219,7 @@ describe('claude and agy windows', () => {
     expect(panelOf(output, 'agy').at(-1)).toBe('agy · agy');
     expect(output).toContain(`${DIM}claude · personal · claude\x1b[0m`);
     expect(output).toContain(`${DIM}agy · agy\x1b[0m`);
-    expect(panelOf(output, 'kilo')).toEqual(['kilo', `${'balance $14.15'.padEnd(35)} ${'█'.repeat(14)}${'░'.repeat(6)}  71%`.padEnd(72), 'api balance · kilo']);
+    expect(panelOf(output, 'kilo')).toEqual(['kilo', 'balance $14.15'.padEnd(72), 'api balance · kilo']);
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
   });
 
@@ -1275,14 +1275,14 @@ describe('cursor panel', () => {
       return { env, names: () => [...names].sort() };
     }
 
-    const SETTINGS = ['DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR', 'DANDELION_CLAUDE_OLLAMA_CONFIG_DIR', 'DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CODEX_ANIMUS_HOME', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_HERMES_AUTH_FILE', 'DANDELION_JUNIE_HOME', 'DANDELION_KILO_REFERENCE', 'DANDELION_KIMI_HOME', 'DANDELION_KIMI_PORT', 'DANDELION_STATE_FILE', 'NO_COLOR', 'XDG_STATE_HOME'];
+    const SETTINGS = ['DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR', 'DANDELION_CLAUDE_OLLAMA_CONFIG_DIR', 'DANDELION_CLAUDE_WORK_CONFIG_DIR', 'DANDELION_CODEX_ANIMUS_HOME', 'DANDELION_CURSOR_API_BASE', 'DANDELION_CURSOR_AUTH_FILE', 'DANDELION_GROK_HOME', 'DANDELION_HERMES_AUTH_FILE', 'DANDELION_JUNIE_HOME', 'DANDELION_KIMI_HOME', 'DANDELION_KIMI_PORT', 'DANDELION_STATE_FILE', 'NO_COLOR', 'XDG_STATE_HOME'];
 
     it('applies every setting under its DANDELION_* name', async () => {
       const launch = vi.fn(HAPPY_KIMI.launch);
-      const io = { ...routedRunner({ kilo: { stdout: 'Balance: $5.00', stderr: '' } }, { launch }, NO_GROK), fetcher: KIMI_FETCHER };
+      const io = { ...routedRunner({ kilo: { stdout: JSON.stringify({ balance: 5 }), stderr: '' } }, { launch }, NO_GROK), fetcher: KIMI_FETCHER };
       const env = { NO_COLOR: '1', DANDELION_KILO_REFERENCE: '10', DANDELION_KIMI_PORT: 'abc', DANDELION_GROK_HOME: '/empty-grok', DANDELION_CURSOR_AUTH_FILE: '/missing.json', DANDELION_CLAUDE_WORK_CONFIG_DIR: '/no-such-dir' };
       const output = await runApp(io, env, NOW);
-      expect(panelOf(output, 'kilo')[1]).toMatch(/^balance \$5\.00 {23}#{10}-{10} {2}50% /);
+      expect(panelOf(output, 'kilo')[1]).toBe('balance $5.00'.padEnd(72));
       expect(panelOf(output, 'kimi')[1]).toBe('DANDELION_KIMI_PORT must be an integer from 1 to 65535');
       expect(launch).not.toHaveBeenCalled();
       expect(panelOf(output, 'grok')[1]).toBe('no grok billing snapshot — run grok once');
@@ -1500,38 +1500,21 @@ describe('wiring', () => {
     await session.dashboard?.finished;
   });
 
-  it('displays kilo balance with default reference', async () => {
+  it('displays the Kilo dollar balance without a synthetic gauge or personal profile fields', async () => {
     const output = await runApp(profileRunner(PROFILE), {}, NOW);
     expect(output).toContain('DANDELION');
     expect(output).toContain('10:00:00');
     expect(output).toContain('━'.repeat(72));
-    expect(output).toContain(`${'balance $14.15'.padEnd(35)} \x1b[32m██████████████░░░░░░\x1b[0m \x1b[32m 71%\x1b[0m`);
+    expect(output).toContain(`balance $14.15${' '.repeat(72 - 'balance $14.15'.length)}`);
     expect(output).toContain('\x1b[90mapi balance · kilo\x1b[0m');
+    expect(output).not.toContain('71%');
+    expect(output).not.toContain('yeti213@googlemail.com');
   });
 
-  it('rounds gauge fill down', async () => {
-    const output = await runApp(profileRunner('Balance: $14.50'), {}, NOW);
-    expect(output).toContain(`${'balance $14.50'.padEnd(35)} \x1b[32m██████████████░░░░░░\x1b[0m \x1b[32m 73%\x1b[0m`);
-  });
-
-  it('fills the gauge when balance exceeds reference', async () => {
-    const output = await runApp(profileRunner('Balance: $25.00'), {}, NOW);
-    expect(output).toContain(`${'balance $25.00'.padEnd(35)} \x1b[32m████████████████████\x1b[0m \x1b[32m100%\x1b[0m`);
-  });
-
-  it('renders an empty gauge when reference is empty', async () => {
-    const output = await runApp(profileRunner('Balance: $14.15'), { DANDELION_KILO_REFERENCE: '' }, NOW);
-    expect(output).toContain(`${'balance $14.15'.padEnd(35)} ░░░░░░░░░░░░░░░░░░░░${' '.repeat(16)}`);
-  });
-
-  it('uses a custom reference', async () => {
-    const output = await runApp(profileRunner('Balance: $5.00'), { DANDELION_KILO_REFERENCE: '10' }, NOW);
-    expect(output).toContain(`${'balance $5.00'.padEnd(35)} \x1b[33m██████████░░░░░░░░░░\x1b[0m \x1b[33m 50%\x1b[0m`);
-  });
-
-  it('degrades to ASCII when NO_COLOR is set', async () => {
-    const output = await runApp(profileRunner('Balance: $14.15'), { NO_COLOR: '1' }, NOW);
-    expect(output).toContain(`${'balance $14.15'.padEnd(35)} ##############------  71%`);
+  it('ignores the legacy Kilo reference setting', async () => {
+    const output = await runApp(profileRunner(PROFILE), { DANDELION_KILO_REFERENCE: '10', NO_COLOR: '1' }, NOW);
+    expect(output).toContain('balance $14.15'.padEnd(72));
+    expect(output).not.toContain('100%');
     expect(output).not.toContain('\x1b[');
   });
 
@@ -1582,7 +1565,7 @@ describe('wiring', () => {
       ['claude', ['-p', '/usage'], 90000, undefined],
       ['agy', ['-p', '/usage'], 60000, undefined],
       ['codex', ['login', 'status'], 15000, undefined],
-      ['kilo', ['profile'], 20000, undefined]
+      ['kilo', ['profile', '--json'], 20000, undefined]
     ]);
     expect(calls.filter((call) => call[3] !== undefined)).toEqual([['claude', ['-p', '/usage'], 90000, { CLAUDE_CONFIG_DIR: WORK_CONFIG_DIR }]]);
   });
@@ -1881,6 +1864,44 @@ describe('runRun', () => {
     expect(spawn).toHaveBeenCalledTimes(1);
   });
 
+  function kiloOnly(fresh: CommandRunnerResult | 'throw') {
+    const calls: string[][] = [];
+    const missing: CommandRunnerResult = { stdout: '', stderr: '', failure: 'missing' };
+    const runner: CommandRunner = {
+      run: async (command, args) => {
+        if (command !== 'kilo') return missing;
+        calls.push(args);
+        if (calls.length === 1) return { stdout: PROFILE, stderr: '' };
+        if (fresh === 'throw') throw new Error('profile failed');
+        return fresh;
+      }
+    };
+    return { io: ioOf(runner), calls };
+  }
+
+  it('runs a fresh JSON profile immediately before launching Kilo', async () => {
+    const { io, calls } = kiloOnly({ stdout: PROFILE, stderr: '' });
+    const { spawn, spawner } = fakeSpawner();
+    expect(await runRun(io, env, headroom, [], spawner)).toEqual({ err: '', code: 0 });
+    expect(calls).toEqual([['profile', '--json'], ['profile', '--json']]);
+    expect(spawn).toHaveBeenCalledExactlyOnceWith({ command: 'kilo', args: ['--model', 'vendor/model-k', '--variant', 'max'], env: {} });
+  });
+
+  it.each<[string, CommandRunnerResult | 'throw']>([
+    ['at the floor', { stdout: JSON.stringify({ balance: 10 }), stderr: '' }],
+    ['below the floor', { stdout: JSON.stringify({ balance: 9.99 }), stderr: '' }],
+    ['a non-dollar currency', { stdout: JSON.stringify({ balance: 14.15, currency: 'USD' }), stderr: '' }],
+    ['a command error', { stdout: '', stderr: 'private profile details', failure: 'exit' }],
+    ['malformed JSON', { stdout: 'Name: Max', stderr: '' }],
+    ['a runner exception', 'throw']
+  ])('fails closed and reroutes without Kilo when the fresh profile is %s', async (_case, fresh) => {
+    const { io, calls } = kiloOnly(fresh);
+    const { spawn, spawner } = fakeSpawner();
+    expect(await runRun(io, env, headroom, [], spawner)).toEqual({ err: 'none\n', code: 1 });
+    expect(calls).toEqual([['profile', '--json'], ['profile', '--json']]);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
   it('prints none on stderr, exits 1 and spawns nothing when nothing routes', async () => {
     const { spawn, spawner } = fakeSpawner();
     expect(await runRun(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), env, headroom, [], spawner)).toEqual({ err: 'none\n', code: 1 });
@@ -2013,6 +2034,16 @@ describe('runRoute', () => {
 
   it('is none when every provider is unavailable', async () => {
     expect(await routeWith(mockRunner({ stdout: '', stderr: '', failure: 'missing' }), {}, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
+  });
+
+  it('preserves a wrong profile currency so the domain rejects Kilo end-to-end', async () => {
+    const io = profileRunner(JSON.stringify({ balance: 14.15, currency: 'USD' }));
+    const routed = await runRoute(io, { DANDELION_ROUTES_FILE: ROUTES_FILE }, { mode: 'headroom', why: true, now: NOW, zone: 'UTC' });
+    expect(routed.code).toBe(1);
+    expect(routed.out).toContain('kilo (balance USD14.15; requires dollar balance above $10.00)');
+    const panel = panelOf(await runApp(io, { NO_COLOR: '1' }, NOW), 'kilo');
+    expect(panel[1]).toBe('balance USD14.15'.padEnd(72));
+    expect(panel[1]).not.toContain('%');
   });
 
   it('reads the shipped routes.json when DANDELION_ROUTES_FILE is unset, and it holds every routed provider and high entry as a valid line', async () => {
@@ -2149,6 +2180,21 @@ describe('route eligibility state file', () => {
   function headerOf(frame: string, id: string): string | undefined {
     return frame.split('\n').find((line) => line.replace(/^▸ /, '').split(' ')[0] === id);
   }
+
+  it('wires the live Kilo launch through a fresh profile check', async () => {
+    const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(0);
+    const io = profileRunner(PROFILE);
+    const run = vi.spyOn(io.runner, 'run');
+    const dashboard = await settledDashboard(io, {});
+    dashboard.press('l');
+    await settleProbes();
+    const profiles = run.mock.calls.filter(([command, args]) => command === 'kilo' && args.join(' ') === 'profile --json');
+    expect(profiles.length).toBeGreaterThanOrEqual(2);
+    expect(run.mock.invocationCallOrder[run.mock.calls.indexOf(profiles[1])]).toBeLessThan(spawn.mock.invocationCallOrder[0]);
+    expect(spawn).toHaveBeenCalledWith({ command: 'kilo', args: ['--model', 'vendor/model-k', '--variant', 'max'], env: {} });
+    await quit(dashboard);
+    spawn.mockRestore();
+  });
 
   it('writes the usage history only from the live dashboard, never from --once or route', async () => {
     const historyFile = join(scratch, 'history', 'history.json');
@@ -2566,7 +2612,7 @@ describe('route eligibility state file', () => {
     mkdirSync(statePath, { recursive: true });
     expect(await routeWith(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'model-a max claude', routed: true });
     rmSync(statePath, { recursive: true });
-    writeState('{"claude": false, "claude-work": false, "agy": false, "kimi": false, "codex": false, "codex-animus": false}');
+    writeState('{"claude": false, "claude-work": false, "agy": false, "kimi": false, "codex": false, "codex-animus": false, "kilo": false}');
     expect(await routeWith(routedRunner(), { DANDELION_STATE_FILE: statePath }, { mode: 'headroom', now: NOW, zone: 'UTC' })).toEqual({ line: 'none', routed: false });
   });
 
@@ -2705,15 +2751,20 @@ describe('route eligibility state file', () => {
     await quit(dashboard);
   });
 
-  it('flashes kilo as not routable and writes nothing', async () => {
-    const dashboard = await settledDashboard(routedRunner(), {});
-    dashboard.press('k');
-    dashboard.press(' ');
-    expect(dashboard.lastFrame().split('\n').at(-1)).toBe('not routable (no usage windows)');
+  it('rejects Kilo toggles at the floor and allows them above it', async () => {
+    const low = await settledDashboard(routedRunner({ kilo: { stdout: JSON.stringify({ balance: 10 }), stderr: '' } }), {});
+    low.press('k');
+    low.press(' ');
+    expect(low.lastFrame().split('\n').at(-1)).toBe('not routable (balance $10.00; must be above $10.00)');
     await vi.advanceTimersByTimeAsync(2000);
-    expect(dashboard.lastFrame().split('\n').at(-1)).toBe('api balance · kilo · 0h0m ago');
+    expect(low.lastFrame().split('\n').at(-1)).toBe('api balance · kilo · 0h0m ago');
     expect(filesBesidesSnapshot(join(scratch, 'state'))).toEqual([]);
-    await quit(dashboard);
+    await quit(low);
+    const high = await settledDashboard(routedRunner(), {});
+    high.press('k');
+    high.press(' ');
+    expect(stateOf()).toEqual({ kilo: false });
+    await quit(high);
   });
 
   it.each<[string, (root: string) => string, (root: string) => void, (root: string) => string, (root: string) => void]>([
@@ -2947,7 +2998,7 @@ describe('junie panel', () => {
 
     it.each<[string, Record<string, string>, Record<string, string>, string, boolean]>([
       ['headroom', {}, junieTree(), 'model-g high junie', true],
-      ['headroom', {}, junieTree(newEvents(0)), 'model-g high junie', true],
+      ['headroom', {}, junieTree(newEvents(0)), 'none', false],
       ['headroom', { DANDELION_JUNIE_REFERENCE: '' }, junieTree(), 'none', false],
       ['headroom', {}, {}, 'none', false],
       ['high', {}, junieTree(newEvents(1000000)), 'none', false]
@@ -3056,7 +3107,7 @@ describe('hermes panel', () => {
     for (const name of names.filter((each) => each !== 'hermes')) expect(panelOf(output, name)).toEqual(panelOf(missing, name));
   });
 
-  it('renders junie at 30%, hermes at 75% and kilo at 14 of 20 under the frozen clock', async () => {
+  it('renders junie at 30%, hermes at 75% and the Kilo dollar balance under the frozen clock', async () => {
     const snapshot = JSON.stringify({
       kind: 'SessionA2uxEvent',
       completion: {
@@ -3079,7 +3130,7 @@ describe('hermes panel', () => {
     expect(lines.filter((line) => names.includes(line))).toEqual(names);
     expect(panelOf(output, 'junie').slice(1)).toEqual(['credits                             ######--------------  30%', 'snapshot 6h6m old', '701513 credits · junie']);
     expect(panelOf(output, 'hermes').slice(1)).toEqual([ROW_75, 'Plus · $5.50 of $22 · hermes']);
-    expect(panelOf(output, 'kilo').slice(1)).toEqual([`${'balance $14.15'.padEnd(35)} ${'#'.repeat(14)}${'-'.repeat(6)}  71%`.padEnd(72), 'api balance · kilo']);
+    expect(panelOf(output, 'kilo').slice(1)).toEqual(['balance $14.15'.padEnd(72), 'api balance · kilo']);
     expect(lines.every((line) => [...line].length <= 72)).toBe(true);
     expect(output).not.toContain(AGENT);
     expect(output).not.toContain(ACCESS);
@@ -3244,7 +3295,7 @@ describe('hermes panel', () => {
     it.each<[string, Outcome, Record<string, string>, string, boolean]>([
       ['headroom at 75%', { status: 200, body: JSON.stringify(account()) }, { '/auth.json': authJson() }, 'vendor/model-h xhigh hermes', true],
       ['headroom at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'vendor/model-h xhigh hermes', true],
-      ['headroom at 100%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 0 } })) }, { '/auth.json': authJson() }, 'vendor/model-h xhigh hermes', true],
+      ['headroom at 100%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 0 } })) }, { '/auth.json': authJson() }, 'none', false],
       ['headroom without auth', { status: 200, body: JSON.stringify(account()) }, {}, 'none', false],
       ['high at 0%', { status: 200, body: JSON.stringify(account({ subscription: { credits_remaining: 22 } })) }, { '/auth.json': authJson() }, 'none', false]
     ])('routes %s with only hermes available', async (mode, accountAnswer, files, line, routed) => {

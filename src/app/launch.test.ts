@@ -30,6 +30,14 @@ describe('launchOf', () => {
   it.each([['cursor', 'cursor-agent'], ['agy', 'agy'], ['kimi', 'kimi'], ['grok', 'grok'], ['junie', 'junie'], ['hermes', 'hermes']])('runs %s as %s with the model only', (account, command) => {
     expect(launchOf(`model-x high ${account}`, [], {}, '/h')).toEqual({ command, args: ['--model', 'model-x'], env: {} });
   });
+
+  it('runs Kilo with the pinned model and max variant', () => {
+    expect(launchOf('deepseek/deepseek-v4.1-flash-1017 max kilo', ['--', 'work'], {}, '/h')).toEqual({
+      command: 'kilo',
+      args: ['--model', 'deepseek/deepseek-v4.1-flash-1017', '--variant', 'max', '--', 'work'],
+      env: {}
+    });
+  });
 });
 
 describe('launchOf codex', () => {

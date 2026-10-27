@@ -15,7 +15,7 @@ const OUTER_TIMEOUT_MS = 60000;
 const HOUR_MS = 3600000;
 const CLEAR = '\x1b[H\x1b[2J';
 const ENTER = '\x1b[?1049h';
-const NOT_ROUTABLE = 'not routable (no usage windows)';
+const NOT_ROUTABLE = 'not routable (balance $10.00; must be above $10.00)';
 const NO_AUTH = 'no hermes auth — run hermes portal login';
 const EXPIRED = 'hermes token expired — run hermes once';
 const HTTP_401 = 'hermes account request failed: HTTP 401';
@@ -23,7 +23,7 @@ const AGENT = 'qa-dummy-hermes-agent-key-016';
 const ACCESS = 'qa-dummy-hermes-access-016';
 const CAPTION = 'Plus · $5.50 of $22 · hermes';
 const HELP = '↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?';
-const KILO_GAUGE = `${'balance $14.15'.padEnd(35)} ${'#'.repeat(14)}${'-'.repeat(6)}  71%`.padEnd(72);
+const KILO_BALANCE = 'balance $14.15'.padEnd(72);
 const NAMES = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const QUOTA = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
 const ACCOUNT_GET = `GET /api/oauth/account Bearer ${AGENT} application/json`;
@@ -50,7 +50,7 @@ const at = (h) => new Date(Date.now() + h * 3600000), iso = (h) => at(h).toISOSt
 const M = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
 const txt = (h) => { const d = at(h), H = d.getUTCHours(); return M[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + (H % 12 || 12) + ':' + String(d.getUTCMinutes()).padStart(2, '0') + (H < 12 ? 'am' : 'pm') + ' (UTC)'; };
 if (me === 'codex') { console.error('Logged in using an API key - sk-proj-***n5zQA'); process.exit(0); }
-if (me === 'kilo') { console.log('Balance: $14.15'); process.exit(0); }
+if (me === 'kilo') { if (a.join(' ') !== 'profile --json') process.exit(2); console.log(JSON.stringify({ balance: Number(process.env.Q_KILO ?? '14.15') })); process.exit(0); }
 if (me === 'claude') { const v = q(process.env.CLAUDE_CONFIG_DIR ? 'Q_WORK' : 'Q_CLAUDE'); if (!v) process.exit(1);
   const fable = v.length > 3 ? '\\nCurrent week (Fable): ' + v[3] + '% used · resets ' + txt(Number(v[4])) : '';
   console.log('Current session: ' + v[0] + '% used · resets ' + txt(3.2) + '\\nCurrent week (all models): ' + v[1] + '% used · resets ' + txt(Number(v[2])) + fable); process.exit(0); }
@@ -425,7 +425,7 @@ async function onceDashboard(ctx) {
   assertCredits(hermes[1], 75);
   assert.equal(hermes[2], CAPTION);
   const kilo = panelLines(result.stdout, 'kilo');
-  assert.equal(kilo[1], KILO_GAUGE);
+  assert.equal(kilo[1], KILO_BALANCE);
   assert.equal(kilo[2], 'api balance · kilo');
   assert.equal(panelLines(result.stdout, 'codex')[1], 'api-key billing · no usage windows');
   assertWidth(result.stdout);
@@ -458,8 +458,10 @@ async function routeCases(ctx) {
     ['live case hermes 0%', 'route', liveCase(100), { junieHome: ctx.junie }, 22, 72, 'vendor/model-h xhigh hermes', 0],
     ['live case junie 0% hermes 0%', 'route', liveCase(100), { junieHome: ctx.full }, 22, 72, 'model-g high junie', 0],
     ['live case --high', 'route --high', liveCase(100), { junieHome: ctx.junie }, 5.5, 72, 'model-h1 max claude', 0],
-    ['--high never uses hermes', 'route --high', {}, {}, 22, 72, 'none', 1],
-    ['nothing windowed is available', 'route', {}, { authFile: join(ctx.hermesDir, 'missing.json') }, 5.5, 72, 'none', 1]
+    ['--high never uses hermes or Kilo', 'route --high', {}, {}, 22, 72, 'none', 1],
+    ['nothing windowed falls back to Kilo', 'route', {}, { authFile: join(ctx.hermesDir, 'missing.json') }, 5.5, 72, 'vendor/model-k max kilo', 0],
+    ['Kilo at exactly 10 fails closed', 'route', {}, { authFile: join(ctx.hermesDir, 'missing.json'), extraEnv: { Q_KILO: '10' } }, 5.5, 72, 'none', 1],
+    ['Kilo below 10 fails closed', 'route', {}, { authFile: join(ctx.hermesDir, 'missing.json'), extraEnv: { Q_KILO: '9.99' } }, 5.5, 72, 'none', 1]
   ];
   for (const [label, args, usages, options, remaining, hours, line, code] of rows) {
     configure(ctx.portal, remaining, hours);
@@ -489,7 +491,7 @@ async function dashboardNotRoute(ctx) {
 
 async function liveBoxesKeysKiloAndClaude(ctx) {
   configure(ctx.portal);
-  const env = await envFor(ctx, liveCase(100), { junieHome: ctx.junie });
+  const env = await envFor(ctx, liveCase(100), { junieHome: ctx.junie, extraEnv: { Q_KILO: '10' } });
   const session = startLive(env);
   try {
     await waitSettled(session);

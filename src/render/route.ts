@@ -39,22 +39,40 @@ function percent(value: number): string {
   return `${Math.round(value)}%`;
 }
 
-function choiceText({ chosen, rivals }: RouteDecision, zone: string): string {
-  if (chosen === undefined) return `${NO_ROUTE}: no account can take the work`;
-  if (chosen.rule === 'evaporation') return `evaporation: ${chosen.id} ${chosen.label} ${percent(chosen.left)} left resets ${clockIn(zone, String(chosen.resetsAt))} before midnight`;
+function dollarBalance(usages: ProviderUsage[]): string {
+  const kilo = usages.find(({ id }) => id === 'kilo');
+  const balance = kilo?.status === 'ok' ? kilo.balance : undefined;
+  return balance === undefined ? 'unavailable' : `${balance.currency}${balance.amount.toFixed(2)}`;
+}
+
+function headroomText(chosen: { id: string; left: number }, rivals: RouteDecision['rivals']): string {
   const others = rivals.map(({ id, left }) => `${id} ${percent(left)}`).join(', ');
-  return `headroom: ${chosen.id} binding ${percent(chosen.left)} left${others === '' ? '' : ` (${others})`}`;
+  const suffix = others === '' ? '' : ` (${others})`;
+  return `headroom: ${chosen.id} binding ${percent(chosen.left)} left${suffix}`;
+}
+
+function choiceText({ chosen, rivals }: RouteDecision, zone: string, usages: ProviderUsage[]): string {
+  if (chosen === undefined) return `${NO_ROUTE}: no account can take the work`;
+  if (chosen.rule === 'balance') return `balance: kilo ${dollarBalance(usages)} available; launch requires a fresh balance above $10.00`;
+  if (chosen.rule === 'evaporation') return `evaporation: ${chosen.id} ${chosen.label} ${percent(chosen.left)} left resets ${clockIn(zone, String(chosen.resetsAt))} before midnight`;
+  return headroomText(chosen, rivals);
 }
 
 function trippedEntry({ id, label, usedPct, backAt }: Skipped['tripped'][number], now: string, zone: string): string {
   return `${id} (${label} ${percent(usedPct)}${backAt === undefined ? '' : `, back ${formatResetAt(backAt, now, zone)}`})`;
 }
 
-function skippedText({ tripped, ineligible, unavailable }: Skipped, now: string, zone: string): string {
+function unavailableEntry(id: string, usages: ProviderUsage[]): string {
+  if (id !== 'kilo') return id;
+  const balance = dollarBalance(usages);
+  return balance === 'unavailable' ? 'kilo (balance unavailable)' : `kilo (balance ${balance}; requires dollar balance above $10.00)`;
+}
+
+function skippedText({ tripped, ineligible, unavailable }: Skipped, now: string, zone: string, usages: ProviderUsage[]): string {
   const parts = [
     tripped.length > 0 ? `tripped: ${tripped.map((each) => trippedEntry(each, now, zone)).join(', ')}` : '',
     ineligible.length > 0 ? `ineligible: ${ineligible.join(', ')}` : '',
-    unavailable.length > 0 ? `unavailable: ${unavailable.join(', ')}` : ''
+    unavailable.length > 0 ? `unavailable: ${unavailable.map((id) => unavailableEntry(id, usages)).join(', ')}` : ''
   ];
   return parts.filter((part) => part !== '').join('; ');
 }
@@ -84,7 +102,7 @@ function explainHigh(lines: RouteLines, usages: ProviderUsage[], ineligible: str
 
 function explainHeadroom(lines: RouteLines, usages: ProviderUsage[], ineligible: string[], { now, zone }: RouteRequest): RouteOutput {
   const decision = routeDecision(usages, now, nextLocalMidnight(zone, now), ineligible);
-  return withExplanation(routeDecisionLine(lines, decision), [choiceText(decision, zone), skippedText(decision.skipped, now, zone)]);
+  return withExplanation(routeDecisionLine(lines, decision), [choiceText(decision, zone, usages), skippedText(decision.skipped, now, zone, usages)]);
 }
 
 function explained(lines: RouteLines, usages: ProviderUsage[], ineligible: string[], request: RouteRequest): RouteOutput {

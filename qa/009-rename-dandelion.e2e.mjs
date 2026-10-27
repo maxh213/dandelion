@@ -53,7 +53,7 @@ function claudeFixture(dir) {
 }
 
 function kiloFixture(balance) {
-  return `#!/bin/sh\n[ "$1" = "profile" ] || exit 2\necho 'Balance: $${balance}'\n`;
+  return `#!/bin/sh\n[ "$1" = "profile" ] && [ "$2" = "--json" ] || exit 2\necho '{"balance":${balance}}'\n`;
 }
 
 async function fixtureDir({ kimi = KIMI_EXITS, balance = '14.15' } = {}) {
@@ -199,7 +199,7 @@ async function newNamesWork(bin) {
   };
   const run = await exec(NPM, ['start', '--silent', '--', '--once'], env);
   assertDandelionDashboard(run);
-  assert.match(panel(run, 'kilo')[1], /^balance \$5\.00 +#{10}-{10} /);
+  assert.equal(panel(run, 'kilo')[1], 'balance $5.00'.padEnd(72));
   assert.equal(panel(run, 'kimi')[1], BAD_PORT);
   await assert.rejects(readFile(join(dir, 'kimi.args')), 'kimi was started');
   assert.equal(panel(run, 'grok')[1], NO_GROK);
@@ -256,7 +256,7 @@ async function oldNamesAreIgnored(bin) {
     };
     const run = await exec(NPM, ['start', '--silent', '--', '--once'], env);
     assertDandelionDashboard(run);
-    assert.match(panel(run, 'kilo')[1], /^balance \$5\.00 +#{5}-{15} /);
+    assert.equal(panel(run, 'kilo')[1], 'balance $5.00'.padEnd(72));
     assert.match(await readFile(join(dir, 'kimi.args'), 'utf8'), /--port 59177\b/);
     assertKimiOnDefaultPort(panel(run, 'kimi'), defaultPortFree);
     assert.equal(panel(run, 'grok')[1], NO_GROK);

@@ -11,6 +11,7 @@ import {
   probeClaudeStatus,
   probeCursorStatus,
   probeOpenAiStatus,
+  freshKiloBalance,
   providerProbes,
   type CommandRunner,
   type CommandRunnerResult,
@@ -421,8 +422,28 @@ function missingCommand(command: string): RunOutput {
   return { err: `dandelion: ${command}: command not found\n`, code: 127 };
 }
 
+const KILO_BALANCE_FLOOR = 10;
+
+function isKiloLaunch(request: CachedRouteRequest, routed: RouteOutput): boolean {
+  return request.mode === 'headroom' && routed.code === 0 && routed.out.trimEnd().endsWith(' kilo');
+}
+
+function launchableKilo(balance: number | undefined): boolean {
+  return balance !== undefined && balance > KILO_BALANCE_FLOOR;
+}
+
+async function authorizedRoute(io: ProbeIo, env: Record<string, string | undefined>, request: CachedRouteRequest, routes: Routes, usages: ProviderUsage[]): Promise<RouteOutput> {
+  if (routes.fault !== undefined) return renderRoutesFault(routes.fault);
+  const ineligible = eligibilityOf(io, env).ineligible();
+  const routed = renderRoute(routes.lines, usages, ineligible, request);
+  if (!isKiloLaunch(request, routed)) return routed;
+  const balance = await freshKiloBalance(io.runner);
+  if (launchableKilo(balance)) return routed;
+  return renderRoute(routes.lines, usages.filter(({ id }) => id !== 'kilo'), ineligible, request);
+}
+
 export async function runRun(io: ProbeIo, env: Record<string, string | undefined>, request: CachedRouteRequest, args: string[], spawner: RunSpawner): Promise<RunOutput> {
-  const routed = await runRoute(io, env, request);
+  const routed = await authorizedRoute(io, env, request, routesOf(env), await cachedUsages(io, env, request));
   if (routed.code !== 0) return { err: routed.code === 1 ? 'none\n' : routed.err, code: routed.code };
   const launch = launchOf(routed.out.trimEnd(), extraArgs(args), env, io.reader.homeDir());
   const status = await spawner.spawn(launch);
@@ -489,6 +510,7 @@ export function runLive(
     spawner: realRunSpawner,
     statusProbe: () => probeClaudeStatus(io, env),
     providerStatusProbes: providerStatusProbes(io, env),
+    freshKiloBalance: () => freshKiloBalance(io.runner),
     clipboard: openClipboard({ tryCommand: realCommandTry, write: screen.write.bind(screen) }),
     clock
   });

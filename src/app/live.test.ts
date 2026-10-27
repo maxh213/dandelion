@@ -17,7 +17,8 @@ const LINES = {
     junie: { standard: 'model-g high', max: 'model-g high' },
     hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' },
     codex: { standard: 'model-i high', max: 'model-i xhigh' },
-    'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' }
+    'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' },
+    kilo: { standard: 'deepseek/deepseek-v4.1-flash-1017 max', max: 'deepseek/deepseek-v4.1-flash-1017 max' }
   },
   high: { fable: 'model-h1 max', codex: 'model-i xhigh', cursor: 'model-f', opus: 'model-a max', grok: 'model-e xhigh', agy: 'model-c high' }
 };
@@ -67,10 +68,11 @@ type SessionOverrides = {
   routes?: Routes;
   statusProbe?: () => Promise<ClaudeStatus | undefined>;
   providerStatusProbes?: Record<string, () => Promise<ClaudeStatus | undefined>>;
+  freshKiloBalance?: () => Promise<number | undefined>;
 };
 
 function startSession(overrides: SessionOverrides = {}) {
-  const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, snapshotText, notifier, copy, spawn, routes, statusProbe, providerStatusProbes } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async (): Promise<CopyResult> => 'command', historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
+  const { ids, env, stopChildren, state, zone, rows, columns, hiddenText, hiddenSaves, viewText, viewSaves, historyText, historyWrites, snapshotWrites, snapshotText, notifier, copy, spawn, routes, statusProbe, providerStatusProbes, freshKiloBalance } = { ids: IDS, spawn: async () => 0, notifier: { notify: vi.fn() }, routes: { lines: LINES }, copy: async (): Promise<CopyResult> => 'command', historyText: '[]', historyWrites: true, snapshotWrites: true, env: { NO_COLOR: '1' }, stopChildren: vi.fn(async () => undefined), state: {}, zone: 'UTC', rows: 60, ...overrides };
   const clipboard = { copy: vi.fn(copy) };
   const spawner = { spawn: vi.fn(spawn), terminate: vi.fn<(signal: string) => Promise<void>>(async () => undefined) };
   const writes: string[] = [];
@@ -114,7 +116,7 @@ function startSession(overrides: SessionOverrides = {}) {
     replace: viewReplace
   });
   const viewSaved = () => viewReplace.mock.calls.map(([, text]) => JSON.parse(text));
-  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, launchOf: (line) => launchOf(line, [], env, '/home/u'), keyboard, signals, screen, stopChildren, eligibility, hidden, view, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe, providerStatusProbes });
+  const finished = startLive({ probes: probes.map(({ probe }) => probe), env, launchOf: (line) => launchOf(line, [], env, '/home/u'), keyboard, signals, screen, stopChildren, eligibility, hidden, view, history, snapshot, routes, zone, notifier, clipboard, spawner, statusProbe, providerStatusProbes, freshKiloBalance });
   const frames = () => writes.filter((text) => text.startsWith(CLEAR)).map((text) => text.slice(CLEAR.length));
   const settleRound = async (round: number, overrides: Record<string, Usage> = {}) => {
     probes.forEach(({ probe, calls }) => calls[round].resolve(overrides[probe.id] ?? usageOf(probe.id, calls[round].now)));
@@ -125,6 +127,7 @@ function startSession(overrides: SessionOverrides = {}) {
 
 const TAG = (lead: string) => `${lead}${' '.repeat(72 - [...lead].length - 11)}routing off`;
 const NO_WINDOWS: Usage = { id: 'kilo', displayName: 'kilo', planLabel: 'plan', windows: [], fetchedAt: START, status: 'ok' };
+const kiloBalance = (amount: number): Usage => ({ ...NO_WINDOWS, balance: { amount, currency: '$' } });
 
 function lineAfter(frame: string, header: string, offset: number): string | undefined {
   const lines = frame.split('\n');
@@ -1240,9 +1243,9 @@ describe('live session', () => {
     const count = session.frames().length;
     session.press(' ');
     expect(session.frames()).toHaveLength(count + 1);
-    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('not routable (no usage windows)');
+    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('not routable (Kilo balance unavailable)');
     await vi.advanceTimersByTimeAsync(1999);
-    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('not routable (no usage windows)');
+    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('not routable (Kilo balance unavailable)');
     await vi.advanceTimersByTimeAsync(1);
     expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('plan · kilo · 0h0m ago');
     ['k', 'k', 'k', 'k', 'k', 'k', ' '].forEach(session.press);
@@ -1261,7 +1264,7 @@ describe('live session', () => {
     await vi.advanceTimersByTimeAsync(500);
     session.press('k');
     session.press('k');
-    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('not routable (no usage windows)');
+    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('not routable (Kilo balance unavailable)');
     expect(lineAfter(session.lastFrame(), '▸ codex', 2)).toBe('plan · codex · 0h0m ago');
     await vi.advanceTimersByTimeAsync(1000);
     session.press(' ');
@@ -1285,9 +1288,42 @@ describe('live session', () => {
     await vi.advanceTimersByTimeAsync(1000);
     ['k', 'k', 'k', 'k', 'k', 'k', ' '].forEach(session.press);
     expect(session.saved().at(-1)).toEqual({ claude: false });
-    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('not routable (no usage windows)');
+    expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('not routable (Kilo balance unavailable)');
     await vi.advanceTimersByTimeAsync(1000);
     expect(lineAfter(session.lastFrame(), 'kilo', 2)).toBe('plan · kilo · 0h0m ago');
+    session.press('q');
+    await session.finished;
+  });
+
+  it.each([10, 9.99])('rejects a Kilo eligibility toggle at a dollar balance of %s', async (amount) => {
+    const session = startSession();
+    await session.settleRound(0, { kilo: kiloBalance(amount) });
+    session.press('k');
+    session.press(' ');
+    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe(`not routable (balance $${amount.toFixed(2)}; must be above $10.00)`);
+    expect(session.saved()).toEqual([]);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('rejects a Kilo eligibility toggle when the settled probe failed', async () => {
+    const unavailable: Usage = { ...NO_WINDOWS, status: 'unavailable', reason: 'profile failed' };
+    const session = startSession();
+    await session.settleRound(0, { kilo: unavailable });
+    session.press('k');
+    session.press(' ');
+    expect(lineAfter(session.lastFrame(), '▸ kilo', 2)).toBe('not routable (Kilo balance unavailable)');
+    expect(session.saved()).toEqual([]);
+    session.press('q');
+    await session.finished;
+  });
+
+  it('allows a Kilo eligibility toggle above the dollar floor', async () => {
+    const session = startSession();
+    await session.settleRound(0, { kilo: kiloBalance(10.01) });
+    session.press('k');
+    session.press(' ');
+    expect(session.saved().at(-1)).toEqual({ kilo: false });
     session.press('q');
     await session.finished;
   });
@@ -2467,6 +2503,72 @@ describe('re-probe after a reset', () => {
       expect(session.keyboard.resume).toHaveBeenCalledTimes(1);
       expect(session.frames().length).toBeGreaterThan(0);
       expect(session.probes.map(({ calls }) => calls.length)).toEqual(IDS.map(() => 2));
+      session.press('q');
+      await session.finished;
+    });
+
+    it('checks the Kilo balance freshly before a standard launch', async () => {
+      const freshKiloBalance = vi.fn(async () => 14.15);
+      const session = startSession({ ids: ['kilo'], freshKiloBalance });
+      await session.settleRound(0, { kilo: kiloBalance(10.01) });
+      session.press('l');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(freshKiloBalance).toHaveBeenCalledTimes(1);
+      expect(session.spawner.spawn).toHaveBeenCalledExactlyOnceWith({ command: 'kilo', args: ['--model', 'deepseek/deepseek-v4.1-flash-1017', '--variant', 'max'], env: {} });
+      session.press('q');
+      await session.finished;
+    });
+
+    it.each([10, 9.99, undefined])('fails closed and recomputes without Kilo when the fresh live balance is %s', async (fresh) => {
+      const freshKiloBalance = vi.fn(async () => fresh);
+      const session = startSession({ ids: ['kilo'], freshKiloBalance });
+      await session.settleRound(0, { kilo: kiloBalance(14.15) });
+      session.press('l');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(freshKiloBalance).toHaveBeenCalledTimes(1);
+      expect(session.spawner.spawn).not.toHaveBeenCalled();
+      expect(summary(session)).toBe('nothing to launch');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('recomputes without Kilo when the fresh live probe rejects', async () => {
+      const freshKiloBalance = vi.fn(() => Promise.reject(new Error('private profile failure')));
+      const session = startSession({ ids: ['kilo'], freshKiloBalance });
+      await session.settleRound(0, { kilo: kiloBalance(14.15) });
+      session.press('l');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.spawner.spawn).not.toHaveBeenCalled();
+      expect(summary(session)).toBe('nothing to launch');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('fails closed if the routes file becomes invalid during the fresh Kilo check', async () => {
+      const routes: Routes = { lines: LINES };
+      const freshKiloBalance = vi.fn(async () => {
+        Object.assign(routes, { lines: undefined, fault: { path: '/x/routes.json', problem: 'changed' } });
+        return 10;
+      });
+      const session = startSession({ ids: ['kilo'], routes, freshKiloBalance });
+      await session.settleRound(0, { kilo: kiloBalance(14.15) });
+      session.press('l');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(session.spawner.spawn).not.toHaveBeenCalled();
+      expect(summary(session)).toBe('nothing to launch');
+      session.press('q');
+      await session.finished;
+    });
+
+    it('never checks or launches Kilo for the high route', async () => {
+      const freshKiloBalance = vi.fn(async () => 14.15);
+      const session = startSession({ ids: ['kilo'], freshKiloBalance });
+      await session.settleRound(0, { kilo: kiloBalance(14.15) });
+      session.press('L');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(freshKiloBalance).not.toHaveBeenCalled();
+      expect(session.spawner.spawn).not.toHaveBeenCalled();
+      expect(summary(session)).toBe('nothing to launch');
       session.press('q');
       await session.finished;
     });

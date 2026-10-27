@@ -22,7 +22,7 @@ const at = (h) => new Date(Date.now() + h * 3600000), iso = (h) => at(h).toISOSt
 const M = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
 const txt = (h) => { const d = at(h), H = d.getUTCHours(); return M[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + (H % 12 || 12) + ':' + String(d.getUTCMinutes()).padStart(2, '0') + (H < 12 ? 'am' : 'pm') + ' (UTC)'; };
 if (me === 'codex') { console.error('Logged in using an API key - sk-proj-***n5zQA'); process.exit(0); }
-if (me === 'kilo') { console.log('Balance: $14.15'); process.exit(0); }
+if (me === 'kilo') { if (a.join(' ') !== 'profile --json') process.exit(2); console.log(JSON.stringify({ balance: 14.15 })); process.exit(0); }
 if (me === 'claude') { const v = q(process.env.CLAUDE_CONFIG_DIR ? 'Q_WORK' : 'Q_CLAUDE'); if (!v) process.exit(1);
   const fable = v.length > 3 ? '\\nCurrent week (Fable): ' + v[3] + '% used · resets ' + txt(Number(v[4])) : '';
   console.log('Current session: ' + v[0] + '% used · resets ' + txt(3.2) + '\\nCurrent week (all models): ' + v[1] + '% used · resets ' + txt(Number(v[2])) + fable); process.exit(0); }
@@ -51,9 +51,9 @@ const TRIP_ROWS = [
   ['claude session at 90 loses rule 2', { claude: [90, 0, 72], grok: [95, 72] }, undefined, 'model-e xhigh grok', 0],
   ['a weekly at 95 does not trip (rule 1)', { kimi: [0, 95, 2], agy: [0, 0, 72] }, undefined, 'model-d max kimi', 0],
   ['a weekly at 92 does not trip (rule 2)', { grok: [92, 72] }, undefined, 'model-e xhigh grok', 0],
-  ['every routable account tripped', { claude: [90, 0, 72], agy: [99, 0, 72], kimi: [100, 0, 72] }, undefined, 'none', 1],
+  ['every windowed account tripped falls back to Kilo', { claude: [90, 0, 72], agy: [99, 0, 72], kimi: [100, 0, 72] }, undefined, 'vendor/model-k max kilo', 0],
   ['ineligible work and tripped claude', { claude: [95, 80, 2], work: [0, 80, 2], agy: [10, 10, 72] }, WORK_OFF, 'model-c high agy', 0],
-  ['only ineligible or tripped claude accounts', { claude: [95, 80, 2], work: [0, 80, 2] }, WORK_OFF, 'none', 1]
+  ['only ineligible or tripped claude accounts fall back to Kilo', { claude: [95, 80, 2], work: [0, 80, 2] }, WORK_OFF, 'vendor/model-k max kilo', 0]
 ];
 
 function liveCase(session) {

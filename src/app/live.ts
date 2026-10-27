@@ -60,6 +60,7 @@ type LiveOptions = {
   spawner: FixRunner;
   statusProbe?: () => Promise<ClaudeStatus | undefined>;
   providerStatusProbes?: Record<string, () => Promise<ClaudeStatus | undefined>>;
+  freshKiloBalance?: () => Promise<number | undefined>;
   clock?: () => string;
 };
 
@@ -92,6 +93,7 @@ type Session = LiveOptions & {
   endedAt: number;
   quitting: boolean;
   suspended: boolean;
+  launching: boolean;
   selected: number;
   graphing: boolean;
   notified: Set<string>;
@@ -422,7 +424,26 @@ function saveToggle(session: Session, index: number): void {
   else showFlash(session, index, NOT_SAVED);
 }
 
-function toggleSettled(session: Session, index: number, usage: LiveSlot['usage']): void {
+function okBalance(usage: NonNullable<LiveSlot['usage']>) {
+  if (usage.status !== 'ok') return undefined;
+  return usage.balance;
+}
+
+function kiloToggleProblem(usage: NonNullable<LiveSlot['usage']>): string | undefined {
+  const balance = okBalance(usage);
+  if (balance?.currency !== '$') return 'not routable (Kilo balance unavailable)';
+  if (!(balance.amount > 10)) return `not routable (balance $${balance.amount.toFixed(2)}; must be above $10.00)`;
+  return undefined;
+}
+
+function toggleKilo(session: Session, index: number, usage: NonNullable<LiveSlot['usage']>): void {
+  const problem = kiloToggleProblem(usage);
+  if (problem === undefined) saveToggle(session, index);
+  else showFlash(session, index, problem);
+}
+
+function toggleSettled(session: Session, index: number, usage: NonNullable<LiveSlot['usage']>): void {
+  if (session.probes[index].id === 'kilo') return toggleKilo(session, index, usage);
   if (isRoutable(usage)) saveToggle(session, index);
   else showFlash(session, index, NOT_ROUTABLE);
 }
@@ -542,11 +563,47 @@ async function runLaunch(session: Session, launch: Launch): Promise<void> {
   if (status === 'missing' && !session.quitting) showFlash(session, ROUTE_FLASH, `${launch.command}: command not found`);
 }
 
+function launchableKilo(balance: number | undefined): boolean {
+  return balance !== undefined && balance > 10;
+}
+
+function fallbackKiloLine(session: Session): string {
+  const settled = session.settled?.filter(({ id }) => id !== 'kilo');
+  return currentRouteLines({ ...viewOf(session), settled }, session.clock())?.[0] ?? NO_ROUTE;
+}
+
+async function authorizedKiloLine(session: Session, line: string): Promise<string> {
+  const balance = await session.freshKiloBalance?.().catch(() => undefined);
+  if (launchableKilo(balance)) return line;
+  return fallbackKiloLine(session);
+}
+
+async function launchKilo(session: Session, line: string): Promise<void> {
+  try {
+    const authorized = await authorizedKiloLine(session, line);
+    if (authorized === NO_ROUTE) showFlash(session, ROUTE_FLASH, NOTHING_TO_LAUNCH);
+    else await runLaunch(session, session.launchOf(authorized));
+  } finally {
+    session.launching = false;
+  }
+}
+
+function launchAuthorized(session: Session, line: string): void {
+  session.launching = true;
+  if (line.endsWith(' kilo')) {
+    void launchKilo(session, line);
+    return;
+  }
+  void runLaunch(session, session.launchOf(line)).finally(() => {
+    session.launching = false;
+  });
+}
+
 function launchLine(session: Session, which: 0 | 1): void {
   session.eligibility.reload();
   const line = currentRouteLines(viewOf(session), session.clock())?.[which];
   if (line === undefined || line === NO_ROUTE) showFlash(session, ROUTE_FLASH, NOTHING_TO_LAUNCH);
-  else void runLaunch(session, session.launchOf(line));
+  else void launchAuthorized(session, line);
 }
 
 function launchRoute(session: Session): void {
@@ -626,7 +683,7 @@ const ESC = String.fromCharCode(27);
 const TOKEN = new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]|${ESC}O[\\s\\S]|${ESC}[^[O${ESC}]|[\\s\\S]`, 'gu');
 
 function keysIgnored(session: Session): boolean {
-  return session.suspended || session.quitting;
+  return session.suspended || session.launching || session.quitting;
 }
 
 function press(session: Session, chunk: string): void {
@@ -674,6 +731,7 @@ export function startLive(options: LiveOptions): Promise<number> {
       reprobed: new Set(),
       quitting: false,
       suspended: false,
+      launching: false,
       terminators: [],
       done
     };

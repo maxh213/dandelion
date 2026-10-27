@@ -360,22 +360,19 @@ function remainingPct(balance: Balance, reference: number): number {
   return Math.min(100, Math.max(0, Math.round((balance.amount / reference) * 100)));
 }
 
-function balanceCells(balance: Balance, noColor: boolean, paint: (text: string, usedPct: number) => string, layout: Layout): string {
-  if (balance.reference === undefined) return renderEmptyGauge(noColor, layout.gauge);
+function balanceCells(balance: Balance & { reference: number }, noColor: boolean, paint: (text: string, usedPct: number) => string, layout: Layout): string {
   const remaining = remainingPct(balance, balance.reference);
   const gauge = paint(renderGauge(balance.amount, balance.reference, noColor, layout.gauge), 100 - remaining);
   return `${gauge} ${paint(`${remaining}%`.padStart(PERCENT_CELLS), 100 - remaining)}`;
 }
 
-function balanceTail(balance: Balance, layout: Layout): number {
-  return balance.reference === undefined ? layout.gauge : layout.gauge + 1 + PERCENT_CELLS;
-}
-
 function balanceLine(balance: Balance | undefined, noColor: boolean, paint: (text: string, usedPct: number) => string, layout: Layout): string {
   if (!balance) return repeatChar(' ', layout.width);
-  const label = fitLabel(`balance ${balance.currency}${balance.amount.toFixed(2)}`, layout.label);
-  const padding = repeatChar(' ', layout.width - layout.label - 1 - balanceTail(balance, layout));
-  return `${label} ${balanceCells(balance, noColor, paint, layout)}${padding}`;
+  const text = `balance ${balance.currency}${balance.amount.toFixed(2)}`;
+  if (balance.reference === undefined) return fitLabel(text, layout.width);
+  const label = fitLabel(text, layout.label);
+  const padding = repeatChar(' ', layout.width - layout.label - 1 - layout.gauge - 1 - PERCENT_CELLS);
+  return `${label} ${balanceCells({ ...balance, reference: balance.reference }, noColor, paint, layout)}${padding}`;
 }
 
 function usageStyle(noColor: boolean): (text: string, usedPct: number) => string {
@@ -403,8 +400,13 @@ function captionLine(usage: ProviderUsage, marks: PanelMarks): string {
 type OkUsage = Extract<ProviderUsage, { status: 'ok' }>;
 type FailedUsage = Exclude<ProviderUsage, OkUsage>;
 
+function panelBalance(usage: OkUsage): Balance | undefined {
+  const { balance } = usage;
+  return usage.id === 'kilo' && balance !== undefined ? { amount: balance.amount, currency: balance.currency } : balance;
+}
+
 function panelBody(usage: OkUsage, noColor: boolean, row: (window: UsageWindow, slot: number) => string, paint: (text: string, usedPct: number) => string, layout: Layout): string[] {
-  if (usage.windows.length === 0) return [usage.note ?? balanceLine(usage.balance, noColor, paint, layout)];
+  if (usage.windows.length === 0) return [usage.note ?? balanceLine(panelBalance(usage), noColor, paint, layout)];
   return usage.windows.map(row);
 }
 

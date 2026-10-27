@@ -22,7 +22,7 @@ const at = (h) => new Date(Date.now() + h * 3600000), iso = (h) => at(h).toISOSt
 const M = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
 const txt = (h) => { const d = at(h), H = d.getUTCHours(); return M[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + (H % 12 || 12) + ':' + String(d.getUTCMinutes()).padStart(2, '0') + (H < 12 ? 'am' : 'pm') + ' (UTC)'; };
 if (me === 'codex') { console.error('Logged in using an API key - sk-proj-***n5zQA'); process.exit(0); }
-if (me === 'kilo') { console.log('Balance: $14.15'); process.exit(0); }
+if (me === 'kilo') { if (a.join(' ') !== 'profile --json' || process.env.Q_KILO === 'fail') process.exit(1); const balance = process.env.Q_KILO ?? '14.15'; console.log(balance === 'missing' ? '{}' : JSON.stringify({ balance: Number(balance) })); process.exit(0); }
 if (me === 'claude') { const v = q(process.env.CLAUDE_CONFIG_DIR ? 'Q_WORK' : 'Q_CLAUDE'); if (!v) process.exit(1);
   console.log('Current session: ' + v[0] + '% used · resets ' + txt(4) + '\\nCurrent week (all models): ' + v[1] + '% used · resets ' + txt(v[2])); process.exit(0); }
 if (me === 'agy') { const v = q('Q_AGY'); if (!v) process.exit(1);
@@ -49,6 +49,9 @@ const ROUTE_ROWS = [
   ['kimi free on both', 'route', { kimi: [10, 10, 72], grok: [50, 72] }, 'model-d kimi'],
   ['headroom tie goes to dashboard order', 'route', { agy: [20, 20, 72], kimi: [20, 20, 72] }, 'model-c high agy'],
   ['an unavailable candidate is skipped', 'route', { cursor: [40, 72] }, 'model-f cursor'],
+  ['evaporation beats the Kilo balance fallback', 'route', { claude: [0, 86, 2], kilo: 14.15 }, 'model-a max claude'],
+  ['windowed headroom beats the Kilo balance fallback', 'route', { agy: [20, 20, 72], kilo: 14.15 }, 'model-c high agy'],
+  ['Kilo is the standard fallback after windowed candidates', 'route', { kilo: 10.01 }, 'vendor/model-k max kilo'],
   ['later arguments are ignored', 'route extra', { claude: [0, 86, 2] }, 'model-a max claude']
 ];
 
@@ -132,9 +135,9 @@ async function homeFor(usages) {
 
 async function run(ctx, args, usages, extraEnv = {}) {
   if (usages.cursor) ctx.cursor.usage = usages.cursor;
-  const q = Object.fromEntries(['claude', 'work', 'agy', 'kimi']
-    .filter((name) => usages[name])
-    .map((name) => [`Q_${name.toUpperCase()}`, usages[name].join(',')]));
+  const q = Object.fromEntries(['claude', 'work', 'agy', 'kimi', 'kilo']
+    .filter((name) => usages[name] !== undefined)
+    .map((name) => [`Q_${name.toUpperCase()}`, Array.isArray(usages[name]) ? usages[name].join(',') : String(usages[name])]));
   const home = await homeFor(usages);
   const env = {
     HOME: home,
@@ -168,9 +171,11 @@ async function routeRowsPrintOneLine(ctx) {
   }
 }
 
-async function nothingToRoute(ctx) {
-  const result = await run(ctx, 'route', {});
-  assert.deepEqual(result, { stdout: 'none\n', stderr: '', status: 1 }, describe('Nothing to route', result));
+async function kiloFloorFailsClosed(ctx) {
+  for (const kilo of [10, 9.99, 'missing', 'fail']) {
+    const result = await run(ctx, 'route', { kilo });
+    assert.deepEqual(result, { stdout: 'none\n', stderr: '', status: 1 }, describe(`Kilo ${kilo}`, result));
+  }
 }
 
 async function routeAnywhereButFirstKeepsTheDashboard(ctx) {
@@ -203,7 +208,7 @@ export default async function () {
   try {
     const ctx = { zone, cursor, bin: await fixtureDir() };
     await routeRowsPrintOneLine(ctx);
-    await nothingToRoute(ctx);
+    await kiloFloorFailsClosed(ctx);
     await routeAnywhereButFirstKeepsTheDashboard(ctx);
   } finally {
     cursor.close();

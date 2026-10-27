@@ -12,18 +12,29 @@ const PREFIX = 'dandelion-qa-011-';
 const OUTER_TIMEOUT_MS = 60000;
 const MINUTE_MS = 60000;
 const CLEAR = '\x1b[H\x1b[2J';
-const NOT_ROUTABLE = 'not routable (no usage windows)';
+const NOT_ROUTABLE = 'not routable (balance $10.00; must be above $10.00)';
 const TAG = 'routing off';
 
 const FIXTURE = `#!/usr/bin/env node
-const path = require('node:path');
-const me = path.basename(process.argv[1]);
+const fs = require('node:fs'), path = require('node:path');
+const me = path.basename(process.argv[1]), a = process.argv.slice(2);
 const q = (n) => process.env[n] && process.env[n].split(',').map(Number);
 const at = (h) => new Date(Number(process.env.Q_T0) + h * 3600000), iso = (h) => at(h).toISOString();
 const M = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
 const txt = (h) => { const d = at(h), H = d.getUTCHours(); return M[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + (H % 12 || 12) + ':' + String(d.getUTCMinutes()).padStart(2, '0') + (H < 12 ? 'am' : 'pm') + ' (UTC)'; };
 if (me === 'codex') { console.error('Logged in using an API key - sk-proj-***n5zQA'); process.exit(0); }
-if (me === 'kilo') { console.log('Balance: $14.15'); process.exit(0); }
+if (me === 'kilo') {
+  const log = process.env.Q_KILO_LOG;
+  const calls = log && fs.existsSync(log) ? fs.readFileSync(log, 'utf8').split('\\n').filter((line) => line === 'profile').length : 0;
+  if (a.join(' ') === 'profile --json') {
+    if (log) fs.appendFileSync(log, 'profile\\n');
+    const balances = (process.env.Q_KILO ?? '14.15').split(',');
+    console.log(JSON.stringify({ balance: Number(balances[Math.min(calls, balances.length - 1)]) }));
+    process.exit(0);
+  }
+  if (log) fs.appendFileSync(log, 'launch ' + a.join(' ') + '\\n');
+  process.exit(0);
+}
 if (me === 'claude') { const v = q(process.env.CLAUDE_CONFIG_DIR ? 'Q_WORK' : 'Q_CLAUDE'); if (!v) process.exit(1);
   console.log('Current session: ' + v[0] + '% used · resets ' + txt(4) + '\\nCurrent week (all models): ' + v[1] + '% used · resets ' + txt(v[2])); process.exit(0); }
 if (me === 'agy') { const v = q('Q_AGY'); if (!v) process.exit(1);
@@ -38,7 +49,7 @@ const ROUTE_ROWS = [
   ['ineligible never wins by evaporation', BOTH, { text: '{"claude": false}' }, 'model-c high agy', 0],
   ['ineligible never wins by headroom', { claude: [20, 30, 72], work: [10, 5, 72], agy: [15, 20, 72] }, { text: '{"claude-work": false, "nope": 1}' }, 'model-c high agy', 0],
   ['true and other values mean eligible', BOTH, { text: '{"claude": true, "agy": "no"}' }, 'model-a max claude', 0],
-  ['every windowed provider ineligible', { claude: [0, 86, 2] }, { text: '{"claude": false}' }, 'none', 1],
+  ['every windowed provider ineligible falls back to Kilo', { claude: [0, 86, 2] }, { text: '{"claude": false}' }, 'vendor/model-k max kilo', 0],
   ['corrupt file means all eligible', BOTH, { text: '{not json' }, 'model-a max claude', 0],
   ['JSON null means all eligible', BOTH, { text: 'null' }, 'model-a max claude', 0],
   ['a JSON array means all eligible', BOTH, { text: '[false]' }, 'model-a max claude', 0],
@@ -315,8 +326,8 @@ async function toggleOffAndOn(ctx) {
   }
 }
 
-async function kiloFlashesAndWritesNothing(ctx) {
-  const box = await sandbox(ctx, BOTH, { NO_COLOR: '1' });
+async function kiloFloorFlashesAndWritesNothing(ctx) {
+  const box = await sandbox(ctx, BOTH, { NO_COLOR: '1', Q_KILO: '10' });
   const run = startLive(box.env);
   try {
     await waitSettled(run);
@@ -327,7 +338,7 @@ async function kiloFlashesAndWritesNothing(ctx) {
     run.child.stdin.write(' ');
     const caption = (frame) => panelLines(frame, 'kilo')[2];
     const indexWhere = (from, text) => frames(run).findIndex((frame, index) => index >= from && (caption(frame) ?? '').startsWith(text));
-    await waitFor(run, () => indexWhere(firstAfter, NOT_ROUTABLE) >= 0, 10000, 'kilo not routable flash');
+    await waitFor(run, () => indexWhere(firstAfter, NOT_ROUTABLE) >= 0, 10000, 'kilo floor flash');
     const flashed = indexWhere(firstAfter, NOT_ROUTABLE);
     await waitFor(run, () => indexWhere(flashed, 'api balance · kilo') >= 0, 10000, 'kilo caption back');
     const back = indexWhere(flashed, 'api balance · kilo');
@@ -342,6 +353,25 @@ async function kiloFlashesAndWritesNothing(ctx) {
     run.child.kill();
   }
   assert.equal(await exists(box.statePath), false, 'the kilo toggle wrote state');
+}
+
+async function kiloRun(ctx, balances) {
+  const box = await sandbox(ctx, {});
+  box.env.Q_KILO = balances;
+  box.env.Q_KILO_LOG = join(box.tmp, 'kilo.calls');
+  const result = await node(['run'], box.env);
+  const calls = (await readFile(box.env.Q_KILO_LOG, 'utf8')).split('\n').filter(Boolean);
+  return { result, calls };
+}
+
+async function kiloLaunchChecksFreshBalance(ctx) {
+  const launched = await kiloRun(ctx, '14.15,14.15');
+  assert.deepEqual(launched.result, { stdout: '', stderr: '', status: 0 }, describe('fresh Kilo launch', launched.result));
+  assert.deepEqual(launched.calls, ['profile', 'profile', 'launch --model vendor/model-k --variant max']);
+
+  const dropped = await kiloRun(ctx, '14.15,10');
+  assert.deepEqual(dropped.result, { stdout: '', stderr: 'none\n', status: 1 }, describe('fresh Kilo balance at floor', dropped.result));
+  assert.deepEqual(dropped.calls, ['profile', 'profile']);
 }
 
 async function assertNoQaProcessLeft() {
@@ -361,7 +391,8 @@ export default async function () {
     await defaultStateFilePath(ctx);
     await onceShowsTagAndNeverWrites(ctx);
     await toggleOffAndOn(ctx);
-    await kiloFlashesAndWritesNothing(ctx);
+    await kiloFloorFlashesAndWritesNothing(ctx);
+    await kiloLaunchChecksFreshBalance(ctx);
   } finally {
     await Promise.all(temps.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   }

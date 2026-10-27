@@ -16,7 +16,7 @@ const HOUR_MS = 3600000;
 const AGENT = 'qa-dummy-hermes-agent-key-021';
 const ACCESS = 'qa-dummy-hermes-access-021';
 const QUOTA = 'com.intellij.ml.llm.matterhorn.ej.app.cli.standalone.tui.app.state.session.TaskQuotaSnapshot';
-const ENV_NAMES = { claude: 'Q_CLAUDE', work: 'Q_WORK', agy: 'Q_AGY', kimi: 'Q_KIMI' };
+const ENV_NAMES = { claude: 'Q_CLAUDE', work: 'Q_WORK', agy: 'Q_AGY', kimi: 'Q_KIMI', kilo: 'Q_KILO' };
 const CLEAR = '\x1b[H\x1b[2J';
 const DIM = '\x1b[90m';
 const RESET = '\x1b[0m';
@@ -30,7 +30,7 @@ const at = (h) => new Date(Date.now() + h * 3600000), iso = (h) => at(h).toISOSt
 const M = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
 const txt = (h) => { const d = at(h), H = d.getUTCHours(); return M[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + (H % 12 || 12) + ':' + String(d.getUTCMinutes()).padStart(2, '0') + (H < 12 ? 'am' : 'pm') + ' (UTC)'; };
 if (me === 'codex') { console.error('Logged in using an API key - sk-proj-***n5zQA'); process.exit(0); }
-if (me === 'kilo') { console.log('Balance: $14.15'); process.exit(0); }
+if (me === 'kilo') { if (a.join(' ') !== 'profile --json' || process.env.Q_KILO === 'fail') process.exit(1); const balance = process.env.Q_KILO ?? '14.15'; console.log(balance === 'missing' ? '{}' : JSON.stringify({ balance: Number(balance) })); process.exit(0); }
 if (me === 'claude') { const v = q(process.env.CLAUDE_CONFIG_DIR ? 'Q_WORK' : 'Q_CLAUDE'); if (!v) process.exit(1);
   const fable = v.length > 3 ? '\\nCurrent week (Fable): ' + v[3] + '% used · resets ' + txt(Number(v[4])) : '';
   console.log('Current session: ' + v[0] + '% used · resets ' + txt(3.2) + '\\nCurrent week (all models): ' + v[1] + '% used · resets ' + txt(Number(v[2])) + fable); process.exit(0); }
@@ -70,7 +70,13 @@ const ROUTE_ROWS = [
   ['junie tie-breaker', {}, { junie: 0, hermes: 0 }, 'model-g high junie', 0],
   ['hermes', {}, { hermes: 75 }, 'vendor/model-h xhigh hermes', 0],
   ['014 live case', LIVE_CASE, { junie: 30, hermes: 75 }, 'model-e xhigh grok', 0],
-  ['nothing routable', {}, {}, 'none', 1]
+  ['Kilo follows evaporation and headroom', { claude: [0, 86, 2] }, {}, 'model-a max claude', 0],
+  ['Kilo is the standard balance fallback', { kilo: 10.01 }, {}, 'vendor/model-k max kilo', 0],
+  ['Kilo at exactly 10 is closed', { kilo: 10 }, {}, 'none', 1],
+  ['Kilo below 10 is closed', { kilo: 9.99 }, {}, 'none', 1],
+  ['a missing Kilo balance is closed', { kilo: 'missing' }, {}, 'none', 1],
+  ['a failed Kilo profile is closed', { kilo: 'fail' }, {}, 'none', 1],
+  ['nothing routable', { kilo: 10 }, {}, 'none', 1]
 ];
 
 const HIGH_ROWS = [
@@ -91,13 +97,13 @@ const KEY_ORDER_ROWS = [
 
 const KEY_FAULTS = [
   ['provider missing', (f) => delete f.route.hermes, 'hermes'],
+  ['Kilo missing', (f) => delete f.route.kilo, 'kilo'],
   ['high entry missing', (f) => delete f.high.opus, 'opus'],
   ['max missing', (f) => delete f.route.agy.max, 'agy'],
   ['entry not an object', (f) => (f.route.claude = 'model-a high'), 'claude'],
   ['empty line', (f) => (f.route.kimi.standard = ''), 'kimi'],
   ['not a string', (f) => (f.high.grok = 4), 'grok'],
   ['provider typo', (f) => (f.route['claude-wrok'] = f.route.claude), 'claude-wrok'],
-  ['kilo is not routed', (f) => (f.route.kilo = f.route.cursor), 'kilo'],
   ['unknown high name', (f) => (f.high.sonnet = 'model-x'), 'sonnet'],
   ['unknown top-level key', (f) => (f.extra = {}), 'extra'],
   ['unknown entry key', (f) => (f.route.cursor.maxx = 'model-f'), 'maxx'],
@@ -110,7 +116,7 @@ const KEY_FAULTS = [
   ['high not an object', (f) => (f.high = 'x'), 'high']
 ];
 
-const ROUTED = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes'];
+const ROUTED = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
 const CHAIN = ['fable', 'codex', 'cursor', 'opus', 'grok', 'agy'];
 
 const temps = [];
@@ -261,8 +267,8 @@ async function envFor(ctx, usages, { credits = {}, routes = ROUTES_FILE, path = 
   if (usages.cursor) ctx.cursor.usage = usages.cursor;
   if (credits.hermes !== undefined) ctx.portal.remaining = 22 * (1 - credits.hermes / 100);
   const vars = Object.fromEntries(Object.entries(ENV_NAMES)
-    .filter(([name]) => usages[name])
-    .map(([name, variable]) => [variable, usages[name].join(',')]));
+    .filter(([name]) => usages[name] !== undefined)
+    .map(([name, variable]) => [variable, Array.isArray(usages[name]) ? usages[name].join(',') : String(usages[name])]));
   const home = await homeFor(usages);
   const env = {
     HOME: home,
@@ -356,6 +362,8 @@ async function shippedLines(ctx) {
     assertLine(`shipped ${label} claude evaporates`, await run(ctx, 'route', { claude: [0, 86, 2] }, { routes }), `${shipped.route.claude.max} claude`);
     assertLine(`shipped ${label} --high opus`, await run(ctx, 'route --high', { claude: high(10, 10, 95) }, { routes }), `${shipped.high.opus} claude`);
     assertLine(`shipped ${label} grok`, await run(ctx, 'route', { grok: [50, 72] }, { routes }), `${shipped.route.grok.standard} grok`);
+    assertLine(`shipped ${label} Kilo fallback`, await run(ctx, 'route', { kilo: 14.15 }, { routes }), 'deepseek/deepseek-v4.1-flash-1017 max kilo');
+    assert.equal(shipped.route.kilo.standard, shipped.route.kilo.max);
   }
 }
 

@@ -21,13 +21,17 @@ type Env = Record<string, string | undefined>;
 
 type AccountUsage = { planLabel: string; windows: UsageWindow[] };
 
+type KeyLimit = { limit: number; remaining: number; reset: unknown };
+
 const ID = 'claude-deepseek';
 const PLAN = 'claude · deepseek';
 const NO_CONFIG = 'no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek claude';
 const NO_LIMIT = 'openrouter key has no spending limit';
 const KEY_URL = 'https://openrouter.ai/api/v1/key';
+const CREDITS_URL = 'https://openrouter.ai/api/v1/credits';
 const TIMEOUT_MS = 10000;
 const REQUEST = 'openrouter key request';
+const CREDITS_REQUEST = 'openrouter credits request';
 const PERIODS = new Set(['daily', 'weekly', 'monthly']);
 
 function configDir(env: Env, homeDir: string): string {
@@ -96,32 +100,44 @@ function resetsAt(reset: unknown, now: string): string | undefined {
   return reset === 'monthly' ? monthlyReset(instant) : undefined;
 }
 
-function money(period: string, remaining: number, limit: number): string {
-  return `${period} · $${remaining.toFixed(2)} of $${limit.toFixed(2)}`;
+function money(period: string, key: KeyLimit, balance: number): string {
+  return `${period} · $${key.remaining.toFixed(2)} of $${key.limit.toFixed(2)} · balance $${balance.toFixed(2)}`;
 }
 
 function windowOf(period: string, remaining: number, limit: number, reset: string | undefined): UsageWindow {
   return withReset({ label: period, kind: 'weekly', usedPct: usedPctFromRemaining(remaining, limit) }, reset);
 }
 
-function usageFrom(data: unknown, now: string): AccountUsage {
+function keyLimitOf(data: unknown): KeyLimit {
   const limit = limitOf(fieldOf(data, 'limit'));
   if (limit === null) throw new ProbeUnavailable(NO_LIMIT);
-  const remaining = remainingOf(fieldOf(data, 'limit_remaining'));
-  const reset = fieldOf(data, 'limit_reset');
-  const period = periodOf(reset);
-  return { planLabel: money(period, remaining, limit), windows: [windowOf(period, remaining, limit, resetsAt(reset, now))] };
+  return { limit, remaining: remainingOf(fieldOf(data, 'limit_remaining')), reset: fieldOf(data, 'limit_reset') };
 }
 
-function accountOf(body: string, now: string): AccountUsage {
-  return usageFrom(fieldOf(parseJson(body), 'data'), now);
+function balanceOf(data: unknown): number {
+  const credits = finiteNumber(fieldOf(data, 'total_credits'));
+  const usage = finiteNumber(fieldOf(data, 'total_usage'));
+  if (credits === undefined || usage === undefined) throw new ProbeUnavailable(USAGE_PARSE_FAILURE);
+  return Math.max(0, credits - usage);
+}
+
+function usageFrom(key: KeyLimit, balance: number, now: string): AccountUsage {
+  const period = periodOf(key.reset);
+  const left = Math.min(key.remaining, balance);
+  return { planLabel: money(period, key, balance), windows: [windowOf(period, left, key.limit, resetsAt(key.reset, now))] };
+}
+
+async function readData(fetcher: DeepseekIo['fetcher'], url: string, request: string, headers: Record<string, string>): Promise<unknown> {
+  const outcome = await fetcher.get(url, headers, TIMEOUT_MS);
+  return fieldOf(parseJson(successBody(outcome, request, TIMEOUT_MS)), 'data');
 }
 
 async function readAccount(io: DeepseekIo, env: Env, now: string): Promise<AccountUsage> {
   const token = await readToken(io.reader, configDir(env, io.reader.homeDir()));
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'User-Agent': 'dandelion' };
-  const outcome = await io.fetcher.get(KEY_URL, headers, TIMEOUT_MS);
-  return accountOf(successBody(outcome, REQUEST, TIMEOUT_MS), now);
+  const key = keyLimitOf(await readData(io.fetcher, KEY_URL, REQUEST, headers));
+  const balance = balanceOf(await readData(io.fetcher, CREDITS_URL, CREDITS_REQUEST, headers));
+  return usageFrom(key, balance, now);
 }
 
 export async function probeClaudeDeepseek(io: DeepseekIo, env: Env, now: string): Promise<ProviderUsage> {

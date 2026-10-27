@@ -40,7 +40,8 @@ function claudeFixture() {
   return `#!/bin/sh\nprintf '%s\\n' ${quoted}\n`;
 }
 
-const KILO_FIXTURE = "#!/bin/sh\n[ \"$1\" = \"profile\" ] || exit 2\necho 'Balance: $14.15'\n";
+const KILO_FIXTURE = "#!/bin/sh\n[ \"$1\" = \"profile\" ] && [ \"$2\" = \"--json\" ] || exit 2\necho '{\"balance\":14.15}'\n";
+const KILO_BALANCE = 'balance $14.15'.padEnd(72);
 
 async function writeExecutable(dir, name, body) {
   await writeFile(join(dir, name), body);
@@ -100,7 +101,7 @@ async function threeProvidersInOrder(dir) {
   assert.ok(lines.indexOf('agy · agy') > lines.indexOf('agy'), 'agy caption missing');
   assert.ok(lines.indexOf('api balance · kilo') > lines.indexOf('kilo'), 'kilo caption missing');
   assert.ok(stdout.includes(`${ESC}90mclaude · personal · claude`), 'claude caption is not dim');
-  assert.ok(plain.includes(`${'balance $14.15'.padEnd(35)} ${'█'.repeat(14)}${'░'.repeat(6)}  71%`), `kilo gauge changed:\n${plain}`);
+  assert.ok(plain.includes(`\nkilo\n${KILO_BALANCE}\napi balance · kilo\n`), `Kilo is not a balance-only panel:\n${plain}`);
   assert.match(plain, new RegExp(`^weekly {30}[█░│]{20}  86% ${COUNTDOWN}$`, 'm'));
   assert.match(plain, new RegExp(`^session {29}[█░│]{20}   3% ${COUNTDOWN}$`, 'm'));
   assert.match(plain, new RegExp(`^weekly Fable {24}[█│]{20} 100% ${COUNTDOWN}$`, 'm'));
@@ -136,7 +137,7 @@ async function noColorRows(dir) {
   assert.match(stdout, new RegExp(`^weekly {30}[#|-]{20}  86% ${COUNTDOWN}$`, 'm'));
   assert.match(stdout, /^Gemini · weekly {21}[|-]{20}   0% ↻ (7d0h|6d23h)$/m);
   assert.match(stdout, /^Claude\+GPT · weekly {17}[|-]{20}   0% ↻ (7d0h|6d23h)$/m);
-  assert.ok(stdout.includes(`${'balance $14.15'.padEnd(35)} ${'#'.repeat(14)}${'-'.repeat(6)}  71%`), 'kilo gauge not ASCII');
+  assert.ok(stdout.includes(`\nkilo\n${KILO_BALANCE}\napi balance · kilo\n`), 'Kilo has a synthetic gauge or window');
   assert.ok(/^[\x0a\x20-\x7e↻·…—→]*$/.test(stdout), `non-ASCII beyond ↻ · … — →:\n${stdout}`);
   assertWidth(stdout);
 }

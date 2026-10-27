@@ -111,7 +111,7 @@ describe('terminal renderer', () => {
     expect(renderEmptyGauge(false)).toBe('░░░░░░░░░░░░░░░░░░░░');
   });
 
-  it('renders ok panel', () => {
+  it('strips a legacy reference from a cached Kilo panel', () => {
     const usage: ProviderUsage = {
       id: 'kilo',
       displayName: 'kilo',
@@ -123,7 +123,8 @@ describe('terminal renderer', () => {
     const panel = renderPanelOk(usage, true, NOW, PLAIN);
     expect(panel).toContain('kilo');
     expect(panel).toContain('$14.15');
-    expect(panel).toContain('##############------');
+    expect(panel).toContain('balance $14.15'.padEnd(72));
+    expect(panel).not.toContain('%');
   });
 
   it('renders ok panel with no reference', () => {
@@ -136,13 +137,14 @@ describe('terminal renderer', () => {
       balance: { amount: 14.15, currency: '$' }
     };
     const panel = renderPanelOk(usage, true, NOW, PLAIN);
-    expect(panel).toContain('--------------------');
+    expect(panel).toContain(`balance $14.15${' '.repeat(72 - 'balance $14.15'.length)}`);
+    expect(panel).not.toContain('%');
   });
 
-  describe('kilo balance row', () => {
+  describe('reference balance row', () => {
     const kilo = (amount: number, reference?: number): ProviderUsage => ({
-      id: 'kilo',
-      displayName: 'kilo',
+      id: 'other',
+      displayName: 'other',
       windows: [],
       fetchedAt: 'now',
       status: 'ok',
@@ -156,7 +158,6 @@ describe('terminal renderer', () => {
       const column = (row: string): number => strip(row).search(/[#█░-]{20}/);
       expect(column(balanceRow(kilo(14.15, 20), noColor))).toBe(36);
       expect(column(balanceRow(kilo(14.15, 20), noColor))).toBe(column(weeklyRow(noColor)));
-      expect(column(balanceRow(kilo(14.15), noColor))).toBe(column(weeklyRow(noColor)));
     });
 
     it('fills the row to exactly the dashboard width with a percent column', () => {
@@ -183,9 +184,10 @@ describe('terminal renderer', () => {
       expect(strip(balanceRow(kilo(-1, 20), true))).toContain('  0%');
     });
 
-    it('keeps an empty gauge without a percent when there is no reference', () => {
+    it('shows only the dollar balance without a reference', () => {
       const row = balanceRow(kilo(14.15), true);
-      expect(row).toBe(`${'balance $14.15'.padEnd(35)} ${'-'.repeat(20)}`.padEnd(72));
+      expect(row).toBe('balance $14.15'.padEnd(72));
+      expect(row).not.toMatch(/[%#█░-]/);
     });
   });
 
@@ -316,9 +318,9 @@ describe('terminal renderer', () => {
       fetchedAt: 'now',
       status: 'ok',
       snapshotAt: '2026-09-10T17:14:22.812Z',
-      balance: { amount: 14.15, currency: '$', reference: 20 }
+      balance: { amount: 14.15, currency: '$' }
     };
-    expect(renderPanelOk(usage, false, NOW, PLAIN).split('\n')[2]).toBe(`\x1b[90m${'balance $14.15'.padEnd(35)} ${'█'.repeat(14)}${'░'.repeat(6)}  71%${' '.repeat(11)}${RESET}`);
+    expect(renderPanelOk(usage, false, NOW, PLAIN).split('\n')[2]).toBe(`\x1b[90m${'balance $14.15'.padEnd(72)}${RESET}`);
   });
 
   it('renders unavailable panel', () => {
@@ -346,7 +348,7 @@ describe('terminal renderer', () => {
         windows: [],
         fetchedAt: 'now',
         status: 'ok',
-        balance: { amount: 14.15, currency: '$', reference: 20 }
+        balance: { amount: 14.15, currency: '$' }
       },
       {
         id: 'other',
@@ -359,7 +361,7 @@ describe('terminal renderer', () => {
     ];
     const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z', [], 'UTC');
     expect(dash).toContain('DANDELION');
-    expect(dash).toContain('##############------');
+    expect(dash).toContain('balance $14.15'.padEnd(72));
     expect(dash).toContain('other\nProbe crashed');
 
     const dashColor = renderDashboard(usages, false, '2026-09-13T10:00:00.000Z', [], 'UTC');
@@ -522,7 +524,7 @@ describe('live frame', () => {
       { label: 'auto', kind: 'weekly', usedPct: 32, resetsAt: '2026-09-30T16:45:06.000Z' },
       { label: 'api', kind: 'weekly', usedPct: 16, resetsAt: '2026-09-30T16:45:06.000Z' }
     ]),
-    okUsage('kilo', [], { balance: { amount: 14.15, currency: '$', reference: 20 } })
+    okUsage('kilo', [], { balance: { amount: 14.15, currency: '$' } })
   ];
   const summaryOf = (usages: ProviderUsage[]) => renderLiveFrame(viewOf(usages), true, NOW).split('\n')[1];
 
@@ -858,7 +860,7 @@ describe('live frame', () => {
     });
 
     it('renders a stale balance panel without windows', () => {
-      const stale = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: NOW, status: 'ok' as const, snapshotAt: '2026-09-01T10:00:00Z', balance: { amount: 5, currency: '$', reference: 10 } };
+      const stale = { id: 'kilo', displayName: 'kilo', windows: [], fetchedAt: NOW, status: 'ok' as const, snapshotAt: '2026-09-01T10:00:00Z', balance: { amount: 5, currency: '$' } };
       expect(renderPanelOk(stale, true, NOW, PLAIN)).toContain('balance $5.00');
     });
 
@@ -916,7 +918,7 @@ describe('live frame', () => {
       okUsage('cursor', [win('total', 'weekly', 80), win('auto', 'weekly', 80), win('api', 'weekly', 80)], { planLabel: 'Ultra' }),
       down('junie', 'no junie quota snapshot — run junie once'),
       down('hermes', 'no hermes auth — run hermes portal login'),
-      okUsage('kilo', [], { planLabel: 'api balance', balance: { amount: 14.15, currency: '$', reference: 20 } })
+      okUsage('kilo', [], { planLabel: 'api balance', balance: { amount: 14.15, currency: '$' } })
     ];
     const tenPanelView = (extra: Partial<LiveView> = {}): LiveView => {
       const usages = tenPanels();
@@ -965,7 +967,7 @@ describe('live frame', () => {
         'hermes · hermes · 0h0m ago',
         RULE,
         '▸ kilo',
-        `${'balance $14.15'.padEnd(35)} ##############------  71%`.padEnd(72),
+        'balance $14.15'.padEnd(72),
         'api balance · kilo · 0h0m ago'
       ]);
       expect(frameOf({ selected: 6 })).toEqual([

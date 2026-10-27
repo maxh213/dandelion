@@ -42,6 +42,7 @@ const LINES: RouteLines = {
     cursor: { standard: 'model-f', max: 'model-f' },
     junie: { standard: 'model-g high', max: 'model-g high' },
     hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' },
+    kilo: { standard: 'vendor/model-k high', max: 'vendor/model-k max' },
     codex: { standard: 'model-i high', max: 'model-i xhigh' },
     'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' }
   },
@@ -100,6 +101,7 @@ const F: RouteLines = {
     cursor: { standard: 'model-f', max: 'model-f' },
     junie: { standard: 'model-g high', max: 'model-g high' },
     hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' },
+    kilo: { standard: 'vendor/model-k high', max: 'vendor/model-k max' },
     codex: { standard: 'model-i high', max: 'model-i xhigh' },
     'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' }
   },
@@ -141,12 +143,55 @@ describe('routeLine', () => {
     return routeLine(lines, candidates.split('; ').map(usageOf), NOW, MIDNIGHT, ineligible);
   }
 
+  function kiloOf(amount?: number, currency = '$'): ProviderUsage {
+    return { id: 'kilo', displayName: 'kilo', fetchedAt: NOW, windows: [], status: 'ok', ...(amount === undefined ? {} : { balance: { amount, currency } }) };
+  }
+
+  it.each<[number | undefined, string, string]>([
+    [10.01, '$', 'vendor/model-k high kilo'],
+    [10, '$', 'none'],
+    [9.99, '$', 'none'],
+    [0, '$', 'none'],
+    [-1, '$', 'none'],
+    [Number.NaN, '$', 'none'],
+    [11, 'USD', 'none'],
+    [undefined, '$', 'none']
+  ])('routes Kilo only for a dollar balance strictly above 10: %s %s', (amount, currency, line) => {
+    expect(routeLine(LINES, [kiloOf(amount, currency)], NOW, MIDNIGHT, [])).toBe(line);
+  });
+
+  it('uses Kilo as a balance-only standard fallback with no synthetic score or window', () => {
+    const decision = routeDecision([kiloOf(14.15)], NOW, MIDNIGHT, []);
+    expect(decision.chosen).toEqual({ rule: 'balance', id: 'kilo' });
+    expect(decision.chosen).not.toHaveProperty('left');
+    expect(decision.chosen).not.toHaveProperty('label');
+    expect(decision.chosen).not.toHaveProperty('resetsAt');
+    expect(decision.rivals).toEqual([]);
+    expect(decision.skipped.unavailable).not.toContain('kilo');
+  });
+
+  it('prioritizes evaporation and then windowed headroom over Kilo', () => {
+    const kilo = kiloOf(14.15);
+    const evaporating = usageOf('claude: weekly 86 @2026-09-14T20:00:00.000Z');
+    const headroom = usageOf('agy: rolling 40 @-');
+    expect(routeLine(LINES, [kilo, evaporating, headroom], NOW, MIDNIGHT, [])).toBe('model-a max claude');
+    expect(routeLine(LINES, [kilo, headroom], NOW, MIDNIGHT, [])).toBe('model-c high agy');
+  });
+
+  it('ignores Kilo windows, probe failures and ineligibility, and never routes it high', () => {
+    const withSyntheticWindow = { ...kiloOf(14.15), windows: [{ label: 'weekly', kind: 'weekly' as const, usedPct: 99, resetsAt: '2026-09-14T20:00:00.000Z' }] };
+    expect(routeLine(LINES, [withSyntheticWindow], NOW, MIDNIGHT, [])).toBe('vendor/model-k high kilo');
+    expect(highRouteLine(LINES, [withSyntheticWindow], [])).toBe('none');
+    expect(routeLine(LINES, [usageOf('kilo: unavailable')], NOW, MIDNIGHT, [])).toBe('none');
+    expect(routeLine(LINES, [kiloOf(14.15)], NOW, MIDNIGHT, ['kilo'])).toBe('none');
+  });
+
   it('decides the same pick routeLine prints, with the skipped accounts', () => {
     const usages = 'claude: rolling 95 @-; agy: weekly 40 @-; grok: weekly 10 @-; junie: unavailable'.split('; ').map(usageOf);
     expect(routeDecision(usages, NOW, MIDNIGHT, ['grok'])).toEqual({
       chosen: { rule: 'headroom', id: 'agy', left: 60 },
       rivals: [],
-      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'claude-deepseek', 'claude-ollama', 'kimi', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes'] }
+      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'claude-deepseek', 'claude-ollama', 'kimi', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'] }
     });
     expect(routeLine(LINES, usages, NOW, MIDNIGHT, ['grok'])).toBe('model-c high agy');
   });
@@ -187,6 +232,21 @@ describe('routeLine', () => {
 
   it('rejects an unknown window kind in a table row', () => {
     expect(() => kindOf('weakly')).toThrow('unknown window kind weakly');
+  });
+
+  it('never evaporates an account whose all-model weekly is spent, but still evaporates past a spent model weekly', () => {
+    const tonight = '2026-09-14T20:00:00.000Z';
+    const agy = usageOf('agy: rolling 0 @-');
+    const work = (all: number, fable: number): ProviderUsage => ({
+      ...usageOf('claude-work: rolling 0 @-'),
+      windows: [
+        { label: 'session', kind: 'rolling', usedPct: 0 },
+        { label: 'weekly', kind: 'weekly', usedPct: all, resetsAt: tonight },
+        { label: 'weekly Fable', kind: 'weekly', usedPct: fable, resetsAt: tonight }
+      ]
+    });
+    expect(routeLine(LINES, [work(100, 95), agy], NOW, MIDNIGHT, [])).toBe('model-c high agy');
+    expect(routeLine(LINES, [work(86, 100), agy], NOW, MIDNIGHT, [])).toBe('model-a max claude-work');
   });
 
   it('drops an ineligible provider before the evaporation rule', () => {
@@ -311,7 +371,7 @@ describe('routeLine', () => {
 
   it.each([
     ['junie alone at 30%', 'junie: weekly 30 @-', [], 'model-g high junie'],
-    ['junie alone at 100%', 'junie: weekly 100 @-', [], 'model-g high junie'],
+    ['junie alone at 100%', 'junie: weekly 100 @-', [], 'none'],
     ['junie with more left than grok', 'grok: weekly 50 @2026-09-17T11:00:00.000Z; junie: weekly 30 @-', [], 'model-g high junie'],
     ['a tie with grok goes to grok', 'junie: weekly 0 @-; grok: weekly 0 @2026-09-17T11:00:00.000Z', [], 'model-e xhigh grok'],
     ['a tie with cursor goes to cursor', 'junie: weekly 0 @-; cursor: weekly 0 @2026-09-17T11:00:00.000Z', [], 'model-f cursor'],
@@ -327,7 +387,7 @@ describe('routeLine', () => {
   it.each([
     ['hermes alone at 75%', 'hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'vendor/model-h xhigh hermes'],
     ['hermes alone at 0%', 'hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'vendor/model-h xhigh hermes'],
-    ['hermes alone at 100%', 'hermes: weekly 100 @2026-09-20T00:00:00.000Z', [], 'vendor/model-h xhigh hermes'],
+    ['hermes alone at 100%', 'hermes: weekly 100 @2026-09-20T00:00:00.000Z', [], 'none'],
     ['grok at 50 beats hermes at 75', 'grok: weekly 50 @2026-09-17T11:00:00.000Z; hermes: weekly 75 @2026-09-20T00:00:00.000Z', [], 'model-e xhigh grok'],
     ['a tie with grok goes to grok', 'grok: weekly 0 @2026-09-17T11:00:00.000Z; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'model-e xhigh grok'],
     ['a tie with junie goes to junie', 'junie: weekly 0 @-; hermes: weekly 0 @2026-09-20T00:00:00.000Z', [], 'model-g high junie'],
@@ -465,7 +525,7 @@ describe('highRouteLine', () => {
   it('pins the chain entry by entry', () => {
     expect(HIGH_CHAIN).toEqual([
       { rank: 1, name: 'fable', providers: ['claude', 'claude-work'], matcher: 'fable' },
-      { rank: 2, name: 'codex', providers: ['codex', 'codex-animus'] },
+      { rank: 2, name: 'codex', providers: ['codex'] },
       { rank: 3, name: 'cursor', providers: ['cursor'] },
       { rank: 4, name: 'opus', providers: ['claude', 'claude-work'] },
       { rank: 5, name: 'grok', providers: ['grok'] },
@@ -489,9 +549,9 @@ describe('highRouteLine', () => {
     ['kimi and kilo are never in the chain', 'kimi: 5h rolling 0; kilo: no windows', [], 'none'],
     ['codex is rank 2, gated on every window', 'codex: 5h rolling 10, weekly weekly 50; cursor: total weekly 10', [], 'model-i xhigh codex'],
     ['codex trips at 90 on its 5h and cursor takes rank 3', 'codex: 5h rolling 90, weekly weekly 10; cursor: total weekly 10', [], 'model-f cursor'],
-    ['codex-animus takes rank 2 when codex is tripped', 'codex: 5h rolling 95; codex-animus: 5h rolling 10, weekly weekly 20', [], 'model-i xhigh codex-animus'],
-    ['the less used codex account wins rank 2', 'codex: 5h rolling 60; codex-animus: 5h rolling 20', [], 'model-i xhigh codex-animus'],
-    ['an equal codex rank goes to codex', 'codex-animus: 5h rolling 20; codex: 5h rolling 20', [], 'model-i xhigh codex'],
+    ['codex-animus is never in the chain', 'codex-animus: 5h rolling 10', [], 'none'],
+    ['codex-animus does not take rank 2 when codex is tripped', 'codex: 5h rolling 95; codex-animus: 5h rolling 10; cursor: total weekly 10', [], 'model-f cursor'],
+    ['a less used codex-animus does not take rank 2', 'codex: 5h rolling 60; codex-animus: 5h rolling 20', [], 'model-i xhigh codex'],
     ['resetsAt is ignored', 'grok: credits weekly 50 resetting 1 h from now; cursor: total weekly 60', [], 'model-f cursor'],
     ['a missing Fable window counts as 0', 'claude: session rolling 10, weekly weekly 50', [], 'model-h1 max claude'],
     ['all-models does not gate fable', 'claude: session rolling 10, weekly weekly 95, weekly Fable weekly 10', [], 'model-h1 max claude'],
@@ -673,13 +733,13 @@ describe('openRoutes', () => {
     ['route not an object', edited((value) => { value.route = [] as never; }), 'route is not a JSON object'],
     ['high not an object', edited((value) => { value.high = 'x' as never; }), 'high is not a JSON object'],
     ['provider missing', edited((value) => { delete value.route.hermes; }), 'route.hermes is missing'],
+    ['Kilo missing', edited((value) => { delete value.route.kilo; }), 'route.kilo is missing'],
     ['high entry missing', edited((value) => { delete value.high.opus; }), 'high.opus is missing'],
     ['max missing', edited((value) => { delete (value.route.agy as Record<string, string>).max; }), 'route.agy.max is missing'],
     ['entry not an object', edited((value) => { value.route.claude = 'model-a high'; }), 'route.claude is not a JSON object'],
     ['empty line', edited((value) => { (value.route.kimi as Record<string, string>).standard = ''; }), 'route.kimi.standard is not a non-empty string'],
     ['not a string', edited((value) => { value.high.grok = 4; }), 'high.grok is not a non-empty string'],
     ['provider typo', edited((value) => { value.route['claude-wrok'] = value.route.claude; }), 'unknown key route.claude-wrok'],
-    ['kilo is not routed', edited((value) => { value.route.kilo = value.route.cursor; }), 'unknown key route.kilo'],
     ['unknown high name', edited((value) => { value.high.sonnet = 'model-x'; }), 'unknown key high.sonnet'],
     ['unknown top-level key', edited((value) => { value.extra = {}; }), 'unknown key extra'],
     ['unknown entry key', edited((value) => { (value.route.cursor as Record<string, string>).maxx = 'model-f'; }), 'unknown key route.cursor.maxx'],

@@ -6,7 +6,7 @@ import { mkdtemp, writeFile, chmod, rm, symlink } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 
 const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PROFILE = 'Name: Max\nEmail: yeti213@googlemail.com\nTeam: Personal\nBalance: $14.15\n';
+const PROFILE = JSON.stringify({ balance: 14.15 });
 const ESC = '\x1b[';
 const ALLOWED_GLYPHS = /[↻·…—]/g;
 let nodeBinDir = '';
@@ -19,8 +19,7 @@ const CODEX_FIXTURE = '#!/bin/sh\nexit 1\n';
 async function kiloFixture() {
   const dir = await mkdtemp(join(tmpdir(), 'dandelion-qa-kilo-'));
   const script = join(dir, 'kilo');
-  const quoted = PROFILE.replaceAll('\n', '\\n').replaceAll('$', '\\$');
-  await writeFile(script, `#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "${quoted}"\n`);
+  await writeFile(script, `#!/bin/sh\n[ "$1" = "profile" ] && [ "$2" = "--json" ] || exit 2\nprintf '%s\\n' '${PROFILE}'\n`);
   await chmod(script, 0o755);
   for (const [name, body] of [['claude', CLAUDE_FIXTURE], ['agy', AGY_FIXTURE], ['kimi', KIMI_FIXTURE], ['codex', CODEX_FIXTURE]]) {
     await writeFile(join(dir, name), body);
@@ -60,23 +59,21 @@ function assertAscii(stdout) {
   }
 }
 
-async function happyPathDefaultReference(kiloDir) {
+async function happyPathBalanceOnly(kiloDir) {
   const stdout = runApp(`${kiloDir}:${nodeBinDir}`, {});
   const plain = stripAnsi(stdout);
   assert.match(plain, /^DANDELION +\d{2}:\d{2}:\d{2}$/m);
-  assert.match(plain, /^kilo$/m);
+  assert.ok(plain.includes(`\nkilo\n${'balance $14.15'.padEnd(72)}\napi balance · kilo\n`), `Kilo is not a balance-only panel:\n${plain}`);
   assert.ok(plain.includes('━'.repeat(72)), 'missing heavy top rule');
-  assert.ok(plain.includes(`${'balance $14.15'.padEnd(35)} ${'█'.repeat(14)}${'░'.repeat(6)}  71%`), `missing 14/6 gauge:\n${plain}`);
   assert.ok(stdout.includes(`${ESC}90mapi balance · kilo`), 'caption is not dim');
   assert.ok(!plain.includes('not found'), 'happy path rendered an unavailable reason');
   assertWidth(stdout);
 }
 
-async function customReferenceFillsGauge(kiloDir) {
+async function legacyReferenceIsIgnored(kiloDir) {
   const stdout = runApp(`${kiloDir}:${nodeBinDir}`, { NO_COLOR: '1', DANDELION_KILO_REFERENCE: '10' });
   assert.ok(!stdout.includes(ESC), 'NO_COLOR output contains escape codes');
-  assert.match(stdout, /^DANDELION /m);
-  assert.ok(stdout.includes(`${'balance $14.15'.padEnd(35)} ${'#'.repeat(20)} 100%`), `gauge not full at reference 10:\n${stdout}`);
+  assert.ok(stdout.includes(`\nkilo\n${'balance $14.15'.padEnd(72)}\napi balance · kilo\n`), `legacy reference created a gauge:\n${stdout}`);
   assertAscii(stdout);
   assertWidth(stdout);
 }
@@ -108,8 +105,8 @@ export default async function () {
     const kiloDir = await kiloFixture();
     const emptyDir = await emptyPathFixture();
     try {
-      await happyPathDefaultReference(kiloDir);
-      await customReferenceFillsGauge(kiloDir);
+      await happyPathBalanceOnly(kiloDir);
+      await legacyReferenceIsIgnored(kiloDir);
       await missingKiloRendersUnavailable(emptyDir);
     } finally {
       await rm(kiloDir, { recursive: true, force: true });

@@ -11,7 +11,8 @@
     "codex-animus": { "standard": "gpt-6.1-sol high",          "max": "gpt-6.1-sol xhigh" },
     "cursor":      { "standard": "auto",                       "max": "auto" },
     "junie":       { "standard": "gemini-3.8-flash high",      "max": "gemini-3.8-flash high" },
-    "hermes":      { "standard": "x-ai/grok-4.7 xhigh",        "max": "x-ai/grok-4.7 xhigh" }
+    "hermes":      { "standard": "x-ai/grok-4.7 xhigh",        "max": "x-ai/grok-4.7 xhigh" },
+    "kilo":        { "standard": "deepseek/deepseek-v4.1-flash-1017 max", "max": "deepseek/deepseek-v4.1-flash-1017 max" }
   },
   "high": {
     "fable":  "claude-fable-5-1 max",

@@ -11,6 +11,8 @@ const NO_CONFIG = 'no deepseek config — CLAUDE_CONFIG_DIR=~/.claude-deepseek c
 const NO_LIMIT = 'openrouter key has no spending limit';
 const PARSE_FAILURE = 'Could not parse usage from response';
 const KEY_URL = 'https://openrouter.ai/api/v1/key';
+const CREDITS_URL = 'https://openrouter.ai/api/v1/credits';
+const LABEL = 'monthly · $10.00 of $20.00 · balance $40.00';
 
 type Answer = FetchOutcome | Promise<FetchOutcome>;
 
@@ -32,11 +34,15 @@ function keyBody(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function creditsBody(overrides: Record<string, unknown> = {}) {
+  return { data: { total_credits: 50, total_usage: 10, ...overrides } };
+}
+
 function settings(token: unknown = TOKEN): string {
   return JSON.stringify({ env: { ANTHROPIC_BASE_URL: 'https://openrouter.ai/api', ANTHROPIC_AUTH_TOKEN: token, ANTHROPIC_API_KEY: '' } });
 }
 
-function ioOf(files: Record<string, string>, dirs: string[] = [DIR], keyAnswer: Answer = answer(keyBody())) {
+function ioOf(files: Record<string, string>, dirs: string[] = [DIR], keyAnswer: Answer = answer(keyBody()), creditsAnswer: Answer = answer(creditsBody())) {
   const requests: [string, Record<string, string>, number][] = [];
   const reads: string[] = [];
   const io: DeepseekIo = {
@@ -51,7 +57,7 @@ function ioOf(files: Record<string, string>, dirs: string[] = [DIR], keyAnswer: 
     fetcher: {
       get: async (url, headers, timeoutMs) => {
         requests.push([url, headers, timeoutMs]);
-        return keyAnswer;
+        return url === KEY_URL ? keyAnswer : creditsAnswer;
       }
     }
   };
@@ -74,14 +80,15 @@ describe('probeClaudeDeepseek', () => {
   it('reads the spending window from limit and limit_remaining, ignoring usage', async () => {
     const { io, reads } = ioOf({ [`${DIR}/settings.json`]: settings() });
     const window = { label: 'monthly', kind: 'weekly', usedPct: 50, resetsAt: '2026-11-01T00:00:00.000Z' };
-    expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual(okUsage([window], 'monthly · $10.00 of $20.00'));
+    expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual(okUsage([window], LABEL));
     expect(reads).toEqual([`${DIR}/settings.json`]);
   });
 
-  it('GETs the key with the bearer token, JSON accept, a dandelion user agent and a 10s timeout', async () => {
+  it('GETs the key and then the credits with the bearer token, JSON accept, a dandelion user agent and a 10s timeout', async () => {
     const { io, requests } = ioOf({ [`${DIR}/settings.json`]: settings() });
     await probeClaudeDeepseek(io, ENV, NOW);
-    expect(requests).toEqual([[KEY_URL, { Authorization: `Bearer ${TOKEN}`, Accept: 'application/json', 'User-Agent': 'dandelion' }, 10000]]);
+    const headers = { Authorization: `Bearer ${TOKEN}`, Accept: 'application/json', 'User-Agent': 'dandelion' };
+    expect(requests).toEqual([[KEY_URL, headers, 10000], [CREDITS_URL, headers, 10000]]);
   });
 
   it.each([[{}], [{ DANDELION_CLAUDE_DEEPSEEK_CONFIG_DIR: '' }]])('defaults the config dir for %j', async (env) => {
@@ -89,8 +96,8 @@ describe('probeClaudeDeepseek', () => {
     const { io, reads, requests } = ioOf({ [`${dir}/settings.json`]: settings('home-token') }, [dir]);
     const usage = await probeClaudeDeepseek(io, env, NOW);
     expect(reads).toEqual([`${dir}/settings.json`]);
-    expect(requests[0]?.[1].Authorization).toBe('Bearer home-token');
-    expect(usage).toMatchObject({ status: 'ok', planLabel: 'monthly · $10.00 of $20.00' });
+    expect(requests.map(([, headers]) => headers.Authorization)).toEqual(['Bearer home-token', 'Bearer home-token']);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: LABEL });
   });
 
   it.each<[string, unknown, unknown, string | null, Record<string, unknown>]>([
@@ -106,7 +113,26 @@ describe('probeClaudeDeepseek', () => {
     const body = keyBody({ limit_remaining: remaining, limit, limit_reset: reset });
     const { io } = ioOf({ [`${DIR}/settings.json`]: settings() }, [DIR], answer(body));
     const period = window.label;
-    expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual(okUsage([window], `${period} · $${Number(remaining) < 0 ? '0.00' : Number(remaining).toFixed(2)} of $${Number(limit).toFixed(2)}`));
+    expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual(okUsage([window], `${period} · $${Number(remaining) < 0 ? '0.00' : Number(remaining).toFixed(2)} of $${Number(limit).toFixed(2)} · balance $40.00`));
+  });
+
+  it.each<[string, number, number, number, string]>([
+    ['below what the key has left', 12, 7, 75, '$5.00'],
+    ['equal to what the key has left', 20, 10, 50, '$10.00'],
+    ['spent past what was bought, clamped to zero', 10, 10.5, 100, '$0.00'],
+    ['nothing ever bought', 0, 0, 100, '$0.00']
+  ])('caps the window at an account balance %s', async (_case, credits, usage, usedPct, balance) => {
+    const { io } = ioOf({ [`${DIR}/settings.json`]: settings() }, [DIR], answer(keyBody()), answer(creditsBody({ total_credits: credits, total_usage: usage })));
+    const window = { label: 'monthly', kind: 'weekly', usedPct, resetsAt: '2026-11-01T00:00:00.000Z' };
+    expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual(okUsage([window], `monthly · $10.00 of $20.00 · balance ${balance}`));
+  });
+
+  it('counts an account with a fraction of a cent left as all but used, whatever the key has left', async () => {
+    const key = answer(keyBody({ limit_remaining: 10.457563006 }));
+    const { io } = ioOf({ [`${DIR}/settings.json`]: settings() }, [DIR], key, answer(creditsBody({ total_credits: 10, total_usage: 9.999054652 })));
+    const usage = await probeClaudeDeepseek(io, ENV, NOW);
+    expect(usage).toMatchObject({ status: 'ok', planLabel: 'monthly · $10.46 of $20.00 · balance $0.00' });
+    expect(usage.windows[0]?.usedPct).toBeCloseTo(99.99527326, 6);
   });
 
   it.each<[string, string, string]>([
@@ -120,9 +146,10 @@ describe('probeClaudeDeepseek', () => {
     expect(await probeClaudeDeepseek(io, ENV, now)).toMatchObject({ windows: [{ resetsAt }] });
   });
 
-  it('is unavailable with no window when the key has a null limit', async () => {
-    const { io } = ioOf({ [`${DIR}/settings.json`]: settings() }, [DIR], answer(keyBody({ limit: null })));
+  it('is unavailable with no window and no credits request when the key has a null limit', async () => {
+    const { io, requests } = ioOf({ [`${DIR}/settings.json`]: settings() }, [DIR], answer(keyBody({ limit: null })));
     expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual(unavailable(NO_LIMIT));
+    expect(requests.map(([url]) => url)).toEqual([KEY_URL]);
   });
 
   it.each<[string, unknown]>([
@@ -141,6 +168,31 @@ describe('probeClaudeDeepseek', () => {
   ])('cannot parse %s', async (_case, body) => {
     const { io } = ioOf({ [`${DIR}/settings.json`]: settings() }, [DIR], answer(body));
     expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual(unavailable(PARSE_FAILURE));
+  });
+
+  it.each<[string, unknown]>([
+    ['missing credits', creditsBody({ total_credits: undefined })],
+    ['string credits', creditsBody({ total_credits: '10' })],
+    ['infinite credits', '{"data":{"total_credits":1e309,"total_usage":1}}'],
+    ['a missing usage', creditsBody({ total_usage: undefined })],
+    ['a null usage', creditsBody({ total_usage: null })],
+    ['no data object', { data: null }],
+    ['not JSON', 'nope'],
+    ['an empty body', '']
+  ])('cannot parse credits with %s', async (_case, body) => {
+    const { io } = ioOf({ [`${DIR}/settings.json`]: settings() }, [DIR], answer(keyBody()), answer(body));
+    expect(await probeClaudeDeepseek(io, ENV, NOW)).toStrictEqual(unavailable(PARSE_FAILURE));
+  });
+
+  it.each<[string, FetchOutcome, string]>([
+    ['an HTTP error', { status: 403, body: `secret ${TOKEN}` }, 'openrouter credits request failed: HTTP 403'],
+    ['a network error', { failure: 'network' }, 'openrouter credits request failed'],
+    ['a timeout', { failure: 'timeout' }, 'openrouter credits request timed out after 10s']
+  ])('reports a credits request with %s without the response body', async (_case, outcome, reason) => {
+    const { io } = ioOf({ [`${DIR}/settings.json`]: settings() }, [DIR], answer(keyBody()), outcome);
+    const usage = await probeClaudeDeepseek(io, ENV, NOW);
+    expect(usage).toStrictEqual(unavailable(reason));
+    expect(JSON.stringify(usage)).not.toContain(TOKEN);
   });
 
   it.each<[string, FetchOutcome, string]>([

@@ -16,7 +16,7 @@ const LINES = JSON.parse(readFileSync(ROUTES_FILE, 'utf8'));
 vi.mock('./app/index.ts', async (importOriginal) => {
   const original = await importOriginal<typeof import('./app/index.ts')>();
   const stubIo: ProbeIo = {
-    runner: { run: async () => ({ stdout: 'Balance: $14.15', stderr: '' }) },
+    runner: { run: async () => ({ stdout: JSON.stringify({ balance: 14.15 }), stderr: '' }) },
     launcher: { launch: async () => undefined },
     fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
     reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
@@ -38,11 +38,19 @@ const routeIo: ProbeIo = {
 };
 
 const profileIo: ProbeIo = {
-  runner: { run: async () => ({ stdout: 'Name: Max\nBalance: $14.15', stderr: '' }) },
+  runner: { run: async () => ({ stdout: JSON.stringify({ name: 'Max', balance: 14.15 }), stderr: '' }) },
   launcher: { launch: async () => undefined },
   fetcher: { get: async () => ({ failure: 'network' }), post: async () => ({ failure: 'network' }) },
   reader: { homeDir: () => '/nowhere', read: async () => undefined, isDirectory: async () => false },
   spawner: { spawn: () => { throw new Error('codex app-server is never started'); } }
+};
+
+const lowProfileIo: ProbeIo = {
+  ...profileIo,
+  runner: {
+    run: async (command, args, timeoutMs, env) =>
+      command === 'kilo' ? { stdout: JSON.stringify({ balance: 10 }), stderr: '' } : profileIo.runner.run(command, args, timeoutMs, env)
+  }
 };
 
 const ENTER_ALTERNATE = '\x1b[?1049h\x1b[?25l';
@@ -80,7 +88,7 @@ function runWithFixtureKilo(extraEnv: NodeJS.ProcessEnv) {
   const dir = mkdtempSync(join(tmpdir(), 'dandelion-kilo-'));
   try {
     const script = join(dir, 'kilo');
-    writeFileSync(script, '#!/bin/sh\n[ "$1" = "profile" ] || exit 2\nprintf "Name: Max\\nEmail: yeti213@googlemail.com\\nTeam: Personal\\nBalance: \\$14.15\\n"\n');
+    writeFileSync(script, '#!/bin/sh\n[ "$1 $2" = "profile --json" ] || exit 2\nprintf \'{"name":"Max","email":"yeti213@googlemail.com","team":"Personal","balance":14.15}\\n\'\n');
     chmodSync(script, 0o755);
     writeFixture(dir, 'claude', "printf '%s\\n' 'Current week (all models): 86% used'");
     writeFixture(dir, 'agy', "printf 'Claude and GPT models\\tFive Hour Limit Remaining\\t25%%\\tsoon\\n'");
@@ -159,20 +167,21 @@ describe('main', () => {
     ], [])).toBe('model-f cursor');
   });
 
-  it('prints the kilo panel with a 14 of 20 gauge from a fixture kilo on PATH', () => {
+  it('prints the Kilo dollar balance without a synthetic gauge from a fixture on PATH', () => {
     const result = runWithFixtureKilo({});
     expect(result.status).toBe(0);
     expect(result.stdout.startsWith('\x1b[1mDANDELION ')).toBe(true);
     expect(result.stdout).toMatch(/^\S+DANDELION +\d{2}:\d{2}:\d{2}\S+\n/);
-    expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\x1b[0m\nkilo\n' + 'balance $14.15'.padEnd(35) + ' \x1b[32m' + '█'.repeat(14) + '░'.repeat(6) + '\x1b[0m \x1b[32m 71%\x1b[0m' + ' '.repeat(11) + '\n\x1b[90mapi balance · kilo\x1b[0m');
+    expect(result.stdout).toContain('\x1b[90m' + '━'.repeat(72) + '\x1b[0m\nkilo\n' + 'balance $14.15'.padEnd(72) + '\n\x1b[90mapi balance · kilo\x1b[0m');
     expect(result.stdout).not.toContain('not found');
+    expect(result.stdout).not.toContain('71%');
   });
 
-  it('fills the gauge from a fixture kilo when DANDELION_KILO_REFERENCE is 10', () => {
+  it('ignores the legacy Kilo reference setting', () => {
     const result = runWithFixtureKilo({ DANDELION_KILO_REFERENCE: '10', NO_COLOR: '1' });
     expect(result.status).toBe(0);
     expect(result.stdout).not.toContain('\x1b[');
-    expect(result.stdout).toContain('='.repeat(72) + '\nkilo\n' + 'balance $14.15'.padEnd(35) + ' ' + '#'.repeat(20) + ' 100%' + ' '.repeat(11) + '\n');
+    expect(result.stdout).toContain('='.repeat(72) + '\nkilo\n' + 'balance $14.15'.padEnd(72) + '\n');
   });
 
   it('prints claude, claude-work, agy, kimi, grok, codex and kilo panels in order from fixture CLIs on PATH', () => {
@@ -594,7 +603,7 @@ describe('main', () => {
 
   it('runIfMain route --json keeps exit code 1 for none and exit code 2 for a bad routes file', async () => {
     const none = procOf(['node', MAIN, 'route', '--json'], false, false);
-    await runIfMain(MAIN_URL, MAIN, profileIo, none.proc);
+    await runIfMain(MAIN_URL, MAIN, lowProfileIo, none.proc);
     expect([none.output(), none.proc.exit.mock.calls]).toEqual(['none\n', [[1]]]);
     const bad = procOf(['node', MAIN, 'route', '--json'], false, false, { DANDELION_ROUTES_FILE: '/nonexistent/routes.json' });
     await runIfMain(MAIN_URL, MAIN, routeIo, bad.proc);
@@ -634,14 +643,14 @@ describe('main', () => {
 
   it('runIfMain run prints none on stderr and exits 1 when nothing routes', async () => {
     const { proc, output, errors } = procOf(['node', MAIN, 'run'], true, true);
-    await runIfMain(MAIN_URL, MAIN, profileIo, proc);
+    await runIfMain(MAIN_URL, MAIN, lowProfileIo, proc);
     expect([output(), errors()]).toEqual(['', 'none\n']);
     expect(proc.exit).toHaveBeenCalledWith(1);
   });
 
   it('runIfMain route prints none and exits 1 when nothing routes', async () => {
     const { proc, output } = procOf(['node', MAIN, 'route'], undefined, undefined);
-    await runIfMain(MAIN_URL, MAIN, profileIo, proc);
+    await runIfMain(MAIN_URL, MAIN, lowProfileIo, proc);
     expect(output()).toBe('none\n');
     expect(proc.exit).toHaveBeenCalledWith(1);
   });
@@ -661,11 +670,12 @@ describe('main', () => {
       linkNodeAndShell(dir);
       writeFixture(dir, 'claude', "[ -z \"$CLAUDE_CONFIG_DIR\" ] || exit 1\nprintf '%s\\n' 'Current week (all models): 86% used'");
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
+      writeFixture(dir, 'kilo', "printf '%s\\n' '{\"balance\":14.15}'");
       const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const routed = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
       expect([routed.stdout, routed.stderr, routed.status]).toEqual(['model-a high claude\n', '', 0]);
       rmSync(join(dir, 'claude'));
+      rmSync(join(dir, 'kilo'));
       const none = spawnSync(process.execPath, ['src/main.ts', 'route'], { env, encoding: 'utf-8', timeout: 60000 });
       expect([none.stdout, none.stderr, none.status]).toEqual(['none\n', '', 1]);
     } finally {
@@ -707,7 +717,7 @@ describe('main', () => {
       linkNodeAndShell(dir);
       writeFixture(dir, 'claude', "[ -z \"$CLAUDE_CONFIG_DIR\" ] || exit 1\nprintf '%s\\n' 'Current session: 10% used' 'Current week (all models): 50% used' 'Current week (Fable): 100% used'");
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
+      writeFixture(dir, 'kilo', "printf '%s\\n' '{\"balance\":14.15}'");
       const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: join(dir, 'missing'), DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const high = spawnSync(process.execPath, ['src/main.ts', 'route', '--high'], { env, encoding: 'utf-8', timeout: 60000 });
       expect([high.stdout, high.stderr, high.status]).toEqual(['model-a max claude\n', '', 0]);
@@ -744,7 +754,8 @@ describe('main', () => {
         junie: { standard: 'model-g high', max: 'model-g high' },
         hermes: { standard: 'vendor/model-h xhigh', max: 'vendor/model-h xhigh' },
         codex: { standard: 'model-i high', max: 'model-i xhigh' },
-        'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' }
+        'codex-animus': { standard: 'model-i high', max: 'model-i xhigh' },
+        kilo: { standard: 'vendor/model-k max', max: 'vendor/model-k max' }
       },
       high: { fable: 'model-h1 max', codex: 'model-i xhigh', cursor: 'model-h2', opus: 'model-h3 max', grok: 'model-h4 xhigh', agy: 'model-h5 high' }
     };
@@ -852,7 +863,7 @@ describe('main', () => {
       writeFixture(dir, 'agy', "printf 'Gemini Models\\tWeekly Limit Remaining\\t100%%\\t2026-09-20T17:13:45Z\\n'");
       writeFixture(dir, 'kimi', 'exit 0');
       writeFixture(dir, 'codex', "echo 'Logged in using an API key - sk-proj-***n5zQA' >&2");
-      writeFixture(dir, 'kilo', "echo 'Balance: $14.15'");
+      writeFixture(dir, 'kilo', "printf '%s\\n' '{\"balance\":14.15}'");
       const env: NodeJS.ProcessEnv = { HOME: dir, PATH: dir, NO_COLOR: '1', DANDELION_KIMI_PORT: '1', DANDELION_GROK_HOME: dir, DANDELION_CURSOR_AUTH_FILE: join(dir, 'missing.json'), DANDELION_CLAUDE_WORK_CONFIG_DIR: dir, DANDELION_HERMES_AUTH_FILE: join(dir, 'missing-hermes.json'), DANDELION_ROUTES_FILE: ROUTES_FILE, DANDELION_STATE_FILE: join(dir, 'state', 'eligibility.json') };
       const runs = ['src/main.ts', join(dir, 'dandelion')].map((entry) => spawnSync(process.execPath, [entry, '--once'], { env, encoding: 'utf-8', timeout: 60000 }));
       const panelOrder = ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'kilo'];
@@ -917,7 +928,7 @@ describe('main', () => {
     expect(readme.startsWith('# Dandelion Dashboard\n\nDandelion is a terminal dashboard')).toBe(true);
     expect(readme).toMatch(/^- `dandelion` - .*`npm link`.*`dandelion --once`/m);
     expect(readme).toContain('npm start');
-    expect(readme).toContain('DANDELION_KILO_REFERENCE');
+    expect(readme).toContain('kilo profile --json');
   });
 
   it('README documents kimi', () => {
@@ -977,15 +988,19 @@ describe('main', () => {
     const providers = readme.split('\n').filter((line) => /^- `(claude|claude-work|agy|kimi|grok|codex|cursor|junie|kilo)` /.test(line));
     expect(providers.map((line) => line.split('`')[1])).toEqual(['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'kilo']);
     const junie = providers[7];
-    expect(junie).toContain('newest completion snapshot from `<junie home>/sessions/<id>/events.jsonl` without running junie');
-    expect(junie).toContain('credits used against a reference');
-    expect(junie).toContain("the snapshot's age");
-    expect(junie).toContain('older than 48h is shown dim as stale');
+    expect(junie).toContain('current JetBrains balance');
+    expect(junie).toContain('`<junie home>/secure_credentials.json`');
+    expect(junie).toContain('without starting an agent or writing credentials');
+    expect(junie).toContain('rather than falling back to an older successful balance');
+    expect(junie).toContain('legacy completion snapshots');
+    expect(junie).toContain('dim when older than 48h');
     expect(junie).toContain('says to run junie once');
     expect(readme).toContain('All thirteen probes run in parallel');
     expect(readme).not.toContain('All nine probes run in parallel');
     expect(readme).toMatch(/^- `DANDELION_JUNIE_HOME` - .*Defaults to `~\/\.junie`.*never writes to it/m);
     expect(readme).toMatch(/^- `DANDELION_JUNIE_REFERENCE` - .*Defaults to `1000000`.*empty string, there is no reference.*not a positive number uses the default/m);
+    expect(readme).toContain('`DANDELION_JUNIE_TOKEN_URL`');
+    expect(readme).toContain('`DANDELION_JUNIE_QUOTA_URL`');
     const route = readme.split('## Route')[1].split('## ')[0];
     expect(route).toContain('`grok`, `codex`, `codex-animus`, `cursor`, `junie` and `hermes`, in dashboard order');
     expect(route).toContain('junie credits, hermes credits, claude-deepseek spending limit)');
@@ -1072,11 +1087,11 @@ describe('main', () => {
     const commands = readme.split('## Run Commands')[1].split('## ')[0];
     expect(commands).toMatch(/^- `dandelion route` \(or `npm start -- route`\) - .*print one line.*prints `none` and exits 1/m);
     const route = readme.split('## Route')[1];
-    expect(route).toContain('`kilo` is never routed, because it reports a balance');
+    expect(route).toMatch(/kilo.*strictly above \$10/i);
     expect(route).toContain('a codex account logged in with an API key has no windows, so it is not routed either');
     expect(route).toMatch(/Evaporation: a weekly window .* before the next local midnight with less than 97% and more than 0% left/);
     expect(route).toMatch(/Most headroom: .*lowest left over its rolling and weekly windows \(100 when it has neither\)/);
-    for (const id of ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor']) expect(route).toContain(`| ${id} | \`route.${id}.standard\` | \`route.${id}.max\` |`);
+    for (const id of ['claude', 'claude-work', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'kilo']) expect(route).toContain(`| ${id} | \`route.${id}.standard\` | \`route.${id}.max\` |`);
   });
 
   it('README documents route --high and the account token', () => {
@@ -1086,7 +1101,7 @@ describe('main', () => {
     const route = readme.split('## Route')[1].split('## ')[0];
     for (const row of [
       '| 1 | claude, claude-work | `fable`: the Fable weekly window plus session | `high.fable` |',
-      '| 2 | codex, codex-animus | (all) | `high.codex` |',
+      '| 2 | codex | (all) | `high.codex` |',
       '| 3 | cursor | (all) | `high.cursor` |',
       '| 4 | claude, claude-work | (all) | `high.opus` |',
       '| 5 | grok | (all) | `high.grok` |',
@@ -1095,6 +1110,7 @@ describe('main', () => {
     expect(route).toMatch(/except the windows another entry of the same provider matches/);
     expect(route).toMatch(/every gating window is under 90% used; at 90% it pops down/);
     expect(route).toMatch(/Ineligible, unavailable and failed providers are skipped/);
+    expect(route).toContain('`--high` does not use codex-animus');
     expect(route).toMatch(/both `route` and `route --high` print `<line> <provider id>`/);
     expect(route).toMatch(/`claude-work` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_WORK_CONFIG_DIR` \(default `~\/\.claude-work`\)/);
   });
@@ -1150,8 +1166,8 @@ describe('main', () => {
     expect(file).toMatch(/both route boxes show `routes file error`/);
     expect(readme).toMatch(/^- `DANDELION_ROUTES_FILE` - .*unset or empty\. A relative path is taken from the working directory\.$/m);
     const route = readme.split('## Route')[1].split('## ')[0];
-    const tableRows = route.split('\n').filter((line) => /^\| (\d|claude|agy|kimi|grok|codex|cursor|junie|hermes)/.test(line));
-    expect(tableRows).toHaveLength(18);
+    const tableRows = route.split('\n').filter((line) => /^\| (\d|claude|agy|kimi|grok|codex|cursor|junie|hermes|kilo)/.test(line));
+    expect(tableRows).toHaveLength(19);
     expect(tableRows.every((row) => /`(route\.[a-z-]+\.(standard|max)|high\.[a-z]+)` \|$/.test(row))).toBe(true);
   });
 

@@ -479,7 +479,7 @@ async function fleetSummary(ctx) {
 
 async function readmeDocumentsJunie() {
   const readme = await readFile(join(rootDir, 'README.md'), 'utf8');
-  assert.match(readme, /^- `junie` - reads the newest completion snapshot from `<junie home>\/sessions\/<id>\/events\.jsonl`/m);
+  assert.match(readme, /^- `junie` - reads the current JetBrains balance from the same `\/auth\/test` account endpoint Junie uses\. .*legacy completion snapshots in `<junie home>\/sessions\/<id>\/events\.jsonl`/m);
   assert.ok(readme.includes('All thirteen probes run in parallel'));
   assert.match(readme, /^- `DANDELION_JUNIE_HOME` - .*Defaults to `~\/\.junie`.*never writes to it/m);
   assert.match(readme, /^- `DANDELION_JUNIE_REFERENCE` - .*Defaults to `1000000`.*empty string, there is no reference/m);

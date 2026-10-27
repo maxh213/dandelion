@@ -11,7 +11,8 @@
     "codex-animus": { "standard": "model-i high", "max": "model-i xhigh" },
     "cursor": { "standard": "model-f", "max": "model-f" },
     "junie": { "standard": "model-g high", "max": "model-g high" },
-    "hermes": { "standard": "vendor/model-h xhigh", "max": "vendor/model-h xhigh" }
+    "hermes": { "standard": "vendor/model-h xhigh", "max": "vendor/model-h xhigh" },
+    "kilo": { "standard": "vendor/model-k max", "max": "vendor/model-k max" }
   },
   "high": { "fable": "model-h1 max", "codex": "model-i xhigh", "cursor": "model-f", "opus": "model-a max", "grok": "model-e xhigh", "agy": "model-c high" }
 }

@@ -22,7 +22,7 @@ const at = (h) => new Date(Date.now() + h * 3600000), iso = (h) => at(h).toISOSt
 const M = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
 const txt = (h) => { const d = at(h), H = d.getUTCHours(); return M[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + (H % 12 || 12) + ':' + String(d.getUTCMinutes()).padStart(2, '0') + (H < 12 ? 'am' : 'pm') + ' (UTC)'; };
 if (me === 'codex') { console.error('Logged in using an API key - sk-proj-***n5zQA'); process.exit(0); }
-if (me === 'kilo') { console.log('Balance: $14.15'); process.exit(0); }
+if (me === 'kilo') { if (a.join(' ') !== 'profile --json') process.exit(2); console.log(JSON.stringify({ balance: 14.15 })); process.exit(0); }
 if (me === 'claude') { const work = Boolean(process.env.CLAUDE_CONFIG_DIR), h = q(work ? 'H_WORK' : 'H_CLAUDE'), v = h ? [h[0], h[1], 72] : q(work ? 'Q_WORK' : 'Q_CLAUDE'); if (!v) process.exit(1);
   const fable = h && h[2] !== '-' ? '\\nCurrent week (Fable): ' + h[2] + '% used · resets ' + txt(72) : '';
   console.log('Current session: ' + v[0] + '% used · resets ' + txt(4) + '\\nCurrent week (all models): ' + v[1] + '% used · resets ' + txt(Number(v[2])) + fable); process.exit(0); }
@@ -54,7 +54,7 @@ const HIGH_ROWS = [
   ['grok tripped, agy left', { grok: [90, 72], agy: [10, 20, 72] }, undefined, 'model-h5 high agy', 0],
   ['quality before headroom', { claude: [10, 50, '-'], agy: [0, 0, 72] }, undefined, 'model-h1 max claude', 0],
   ['ineligible work skipped', { claude: [10, 10, 95], work: [10, 10, 10], cursor: cursor(50) }, '{"claude-work": false}', 'model-h2 cursor', 0],
-  ['kimi is never in the chain', { kimi: [0, 0, 72] }, undefined, 'none', 1],
+  ['kimi and a healthy Kilo balance are never in the chain', { kimi: [0, 0, 72] }, undefined, 'none', 1],
   ['everything tripped or unavailable', { claude: [90, 90, 90], cursor: cursor(99), grok: [90, 72], agy: [10, 90, 72], kimi: [0, 0, 72] }, undefined, 'none', 1]
 ];
 

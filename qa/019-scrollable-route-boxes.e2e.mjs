@@ -33,7 +33,7 @@ const at = (h) => new Date(Date.now() + h * 3600000), iso = (h) => at(h).toISOSt
 const M = 'Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec'.split(' ');
 const txt = (h) => { const d = at(h), H = d.getUTCHours(); return M[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + (H % 12 || 12) + ':' + String(d.getUTCMinutes()).padStart(2, '0') + (H < 12 ? 'am' : 'pm') + ' (UTC)'; };
 if (me === 'codex') { console.error('Logged in using an API key - sk-proj-***n5zQA'); process.exit(0); }
-if (me === 'kilo') { console.log('Balance: $14.15'); process.exit(0); }
+if (me === 'kilo') { if (a.join(' ') !== 'profile --json') process.exit(2); console.log(JSON.stringify({ balance: 14.15 })); process.exit(0); }
 if (me === 'claude') { const work = Boolean(process.env.CLAUDE_CONFIG_DIR), h = q(work ? 'H_WORK' : 'H_CLAUDE'), v = h ? [h[0], h[1], 72] : q(work ? 'Q_WORK' : 'Q_CLAUDE'); if (!v) process.exit(1);
   const fable = h && h[2] !== '-' ? '\\nCurrent week (Fable): ' + h[2] + '% used · resets ' + txt(72) : '';
   console.log('Current session: ' + v[0] + '% used · resets ' + txt(4) + '\\nCurrent week (all models): ' + v[1] + '% used · resets ' + txt(Number(v[2])) + fable); process.exit(0); }
@@ -224,7 +224,7 @@ async function unitRender() {
     ok('cursor', 'Ultra', [win('total', 'weekly', 80), win('auto', 'weekly', 80), win('api', 'weekly', 80)]),
     dim('junie', 'junie', 'no junie quota snapshot — run junie once'),
     dim('hermes', 'hermes', 'no hermes auth — run hermes portal login'),
-    ok('kilo', 'api balance', [], { balance: { amount: 14.15, currency: '$', reference: 20 } })
+    ok('kilo', 'api balance', [], { balance: { amount: 14.15, currency: '$' } })
   ];
   const routes = { lines: JSON.parse(await readFile(ROUTES_FILE, 'utf8')) };
   const view = (extra = {}) => ({ slots: usages.map((usage) => ({ id: usage.id, usage })), spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes, settled: usages, selected: -1, rows: 12, ...extra });
@@ -253,7 +253,7 @@ async function unitRender() {
     assert.deepEqual(frameOf({ rows }), twentyFour, `rows ${rows} is not the 24-line fallback`);
   }
   assert.deepEqual(frameOf({ selected: undefined }), twelve.split('\n'));
-  assert.deepEqual(frameOf({ selected: 12 }), [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), 'no hermes auth — run hermes portal login', 'hermes · hermes · 0h0m ago', RULE, '▸ kilo', 'balance $14.15                      ##############------  71%           ', 'api balance · kilo · 0h0m ago']);
+  assert.deepEqual(frameOf({ selected: 12 }), [BANNER_UNIT, SUMMARY_UNIT, ...SETTLED_BLOCK.split('\n'), 'no hermes auth — run hermes portal login', 'hermes · hermes · 0h0m ago', RULE, '▸ kilo', 'balance $14.15'.padEnd(72), 'api balance · kilo · 0h0m ago']);
   const withFooter = frameOf({ selected: 0, footer: true });
   assert.equal(withFooter.length, 12);
   assert.equal(withFooter[6], '▸ claude');

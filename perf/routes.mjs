@@ -12,7 +12,8 @@ export const ROUTE_LINES = {
     grok: { standard: 'model-e9 xhigh', max: 'model-e9 xhigh' },
     cursor: { standard: 'model-fox-1', max: 'model-fox-1' },
     junie: { standard: 'model-golf-3.8.1 high', max: 'model-golf-3.8.1 high' },
-    hermes: { standard: 'vndr/model-h9 xhigh', max: 'vndr/model-h9 xhigh' }
+    hermes: { standard: 'vndr/model-h9 xhigh', max: 'vndr/model-h9 xhigh' },
+    kilo: { standard: 'vndr/model-k9 max', max: 'vndr/model-k9 max' }
   },
   high: { fable: 'model-hi-fable-1 max', cursor: 'model-fox-1', opus: 'model-alpha-5 max', grok: 'model-e9 xhigh', agy: 'model-charlie-98-fast high' }
 };
