@@ -12,7 +12,8 @@ Feature: 021 - read route lines from routes.json, and route claude as Opus 5.5
     A bad file wins over `none`: with a bad file and no quota, the exit code is 2.
   - Tie order (dashboard order) and the --high chain order stay in code; the order of keys in the file means nothing.
   - Unknown keys fail at every level: top level (only `route` and `high`), provider ids (codex and kilo included), `high` names and
-    keys inside a provider entry (only `standard` and `max`). A line matches `^\S+( \S+)?$`: one or two words, one space apart.
+    keys inside a provider entry (only `standard`, `max` and, on every provider but kilo, an optional `limit`). A line matches
+    `^\S+( \S+)?$`: one or two words, one space apart. A `limit` is a whole number from 1 to 100.
   - `--once` has no route boxes (013). With a bad file it prints its dashboard unchanged on stdout, the error line on stderr, and
     exits 0. In the live dashboard, once the probes settle, both boxes are dim, like a `none` box, and show `routes file error` over
     the start of `<what is wrong>`, cut to the box's 31 text cells. For the `claude-wrok` case below that row shows `claude-wrok`.
@@ -149,6 +150,30 @@ Feature: 021 - read route lines from routes.json, and route claude as Opus 5.5
       | trailing space        | /tmp/r/bad.json   | route.grok.standard set to "model-e xhigh "        | grok         |
       | two spaces            | /tmp/r/bad.json   | route.junie.max set to "model-g  high"             | junie        |
       | tab                   | /tmp/r/bad.json   | route.hermes.standard set to "vendor/model-h<TAB>xhigh" | hermes  |
+      | limit of 0            | /tmp/r/bad.json   | adding route.claude-animus.limit 0                 | limit        |
+      | fractional limit      | /tmp/r/bad.json   | adding route.claude-animus.limit 75.5              | limit        |
+      | limit as a string     | /tmp/r/bad.json   | adding route.claude-animus.limit "75"              | limit        |
+      | a limit on kilo       | /tmp/r/bad.json   | adding route.kilo.limit 75                         | limit        |
+
+  Scenario Outline: An account's limit keeps both routes off it once any of its windows reaches the limit
+    Given DANDELION_ROUTES_FILE is F with `"limit": 75` added to route.claude-animus
+    When the user runs `node src/main.ts <command>` for <usages>
+    Then stdout is exactly "<line>" and the exit code is 0
+
+    Examples:
+      | command      | usages                                                     | line                    |
+      | route        | claude-animus session 10, weekly 74, agy weekly 80         | model-b high claude-animus |
+      | route        | claude-animus session 10, weekly 75, agy weekly 80         | model-c high agy        |
+      | route        | claude-animus session 75, weekly 10, agy weekly 80         | model-c high agy        |
+      | route        | claude-animus weekly 80 resetting before midnight, agy weekly 80 | model-c high agy  |
+      | route --high | claude-animus 10/10/80, cursor total 50                    | model-h2 cursor         |
+      | route --high | claude-animus 10/75/0, claude 50/50/50                     | model-h1 max claude     |
+
+  Scenario: The shipped file holds claude-animus at 75%
+    Then "routes.json" at the repo root sets `"limit": 75` on route.claude-animus and no limit on any other provider
+    And `route --why` lists an account at its limit first, as "limited: claude-animus (weekly 76%, limit 75%, back <local time>)"
+    And `route --high --why` ends its skipped line with the same "limited: …" list for chain accounts
+    And its panel shows `limited · back <local time>` where a tripped panel shows `tripped · back <local time>`
 
   Scenario: A bad file wins over none, and a missing shipped file names its real path
     Given DANDELION_ROUTES_FILE is "/tmp/r/nope.json" and no provider is available

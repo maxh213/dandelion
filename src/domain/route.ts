@@ -4,9 +4,11 @@ type RoutableWindow = { label: string; kind: WindowKind; usedPct: number; resets
 
 type RoutableUsage = { id: string; status: string; windows: RoutableWindow[]; balance?: { amount: number; currency: string } };
 
-type RuleLines = { standard: string; max: string };
+type RouteEntry = { standard: string; max: string; limit?: number };
 
-export type RouteLines = { route: Record<string, RuleLines>; high: Record<string, string> };
+export type RouteLines = { route: Record<string, RouteEntry>; high: Record<string, string> };
+
+export type Limits = Partial<Record<string, number>>;
 
 export type RoutesFault = { path: string; problem: string };
 
@@ -61,12 +63,16 @@ function candidatesOf(usages: RoutableUsage[]): Candidate[] {
   });
 }
 
-function trippingWindow({ windows }: Candidate): RoutableWindow | undefined {
-  return windows.filter((window) => window.kind === 'rolling' && trips(window.usedPct)).sort((a, b) => b.usedPct - a.usedPct)[0];
+function mostUsedFirst(a: RoutableWindow, b: RoutableWindow): number {
+  return b.usedPct - a.usedPct;
+}
+
+function trippingWindows({ windows }: Candidate): RoutableWindow[] {
+  return windows.filter((window) => window.kind === 'rolling' && trips(window.usedPct)).sort(mostUsedFirst);
 }
 
 function isUntripped(candidate: Candidate): boolean {
-  return trippingWindow(candidate) === undefined;
+  return trippingWindows(candidate).length === 0;
 }
 
 function hasCreditHeadroom(candidate: Candidate): boolean {
@@ -99,7 +105,9 @@ function highest(candidates: Candidate[], score: (windows: RoutableWindow[]) => 
 
 type Tripped = { id: string; label: string; usedPct: number; backAt?: string };
 
-export type Skipped = { tripped: Tripped[]; ineligible: string[]; unavailable: string[] };
+type Limited = Tripped & { limit: number };
+
+export type Skipped = { limited: Limited[]; tripped: Tripped[]; ineligible: string[]; unavailable: string[] };
 
 type WindowChosen = { rule: 'evaporation' | 'headroom'; id: string; left: number; label?: string; resetsAt?: string };
 
@@ -109,10 +117,6 @@ type Rival = { id: string; left: number };
 
 export type RouteDecision = { chosen: Chosen | undefined; rivals: Rival[]; skipped: Skipped };
 
-function trippingWindows({ windows }: Candidate): RoutableWindow[] {
-  return windows.filter((window) => window.kind === 'rolling' && trips(window.usedPct));
-}
-
 function backAtOf(windows: RoutableWindow[], nowMs: number): string | undefined {
   const resets = windows.map((window) => Date.parse(String(window.resetsAt)));
   const known = resets.every((resetMs) => !Number.isNaN(resetMs));
@@ -120,18 +124,35 @@ function backAtOf(windows: RoutableWindow[], nowMs: number): string | undefined 
   return known && latest > nowMs ? new Date(latest).toISOString() : undefined;
 }
 
+function heldBack(id: string, windows: RoutableWindow[], nowMs: number): Tripped[] {
+  const [worst] = windows;
+  if (worst === undefined) return [];
+  const backAt = backAtOf(windows, nowMs);
+  return [{ id, label: worst.label, usedPct: worst.usedPct, ...(backAt === undefined ? {} : { backAt }) }];
+}
+
 function trippedOf(candidates: Candidate[], nowMs: number): Tripped[] {
+  return candidates.flatMap((candidate) => heldBack(candidate.id, trippingWindows(candidate), nowMs));
+}
+
+function windowsAtLimit({ windows }: Candidate, limit: number): RoutableWindow[] {
+  return windows.filter((window) => window.kind !== 'other' && window.usedPct >= limit).sort(mostUsedFirst);
+}
+
+function limitedOf(candidates: Candidate[], limits: Limits, nowMs: number): Limited[] {
   return candidates.flatMap((candidate) => {
-    const window = trippingWindow(candidate);
-    if (window === undefined) return [];
-    const backAt = backAtOf(trippingWindows(candidate), nowMs);
-    return [{ id: candidate.id, label: window.label, usedPct: window.usedPct, ...(backAt === undefined ? {} : { backAt }) }];
+    const limit = limits[candidate.id] ?? Infinity;
+    return heldBack(candidate.id, windowsAtLimit(candidate, limit), nowMs).map((held) => ({ ...held, limit }));
   });
 }
 
-function skippedOf(all: Candidate[], ineligible: string[], nowMs: number, kiloAvailable: boolean): Skipped {
+function belowLimit<T extends { id: string }>(accounts: T[], limited: Limited[]): T[] {
+  return accounts.filter(({ id }) => !limited.some((each) => each.id === id));
+}
+
+function skippedOf(all: Candidate[], ineligible: string[], kiloAvailable: boolean, held: { limited: Limited[]; tripped: Tripped[] }): Skipped {
   return {
-    tripped: trippedOf(all, nowMs),
+    ...held,
     ineligible: ROUTED_IDS.filter((id) => ineligible.indexOf(id) !== -1),
     unavailable: ROUTED_IDS.filter((id) => !ineligible.includes(id) && !all.some((candidate) => candidate.id === id) && !(id === 'kilo' && kiloAvailable))
   };
@@ -181,14 +202,16 @@ function rivalsOf(candidates: Candidate[], chosen: Chosen | undefined): Rival[] 
   return candidates.filter(({ id }) => id !== chosen.id).map(({ id, windows }) => ({ id, left: bindingLeft(windows) }));
 }
 
-export function routeDecision(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): RouteDecision {
+export function routeDecision(usages: RoutableUsage[], now: string, midnight: string, ineligible: string[], limits: Limits): RouteDecision {
   const eligible = eligibleUsages(usages, ineligible);
   const all = candidatesOf(eligible);
-  const candidates = all.filter(isUntripped).filter(hasCreditHeadroom);
   const tonight = { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) };
+  const limited = limitedOf(all, limits, tonight.nowMs);
+  const open = belowLimit(all, limited);
+  const candidates = open.filter(isUntripped).filter(hasCreditHeadroom);
   const balance = balanceChoice(eligible);
   const chosen = evaporationChoice(candidates, tonight) ?? headroomChoice(candidates) ?? balance;
-  return { chosen, rivals: rivalsOf(candidates, chosen), skipped: skippedOf(all, ineligible, tonight.nowMs, balance !== undefined) };
+  return { chosen, rivals: rivalsOf(candidates, chosen), skipped: skippedOf(all, ineligible, balance !== undefined, { limited, tripped: trippedOf(open, tonight.nowMs) }) };
 }
 
 export function routeDecisionLine(lines: RouteLines, { chosen }: RouteDecision): string {
@@ -197,8 +220,16 @@ export function routeDecisionLine(lines: RouteLines, { chosen }: RouteDecision):
   return onAccount(chosen.rule === 'evaporation' ? rule.max : rule.standard, chosen.id);
 }
 
+function limitEntries(route: Record<string, RouteEntry>): [string, number][] {
+  return Object.entries(route).flatMap(([id, { limit }]) => (limit === undefined ? [] : [[id, limit]]));
+}
+
+export function limitsOf(lines: RouteLines | undefined): Limits {
+  return lines === undefined ? {} : Object.fromEntries(limitEntries(lines.route));
+}
+
 export function routeLine(lines: RouteLines, usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
-  return routeDecisionLine(lines, routeDecision(usages, now, midnight, ineligible));
+  return routeDecisionLine(lines, routeDecision(usages, now, midnight, ineligible, limitsOf(lines)));
 }
 
 type ChainEntry = { rank: number; name: string; providers: readonly string[]; matcher?: string };
@@ -250,7 +281,7 @@ export type ChainSkip = { rank: number; name: string; usedPct: number | undefine
 
 export type ChainWin = { rank: number; name: string; id: string; usedPct: number };
 
-export type HighDecision = { winner: ChainWin | undefined; skipped: ChainSkip[] };
+export type HighDecision = { winner: ChainWin | undefined; skipped: ChainSkip[]; limited: Limited[] };
 
 function leastUsedOpen(entry: ChainEntry, usages: RoutableUsage[]): Account | undefined {
   return openAccounts(entry, usages).sort((a, b) => a.used - b.used)[0];
@@ -268,26 +299,40 @@ function skipOf(entry: ChainEntry, usages: RoutableUsage[]): ChainSkip {
   return { rank: entry.rank, name: entry.name, usedPct: lowestUsed(entry, usages) };
 }
 
-export function highDecision(usages: RoutableUsage[], ineligible: string[]): HighDecision {
-  const eligible = eligibleUsages(usages, ineligible);
+const CHAIN_IDS = WINDOWED_IDS.filter((id) => HIGH_CHAIN.some((entry) => entry.providers.includes(id)));
+
+function chainCandidates(usages: RoutableUsage[]): Candidate[] {
+  return CHAIN_IDS.flatMap((id) => {
+    const usage = usages.find((each) => each.id === id);
+    return isRoutable(usage) ? [{ id, windows: usage.windows }] : [];
+  });
+}
+
+function chainWalk(usages: RoutableUsage[]): Omit<HighDecision, 'limited'> {
   const skipped: ChainSkip[] = [];
   for (const entry of HIGH_CHAIN) {
-    const open = leastUsedOpen(entry, eligible);
+    const open = leastUsedOpen(entry, usages);
     if (open !== undefined) return { winner: { rank: entry.rank, name: entry.name, id: open.id, usedPct: open.used }, skipped };
-    skipped.push(skipOf(entry, eligible));
+    skipped.push(skipOf(entry, usages));
   }
   return { winner: undefined, skipped };
+}
+
+export function highDecision(usages: RoutableUsage[], now: string, ineligible: string[], limits: Limits): HighDecision {
+  const eligible = eligibleUsages(usages, ineligible);
+  const limited = limitedOf(chainCandidates(eligible), limits, Date.parse(now));
+  return { ...chainWalk(belowLimit(eligible, limited)), limited };
 }
 
 export function highDecisionLine(lines: RouteLines, { winner }: HighDecision): string {
   return winner === undefined ? NO_ROUTE : onAccount(lines.high[winner.name], winner.id);
 }
 
-export function highRouteLine(lines: RouteLines, usages: RoutableUsage[], ineligible: string[]): string {
-  return highDecisionLine(lines, highDecision(usages, ineligible));
+export function highRouteLine(lines: RouteLines, usages: RoutableUsage[], now: string, ineligible: string[]): string {
+  return highDecisionLine(lines, highDecision(usages, now, ineligible, limitsOf(lines)));
 }
 
-type Shape = 'line' | { readonly [key: string]: Shape };
+type Shape = 'line' | 'limit' | { readonly [key: string]: Shape };
 
 function keyed(keys: readonly string[], shape: Shape): Record<string, Shape> {
   return Object.fromEntries(keys.map((key) => [key, shape]));
@@ -295,7 +340,7 @@ function keyed(keys: readonly string[], shape: Shape): Record<string, Shape> {
 
 function routesShape(): Shape {
   return {
-    route: keyed(ROUTED_IDS, { standard: 'line', max: 'line' }),
+    route: { ...keyed(WINDOWED_IDS, { standard: 'line', max: 'line', limit: 'limit' }), kilo: { standard: 'line', max: 'line' } },
     high: keyed(HIGH_CHAIN.map((entry) => entry.name), 'line')
   };
 }
@@ -313,6 +358,14 @@ function lineProblem(value: unknown, at: string): string | undefined {
   return /^\S+( \S+)?$/.test(value) ? undefined : `${at} is not "<model>" or "<model> <effort>"`;
 }
 
+function isWholePercent(value: unknown): boolean {
+  return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= FULL_LEFT;
+}
+
+function limitProblem(value: unknown, at: string): string | undefined {
+  return isWholePercent(value) ? undefined : `${at} is not a whole percent from 1 to 100`;
+}
+
 function unknownKeyProblem(value: Record<string, unknown>, shape: Record<string, Shape>, at: string): string | undefined {
   const unknown = Object.keys(value).find((key) => !Object.hasOwn(shape, key));
   return unknown === undefined ? undefined : `unknown key ${keyPath(at, unknown)}`;
@@ -320,7 +373,8 @@ function unknownKeyProblem(value: Record<string, unknown>, shape: Record<string,
 
 function keyProblem(value: Record<string, unknown>, key: string, shape: Shape, at: string): string | undefined {
   const path = keyPath(at, key);
-  return Object.hasOwn(value, key) ? problemIn(value[key], shape, path) : `${path} is missing`;
+  if (Object.hasOwn(value, key)) return problemIn(value[key], shape, path);
+  return shape === 'limit' ? undefined : `${path} is missing`;
 }
 
 function childProblem(value: Record<string, unknown>, shape: Record<string, Shape>, at: string): string | undefined {
@@ -332,8 +386,10 @@ function objectProblem(value: unknown, shape: Record<string, Shape>, at: string)
   return unknownKeyProblem(value, shape, at) ?? childProblem(value, shape, at);
 }
 
+const LEAF_PROBLEMS = { line: lineProblem, limit: limitProblem };
+
 function problemIn(value: unknown, shape: Shape, at: string): string | undefined {
-  return shape === 'line' ? lineProblem(value, at) : objectProblem(value, shape, at);
+  return typeof shape === 'string' ? LEAF_PROBLEMS[shape](value, at) : objectProblem(value, shape, at);
 }
 
 function attempted<T>(action: () => T, fault: RoutesFault): { value: T } | { fault: RoutesFault } {

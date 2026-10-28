@@ -129,7 +129,7 @@ describe('main', () => {
     expect(highRouteLine(LINES, [
       { ...tripped, windows: [{ label: 'session', kind: 'rolling' as const, usedPct: 90 }, { label: 'Fable', kind: 'weekly' as const, usedPct: 10 }] },
       { id: 'cursor', displayName: 'cursor', fetchedAt: now, status: 'ok' as const, windows: [{ label: 'total', kind: 'weekly' as const, usedPct: 10 }] }
-    ], [])).toBe('model-f cursor');
+    ], now, [])).toBe('model-f cursor');
   });
 
   it('kills route edge mutants before the long suite', () => {
@@ -157,14 +157,14 @@ describe('main', () => {
         { label: 'weekly', kind: 'weekly', usedPct: 50 },
         { label: 'Fable', kind: 'weekly', usedPct: 100 }
       ])
-    ], [])).toBe('model-a max claude');
+    ], now, [])).toBe('model-a max claude');
     expect(highRouteLine(LINES, [
       ok('claude', [
         { label: 'session', kind: 'rolling', usedPct: 10 },
         { label: 'FABLE', kind: 'weekly', usedPct: 90 }
       ]),
       ok('cursor', [{ label: 'total', kind: 'weekly', usedPct: 10 }])
-    ], [])).toBe('model-f cursor');
+    ], now, [])).toBe('model-f cursor');
   });
 
   it('prints the Kilo dollar balance without a synthetic gauge from a fixture on PATH', () => {

@@ -359,18 +359,18 @@ describe('terminal renderer', () => {
         reason: 'Probe crashed'
       }
     ];
-    const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z', [], 'UTC');
+    const dash = renderDashboard(usages, true, '2026-09-13T10:00:00.000Z', [], 'UTC', {});
     expect(dash).toContain('DANDELION');
     expect(dash).toContain('balance $14.15'.padEnd(72));
     expect(dash).toContain('other\nProbe crashed');
 
-    const dashColor = renderDashboard(usages, false, '2026-09-13T10:00:00.000Z', [], 'UTC');
+    const dashColor = renderDashboard(usages, false, '2026-09-13T10:00:00.000Z', [], 'UTC', {});
     expect(dashColor).toContain('\x1b[90m');
   });
 
   it('rejects a provider status it does not know', () => {
     const usage = { id: 'x', displayName: 'x', windows: [], fetchedAt: 'now', status: 'bogus' } as unknown as ProviderUsage;
-    expect(() => renderDashboard([usage], true, '2026-09-13T10:00:00.000Z', [], 'UTC')).toThrow('Unexpected provider status');
+    expect(() => renderDashboard([usage], true, '2026-09-13T10:00:00.000Z', [], 'UTC', {})).toThrow('Unexpected provider status');
   });
 });
 
@@ -705,7 +705,7 @@ describe('live frame', () => {
     expect(lines[1]).toBe(`\x1b[90m2/13 windows above 80% · next reset: claude session in 8h38m${RESET}`);
     expect(lines.at(-1)).toBe(`\x1b[90m↑↓/jk select · space route · r refresh · t times · c/C copy · q quit · ?${RESET}`);
     expect(lines.at(-2)).toBe(`\x1b[90mg usage graph of the selected panel · esc/q/g back · v compact · w why${RESET}`);
-    expect(lines.slice(6, -3).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC').split('\n').slice(1).join('\n').replace(PLAN_CAPTION, '$1 · 0h1m ago'));
+    expect(lines.slice(6, -3).join('\n')).toBe(renderDashboard(background(), false, frameNow, [], 'UTC', {}).split('\n').slice(1).join('\n').replace(PLAN_CAPTION, '$1 · 0h1m ago'));
   });
 
   it('renders the refreshing banner and footer as plain text under NO_COLOR within 72 cells', () => {
@@ -1022,7 +1022,7 @@ describe('live frame', () => {
     });
 
     it('never clips the once dashboard and draws no boxes there', () => {
-      const once = renderDashboard(tenPanels(), true, NOW, [], 'UTC');
+      const once = renderDashboard(tenPanels(), true, NOW, [], 'UTC', {});
       expect(once.split('\n')).toHaveLength(52);
       expect(once).not.toContain('+- route');
       const ids = ['claude', 'claude-work', 'agy', 'kimi', 'grok', 'codex', 'cursor', 'junie', 'hermes', 'kilo'];
@@ -1122,9 +1122,9 @@ describe('panel marks', () => {
 
   it('tags the ineligible panels of the once dashboard and nothing else', () => {
     const kilo: ProviderUsage = { id: 'kilo', displayName: 'kilo', planLabel: 'api balance', windows: [], fetchedAt: NOW, status: 'ok' };
-    const lines = renderDashboard([freshClaude, unavailableClaude, kilo], true, NOW, ['kilo'], 'UTC').split('\n');
+    const lines = renderDashboard([freshClaude, unavailableClaude, kilo], true, NOW, ['kilo'], 'UTC', {}).split('\n');
     expect(lines.filter((line) => line.includes('routing off'))).toEqual([`kilo${' '.repeat(57)}routing off`]);
-    expect(renderDashboard([freshClaude, kilo], true, NOW, [], 'UTC')).not.toContain('▸');
+    expect(renderDashboard([freshClaude, kilo], true, NOW, [], 'UTC', {})).not.toContain('▸');
   });
 });
 
@@ -1357,7 +1357,7 @@ describe('route boxes', () => {
   ])('boxes equal routeLine and highRouteLine split at the last space: %s', (_case, usages, ineligible, zone, now) => {
     const lines = boxLines(boxView(usages, { ineligible, zone }), true, now);
     const midnight = nextLocalMidnight(zone, now);
-    const [route, high] = [routeLine(LINES, usages, now, midnight, ineligible), highRouteLine(LINES, usages, ineligible)].map(splitLine);
+    const [route, high] = [routeLine(LINES, usages, now, midnight, ineligible), highRouteLine(LINES, usages, now, ineligible)].map(splitLine);
     expect([rowText(lines[1], 0), rowText(lines[2], 0)]).toEqual([cut31(route[0]), route[1]]);
     expect([rowText(lines[1], 1), rowText(lines[2], 1)]).toEqual([cut31(high[0]), high[1]]);
   });
@@ -1410,8 +1410,8 @@ describe('route boxes', () => {
   });
 
   it('never draws the boxes in the once dashboard', () => {
-    expect(renderDashboard(ROUTED, true, NOW, [], 'UTC')).not.toContain('+- route');
-    expect(renderDashboard(ROUTED, false, NOW, [], 'UTC')).not.toContain('┌─ route');
+    expect(renderDashboard(ROUTED, true, NOW, [], 'UTC', {})).not.toContain('+- route');
+    expect(renderDashboard(ROUTED, false, NOW, [], 'UTC', {})).not.toContain('┌─ route');
   });
 });
 
@@ -1450,7 +1450,7 @@ describe('style balance', () => {
   });
 
   it('closes every styled line of the once dashboard', () => {
-    const lines = renderDashboard(mixed, false, NOW, ['kilo'], 'UTC').split('\n');
+    const lines = renderDashboard(mixed, false, NOW, ['kilo'], 'UTC', {}).split('\n');
     expect(lines.filter((line) => line.includes('\x1b['))).not.toHaveLength(0);
     expect(lines.every(closed)).toBe(true);
     expect(lines.filter((line) => line.includes('token expired') || line.includes('stale'))).toSatisfy((dimmed: string[]) =>
@@ -1473,7 +1473,7 @@ describe('style balance', () => {
   });
 
   it('leaves NO_COLOR output free of escapes', () => {
-    expect(renderDashboard(mixed, true, NOW, [], 'UTC')).not.toContain('\x1b');
+    expect(renderDashboard(mixed, true, NOW, [], 'UTC', {})).not.toContain('\x1b');
     expect(renderLiveFrame(liveViewOf(mixed, 12), true, NOW)).not.toContain('\x1b');
   });
 });
@@ -1963,7 +1963,7 @@ describe('tripped badge', () => {
   const RESET_AT = '2026-09-13T12:30:00.000Z';
   const session = (usedPct: number, resetsAt?: string): UsageWindow => ({ label: 'session', kind: 'rolling', usedPct, ...(resetsAt === undefined ? {} : { resetsAt }) });
   const claude = (...windows: UsageWindow[]): ProviderUsage => ({ id: 'claude', displayName: 'claude', planLabel: 'claude · personal', windows, fetchedAt: NOW, status: 'ok' });
-  const once = (usage: ProviderUsage, noColor: boolean, ineligible: string[] = []) => renderDashboard([usage], noColor, NOW, ineligible, 'UTC').split('\n')[2];
+  const once = (usage: ProviderUsage, noColor: boolean, ineligible: string[] = []) => renderDashboard([usage], noColor, NOW, ineligible, 'UTC', {}).split('\n')[2];
   const live = (usage: ProviderUsage, noColor: boolean) => renderLiveFrame({ slots: [{ id: 'claude', usage }], spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: LINES } }, noColor, NOW).split('\n').find((line) => line.startsWith('claude')) ?? '';
   const backText = formatResetAt(RESET_AT, NOW, 'UTC');
   const badge = `tripped · back ${backText}`;
@@ -2003,6 +2003,21 @@ describe('tripped badge', () => {
     const frame = renderLiveFrame({ slots: [{ id: 'claude', usage: claude(session(92, RESET_AT)) }], spinner: 0, refreshing: false, footer: false, ineligible: [], hidden: ['claude'], showHidden: true, zone: 'UTC', routes: { lines: LINES } }, false, NOW);
     expect(frame).toContain(`\x1b[90mhidden · \x1b[0m\x1b[31m${badge}\x1b[0m`);
     renderLiveFrame({ slots: [{ id: 'claude', usage: claude(session(92, RESET_AT)) }], spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: LINES } }, true, NOW).split('\n').forEach((line) => expect([...line].length).toBeLessThanOrEqual(72));
+  });
+
+  it('shows limited with the back time when a window reaches the account limit', () => {
+    const usage = claude(session(10), { label: 'weekly', kind: 'weekly', usedPct: 80, resetsAt: RESET_AT });
+    const limited = `limited · back ${backText}`;
+    expect(renderDashboard([usage], true, NOW, [], 'UTC', { claude: 75 }).split('\n')[2]).toBe(`claude${' '.repeat(72 - 6 - limited.length)}${limited}`);
+    const capped = { ...LINES, route: { ...LINES.route, claude: { ...LINES.route.claude, limit: 75 } } };
+    const frame = renderLiveFrame({ slots: [{ id: 'claude', usage }], spinner: 0, refreshing: false, footer: false, ineligible: [], zone: 'UTC', routes: { lines: capped } }, true, NOW);
+    expect(frame.split('\n').find((line) => line.startsWith('claude'))).toBe(`claude${' '.repeat(72 - 6 - limited.length)}${limited}`);
+    expect(once(usage, true)).toBe('claude');
+  });
+
+  it('shows limited ahead of tripped when both apply', () => {
+    const usage = claude(session(92, RESET_AT));
+    expect(renderDashboard([usage], true, NOW, [], 'UTC', { claude: 75 }).split('\n')[2]).toContain('limited · back');
   });
 
   it('leaves the compact row without the badge', () => {

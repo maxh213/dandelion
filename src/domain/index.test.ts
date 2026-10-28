@@ -3,7 +3,9 @@ import {
   HIGH_CHAIN,
   dueReprobes,
   formatCountdown,
+  highDecision,
   highRouteLine,
+  limitsOf,
   nextSortOrder,
   nextLocalMidnight,
   notificationEvents,
@@ -116,6 +118,16 @@ function reversedKeys<T>(record: Record<string, T>): Record<string, T> {
 
 const R: RouteLines = { high: reversedKeys(F.high), route: reversedKeys(F.route) };
 
+const CAPPED: RouteLines = { ...LINES, route: { ...LINES.route, 'claude-animus': { ...LINES.route['claude-animus'], limit: 75 }, agy: { ...LINES.route.agy, limit: 95 } } };
+
+describe('limitsOf', () => {
+  it('collects the limit of every entry that sets one', () => {
+    expect(limitsOf(CAPPED)).toEqual({ 'claude-animus': 75, agy: 95 });
+    expect(limitsOf(LINES)).toEqual({});
+    expect(limitsOf(undefined)).toEqual({});
+  });
+});
+
 const WINDOW_KINDS: readonly WindowKind[] = ['rolling', 'weekly', 'other'];
 
 function kindOf(text: string): WindowKind {
@@ -163,7 +175,7 @@ describe('routeLine', () => {
   });
 
   it('uses Kilo as a balance-only standard fallback with no synthetic score or window', () => {
-    const decision = routeDecision([kiloOf(14.15)], NOW, MIDNIGHT, []);
+    const decision = routeDecision([kiloOf(14.15)], NOW, MIDNIGHT, [], {});
     expect(decision.chosen).toEqual({ rule: 'balance', id: 'kilo' });
     expect(decision.chosen).not.toHaveProperty('left');
     expect(decision.chosen).not.toHaveProperty('label');
@@ -183,42 +195,74 @@ describe('routeLine', () => {
   it('ignores Kilo windows, probe failures and ineligibility, and never routes it high', () => {
     const withSyntheticWindow = { ...kiloOf(14.15), windows: [{ label: 'weekly', kind: 'weekly' as const, usedPct: 99, resetsAt: '2026-09-14T20:00:00.000Z' }] };
     expect(routeLine(LINES, [withSyntheticWindow], NOW, MIDNIGHT, [])).toBe('vendor/model-k high kilo');
-    expect(highRouteLine(LINES, [withSyntheticWindow], [])).toBe('none');
+    expect(highRouteLine(LINES, [withSyntheticWindow], NOW, [])).toBe('none');
     expect(routeLine(LINES, [usageOf('kilo: unavailable')], NOW, MIDNIGHT, [])).toBe('none');
     expect(routeLine(LINES, [kiloOf(14.15)], NOW, MIDNIGHT, ['kilo'])).toBe('none');
   });
 
   it('decides the same pick routeLine prints, with the skipped accounts', () => {
     const usages = 'claude: rolling 95 @-; agy: weekly 40 @-; grok: weekly 10 @-; junie: unavailable'.split('; ').map(usageOf);
-    expect(routeDecision(usages, NOW, MIDNIGHT, ['grok'])).toEqual({
+    expect(routeDecision(usages, NOW, MIDNIGHT, ['grok'], {})).toEqual({
       chosen: { rule: 'headroom', id: 'agy', left: 60 },
       rivals: [],
-      skipped: { tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'kimi', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'] }
+      skipped: { limited: [], tripped: [{ id: 'claude', label: 'rolling', usedPct: 95 }], ineligible: ['grok'], unavailable: ['claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'kimi', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'] }
     });
     expect(routeLine(LINES, usages, NOW, MIDNIGHT, ['grok'])).toBe('model-c high agy');
   });
 
   it('reports when a tripped account comes back, the latest reset of its tripping windows', () => {
     const usages = [usageOf('claude: rolling 91 @2026-09-15T05:00:00.000Z, rolling 97 @2026-09-15T04:00:00.000Z, rolling 10 @2026-09-16T00:00:00.000Z')];
-    expect(routeDecision(usages, NOW, MIDNIGHT, []).skipped.tripped).toEqual([{ id: 'claude', label: 'rolling', usedPct: 97, backAt: '2026-09-15T05:00:00.000Z' }]);
+    expect(routeDecision(usages, NOW, MIDNIGHT, [], {}).skipped.tripped).toEqual([{ id: 'claude', label: 'rolling', usedPct: 97, backAt: '2026-09-15T05:00:00.000Z' }]);
   });
 
   it('gives no back time when a tripping window has no reset or the reset has passed', () => {
     const missing = [usageOf('claude: rolling 91 @2026-09-15T05:00:00.000Z, rolling 97 @-')];
     const past = [usageOf('claude: rolling 97 @2026-09-14T00:00:00.000Z')];
-    expect(routeDecision(missing, NOW, MIDNIGHT, []).skipped.tripped[0]).not.toHaveProperty('backAt');
-    expect(routeDecision(past, NOW, MIDNIGHT, []).skipped.tripped[0]).not.toHaveProperty('backAt');
+    expect(routeDecision(missing, NOW, MIDNIGHT, [], {}).skipped.tripped[0]).not.toHaveProperty('backAt');
+    expect(routeDecision(past, NOW, MIDNIGHT, [], {}).skipped.tripped[0]).not.toHaveProperty('backAt');
   });
 
   it('reports the most used rolling window of a tripped account', () => {
     const usages = [usageOf('claude: rolling 91 @-, rolling 97 @-')];
-    expect(routeDecision(usages, NOW, MIDNIGHT, []).skipped.tripped).toEqual([{ id: 'claude', label: 'rolling', usedPct: 97 }]);
+    expect(routeDecision(usages, NOW, MIDNIGHT, [], {}).skipped.tripped).toEqual([{ id: 'claude', label: 'rolling', usedPct: 97 }]);
   });
 
   it('does not trip a rolling window at 89.5 used and keeps the account a candidate', () => {
     expect(routeOf('kimi: rolling 89.5 @-, weekly 10 @2026-09-20T00:00:00.000Z')).toBe('model-d max kimi');
-    expect(routeDecision([usageOf('kimi: rolling 89.5 @-')], NOW, MIDNIGHT, []).skipped.tripped).toEqual([]);
-    expect(routeDecision([usageOf('kimi: rolling 90 @-')], NOW, MIDNIGHT, []).skipped.tripped).toHaveLength(1);
+    expect(routeDecision([usageOf('kimi: rolling 89.5 @-')], NOW, MIDNIGHT, [], {}).skipped.tripped).toEqual([]);
+    expect(routeDecision([usageOf('kimi: rolling 90 @-')], NOW, MIDNIGHT, [], {}).skipped.tripped).toHaveLength(1);
+  });
+
+  it('skips an account once any rolling or weekly window reaches its limit', () => {
+    expect(routeOf('claude-animus: rolling 10 @-, weekly 74.9 @-; agy: weekly 80 @-', [], CAPPED)).toBe('model-a high claude-animus');
+    expect(routeOf('claude-animus: rolling 10 @-, weekly 75 @-; agy: weekly 80 @-', [], CAPPED)).toBe('model-c high agy');
+    expect(routeOf('claude-animus: rolling 75 @-, weekly 10 @-; agy: weekly 80 @-', [], CAPPED)).toBe('model-c high agy');
+    expect(routeOf('claude-animus: rolling 10 @-, weekly 75 @-; agy: weekly 80 @-')).toBe('model-a high claude-animus');
+  });
+
+  it('ignores other windows when checking a limit', () => {
+    expect(routeOf('claude-animus: rolling 10 @-, weekly 10 @-, other 99 @-', [], CAPPED)).toBe('model-a high claude-animus');
+  });
+
+  it('never evaporates a weekly on an account at its limit', () => {
+    expect(routeOf('claude-animus: weekly 80 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-', [], CAPPED)).toBe('model-c high agy');
+    expect(routeOf('claude-animus: weekly 80 @2026-09-14T20:00:00.000Z; agy: rolling 40 @-')).toBe('model-a max claude-animus');
+  });
+
+  it('lists an account at its limit once, with its most used window and the latest reset at or over the limit', () => {
+    const usages = [usageOf('claude-animus: rolling 95 @2026-09-14T15:00:00.000Z, weekly 80 @2026-09-17T00:00:00.000Z, weekly 20 @2026-09-20T00:00:00.000Z')];
+    expect(routeDecision(usages, NOW, MIDNIGHT, [], { 'claude-animus': 75 }).skipped).toMatchObject({ limited: [{ id: 'claude-animus', label: 'rolling', usedPct: 95, limit: 75, backAt: '2026-09-17T00:00:00.000Z' }], tripped: [] });
+  });
+
+  it('keeps the 90% trip under a limit above it and stops weekly windows at the limit', () => {
+    const limits = { agy: 95 };
+    expect(routeDecision([usageOf('agy: rolling 92 @-, weekly 10 @-')], NOW, MIDNIGHT, [], limits).skipped).toMatchObject({ limited: [], tripped: [{ id: 'agy', label: 'rolling', usedPct: 92 }] });
+    expect(routeDecision([usageOf('agy: rolling 10 @-, weekly 95 @-')], NOW, MIDNIGHT, [], limits).skipped).toMatchObject({ limited: [{ id: 'agy', label: 'weekly', usedPct: 95, limit: 95 }], tripped: [] });
+  });
+
+  it('lists an ineligible account at its limit only as ineligible', () => {
+    const { limited, ineligible } = routeDecision([usageOf('claude-animus: weekly 80 @-')], NOW, MIDNIGHT, ['claude-animus'], { 'claude-animus': 75 }).skipped;
+    expect([limited, ineligible]).toEqual([[], ['claude-animus']]);
   });
 
   it('excludes ok usages with zero windows before any other rule', () => {
@@ -494,7 +538,7 @@ describe('highRouteLine', () => {
   }
 
   function highOf(candidates: string, ineligible: string[] = [], lines = LINES): string {
-    return highRouteLine(lines, candidates.split('; ').map(usageOf), ineligible);
+    return highRouteLine(lines, candidates.split('; ').map(usageOf), NOW, ineligible);
   }
 
   it('offers rank 3 cursor at 89.5 used and skips it at 90', () => {
@@ -524,6 +568,19 @@ describe('highRouteLine', () => {
     ['claude: session rolling 10, weekly weekly 10, Fable weekly 95; grok: credits weekly 60', 'model-h3 max claude']
   ])('walks the chain in code order whatever the key order of the file: %s', (candidates, line) => {
     expect(highOf(candidates, [], R)).toBe(line);
+  });
+
+  it('skips an account at its limit on every rank, whichever window reached it', () => {
+    const others = 'claude: session rolling 50, weekly weekly 50, weekly Fable weekly 50';
+    expect(highOf(`claude-animus: session rolling 10, weekly weekly 74, weekly Fable weekly 0; ${others}`, [], CAPPED)).toBe('model-h1 max claude-animus');
+    expect(highOf(`claude-animus: session rolling 10, weekly weekly 75, weekly Fable weekly 0; ${others}`, [], CAPPED)).toBe('model-h1 max claude');
+    expect(highOf('claude-animus: session rolling 10, weekly weekly 10, weekly Fable weekly 80; cursor: total weekly 50', [], CAPPED)).toBe('model-f cursor');
+    expect(highOf('claude-animus: session rolling 10, weekly weekly 10, weekly Fable weekly 80; cursor: total weekly 50')).toBe('model-h1 max claude-animus');
+  });
+
+  it('lists only chain accounts at their limit, with when they come back', () => {
+    const usages = 'claude-animus: session rolling 80 resetting soon, weekly weekly 10; kimi: 5h rolling 99'.split('; ').map(usageOf);
+    expect(highDecision(usages, NOW, [], { 'claude-animus': 75, kimi: 50 }).limited).toEqual([{ id: 'claude-animus', label: 'session', usedPct: 80, limit: 75, backAt: '2026-09-14T12:00:00.000Z' }]);
   });
 
   it('pins the chain entry by entry', () => {
@@ -720,6 +777,17 @@ describe('openRoutes', () => {
     expect(reads).toEqual(['/shipped/routes.json']);
   });
 
+  it('reads a limit on any account with usage windows', () => {
+    const text = edited((value) => {
+      Object.assign(value.route['claude-animus'] as object, { limit: 75 });
+      Object.assign(value.route.agy as object, { limit: 100 });
+      Object.assign(value.route.kimi as object, { limit: 1 });
+    });
+    const { file } = fileOf({ [PATH]: text });
+    expect(openRoutes({ DANDELION_ROUTES_FILE: PATH }, '/shipped/routes.json', file).lines?.route['claude-animus']).toEqual({ ...F.route['claude-animus'], limit: 75 });
+    expect(problemOf(text)).toBeUndefined();
+  });
+
   it('takes a file whose keys come in any order', () => {
     const { file } = fileOf({ [PATH]: JSON.stringify(R) });
     expect(openRoutes({ DANDELION_ROUTES_FILE: PATH }, '/shipped/routes.json', file)).toEqual({ lines: R });
@@ -753,6 +821,12 @@ describe('openRoutes', () => {
     ['leading space', edited((value) => { value.high.fable = ' model-h1 max'; }), 'high.fable is not "<model>" or "<model> <effort>"'],
     ['trailing space', edited((value) => { (value.route.grok as Record<string, string>).standard = 'model-e xhigh '; }), 'route.grok.standard is not "<model>" or "<model> <effort>"'],
     ['two spaces', edited((value) => { (value.route.junie as Record<string, string>).max = 'model-g  high'; }), 'route.junie.max is not "<model>" or "<model> <effort>"'],
+    ['a limit of 0', edited((value) => { Object.assign(value.route['claude-animus'] as object, { limit: 0 }); }), 'route.claude-animus.limit is not a whole percent from 1 to 100'],
+    ['a limit above 100', edited((value) => { Object.assign(value.route['claude-animus'] as object, { limit: 101 }); }), 'route.claude-animus.limit is not a whole percent from 1 to 100'],
+    ['a fractional limit', edited((value) => { Object.assign(value.route.codex as object, { limit: 75.5 }); }), 'route.codex.limit is not a whole percent from 1 to 100'],
+    ['a limit as a string', edited((value) => { Object.assign(value.route.codex as object, { limit: '75' }); }), 'route.codex.limit is not a whole percent from 1 to 100'],
+    ['a null limit', edited((value) => { Object.assign(value.route.codex as object, { limit: null }); }), 'route.codex.limit is not a whole percent from 1 to 100'],
+    ['a limit on kilo', edited((value) => { Object.assign(value.route.kilo as object, { limit: 75 }); }), 'unknown key route.kilo.limit'],
     ['tab', edited((value) => { (value.route.hermes as Record<string, string>).standard = 'vendor/model-h\txhigh'; }), 'route.hermes.standard is not "<model>" or "<model> <effort>"']
   ])('names what is wrong with a bad file: %s', (_case, text, problem) => {
     expect(problemOf(text)).toBe(problem);

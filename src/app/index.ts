@@ -26,6 +26,7 @@ import {
   type RunFailure
 } from '../probes/index.ts';
 import {
+  limitsOf,
   openEligibility,
   openHidden,
   openHistory,
@@ -320,7 +321,7 @@ export function routesWarning(env: Record<string, string | undefined>): string {
 export async function runApp(io: ProbeIo, env: Record<string, string | undefined>, now: string, maxAge?: number): Promise<string> {
   const usages = await cachedUsages(io, env, { now, maxAge });
   const noColor = env['NO_COLOR'] !== undefined;
-  return renderDashboard(usages, noColor, now, eligibilityOf(io, env).ineligible(), processZone());
+  return renderDashboard(usages, noColor, now, eligibilityOf(io, env).ineligible(), processZone(), limitsOf(routesOf(env).lines));
 }
 
 export type CachedRouteRequest = RouteRequest & { maxAge?: number };

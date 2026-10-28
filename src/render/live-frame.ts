@@ -4,6 +4,7 @@ import {
   formatCountdown,
   formatResetAt,
   highRouteLine,
+  limitsOf,
   nextLocalMidnight,
   routeLine,
   sortSuffix,
@@ -159,7 +160,7 @@ function statusOf(view: LiveView, slot: LiveSlot): ClaudeStatus | undefined {
 
 function slotMarks(view: LiveView, slot: LiveSlot, index: number): PanelMarks {
   const caption = view.flash?.index === index ? view.flash.message : undefined;
-  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), zone: view.zone, caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view), status: statusOf(view, slot), samples: samplesOf(view, slot) };
+  return { selected: view.selected === index, ineligible: view.ineligible.includes(slot.id), hidden: isHidden(view, slot), zone: view.zone, caption, absoluteZone: absoluteZoneOf(view), width: widthOf(view), status: statusOf(view, slot), samples: samplesOf(view, slot), limits: limitsOf(view.routes.lines) };
 }
 
 function settledMarks(slot: LiveSlot, usage: ProviderUsage, spinner: number, now: string, marks: PanelMarks): PanelMarks {
@@ -261,7 +262,7 @@ function faultAnswer(problem: string): BoxAnswer {
 
 function answerLines(lines: RouteLines, settled: ProviderUsage[], view: LiveView, now: string): [string, string] {
   const midnight = cachedMidnight(view.zone, now);
-  return [routeLine(lines, settled, now, midnight, view.ineligible), highRouteLine(lines, settled, view.ineligible)];
+  return [routeLine(lines, settled, now, midnight, view.ineligible), highRouteLine(lines, settled, now, view.ineligible)];
 }
 
 export function currentRouteLines(view: LiveView, now: string): [string, string] | undefined {

@@ -1,4 +1,4 @@
-import { elapsedFraction, formatCountdown, formatResetAt, isStale, printable, projectFull, routeDecision, usageClass, type Balance, type ClaudeStatus, type HistorySample, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
+import { elapsedFraction, formatCountdown, formatResetAt, isStale, printable, projectFull, routeDecision, usageClass, type Balance, type ClaudeStatus, type HistorySample, type Limits, type ProviderUsage, type UsageWindow } from '../domain/index.ts';
 
 export const WIDTH = 72;
 const GAUGE_CELLS = 20;
@@ -16,6 +16,7 @@ const TITLE = 'DANDELION';
 const ROUTING_OFF = 'routing off';
 const HIDDEN = 'hidden';
 const TRIPPED = 'tripped';
+const LIMITED = 'limited';
 const MARKER = '▸ ';
 const COMPACT_LEAD_CELLS = 20;
 const SPARK_BUCKETS = 8;
@@ -25,7 +26,7 @@ const SPARK_MIN_SAMPLES = 2;
 const SPARK_BLOCKS = [...'▁▂▃▄▅▆▇█'];
 const SPARK_ASCII = [...'_.-=#'];
 
-export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; zone?: string; tripped?: string; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number; status?: ClaudeStatus; samples?: HistorySample[] };
+export type PanelMarks = { selected: boolean; ineligible: boolean; hidden?: boolean; zone?: string; tripped?: string; caption?: string; fixable?: boolean; age?: string; spinner?: string; absoluteZone?: string; width?: number; status?: ClaudeStatus; samples?: HistorySample[]; limits?: Limits };
 
 export type Layout = { width: number; label: number; gauge: number };
 
@@ -200,13 +201,20 @@ function flagsOf(marks: PanelMarks): string {
   return [...(marks.hidden ? [HIDDEN] : []), ...(marks.ineligible ? [ROUTING_OFF] : []), ...(marks.tripped === undefined ? [] : [marks.tripped])].join(' · ');
 }
 
-function trippedLabel(backAt: string | undefined, now: string, zone: string): string {
-  return backAt === undefined ? TRIPPED : `${TRIPPED} · back ${formatResetAt(backAt, now, zone)}`;
+type HeldFlag = { flag: string; backAt?: string };
+
+function trippedLabel({ flag, backAt }: HeldFlag, now: string, zone: string): string {
+  return backAt === undefined ? flag : `${flag} · back ${formatResetAt(backAt, now, zone)}`;
+}
+
+function heldOf(usage: OkUsage, now: string, marks: PanelMarks): HeldFlag | undefined {
+  const { limited, tripped } = routeDecision([usage], now, now, [], marks.limits ?? {}).skipped;
+  return [...limited.map(({ backAt }) => ({ flag: LIMITED, backAt })), ...tripped.map(({ backAt }) => ({ flag: TRIPPED, backAt }))][0];
 }
 
 function trippedFlag(usage: OkUsage, now: string, marks: PanelMarks): string | undefined {
-  const [tripped] = routeDecision([usage], now, now, []).skipped.tripped;
-  return tripped === undefined || marks.ineligible || marks.zone === undefined ? undefined : trippedLabel(tripped.backAt, now, marks.zone);
+  const held = heldOf(usage, now, marks);
+  return held === undefined || marks.ineligible || marks.zone === undefined ? undefined : trippedLabel(held, now, marks.zone);
 }
 
 function flagTag(marks: PanelMarks, noColor: boolean): (text: string) => string {
@@ -469,8 +477,8 @@ export function renderPanel(usage: ProviderUsage, noColor: boolean, now: string,
   }
 }
 
-export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string, ineligible: string[], zone: string): string {
-  const panels = usages.map((usage) => renderPanel(usage, noColor, now, { selected: false, ineligible: ineligible.includes(usage.id), zone }));
+export function renderDashboard(usages: ProviderUsage[], noColor: boolean, now: string, ineligible: string[], zone: string, limits: Limits): string {
+  const panels = usages.map((usage) => renderPanel(usage, noColor, now, { selected: false, ineligible: ineligible.includes(usage.id), zone, limits }));
   return [renderBanner(now, zone, noColor), ...panels].join('\n');
 }
 

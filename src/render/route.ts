@@ -4,6 +4,7 @@ import {
   highDecisionLine,
   formatResetAt,
   highRouteLine,
+  limitsOf,
   nextLocalMidnight,
   projectFull,
   routeDecision,
@@ -12,6 +13,7 @@ import {
   usageClass,
   type ChainSkip,
   type ChainWin,
+  type HighDecision,
   type ProviderUsage,
   type RouteDecision,
   type RouteLines,
@@ -58,8 +60,20 @@ function choiceText({ chosen, rivals }: RouteDecision, zone: string, usages: Pro
   return headroomText(chosen, rivals);
 }
 
+function backText(backAt: string | undefined, now: string, zone: string): string {
+  return backAt === undefined ? '' : `, back ${formatResetAt(backAt, now, zone)}`;
+}
+
 function trippedEntry({ id, label, usedPct, backAt }: Skipped['tripped'][number], now: string, zone: string): string {
-  return `${id} (${label} ${percent(usedPct)}${backAt === undefined ? '' : `, back ${formatResetAt(backAt, now, zone)}`})`;
+  return `${id} (${label} ${percent(usedPct)}${backText(backAt, now, zone)})`;
+}
+
+function limitedEntry({ id, label, usedPct, limit, backAt }: Skipped['limited'][number], now: string, zone: string): string {
+  return `${id} (${label} ${percent(usedPct)}, limit ${limit}%${backText(backAt, now, zone)})`;
+}
+
+function limitedText(limited: Skipped['limited'], now: string, zone: string): string {
+  return limited.length > 0 ? `limited: ${limited.map((each) => limitedEntry(each, now, zone)).join(', ')}` : '';
 }
 
 function unavailableEntry(id: string, usages: ProviderUsage[]): string {
@@ -68,8 +82,9 @@ function unavailableEntry(id: string, usages: ProviderUsage[]): string {
   return balance === 'unavailable' ? 'kilo (balance unavailable)' : `kilo (balance ${balance}; requires dollar balance above $10.00)`;
 }
 
-function skippedText({ tripped, ineligible, unavailable }: Skipped, now: string, zone: string, usages: ProviderUsage[]): string {
+function skippedText({ limited, tripped, ineligible, unavailable }: Skipped, now: string, zone: string, usages: ProviderUsage[]): string {
   const parts = [
+    limitedText(limited, now, zone),
     tripped.length > 0 ? `tripped: ${tripped.map((each) => trippedEntry(each, now, zone)).join(', ')}` : '',
     ineligible.length > 0 ? `ineligible: ${ineligible.join(', ')}` : '',
     unavailable.length > 0 ? `unavailable: ${unavailable.map((id) => unavailableEntry(id, usages)).join(', ')}` : ''
@@ -86,8 +101,9 @@ function winnerText(winner: ChainWin | undefined): string {
   return `rank ${winner.rank} ${winner.name} on ${winner.id}: gating ${percent(winner.usedPct)} used`;
 }
 
-function skipsText(skipped: ChainSkip[]): string {
-  return skipped.length === 0 ? '' : `skipped: ${skipped.map(skipReason).join('; ')}`;
+function skipsText({ skipped, limited }: HighDecision, now: string, zone: string): string {
+  const parts = [skipped.length === 0 ? '' : `skipped: ${skipped.map(skipReason).join('; ')}`, limitedText(limited, now, zone)];
+  return parts.filter((part) => part !== '').join('; ');
 }
 
 function withExplanation(line: string, explanation: string[]): RouteOutput {
@@ -95,20 +111,20 @@ function withExplanation(line: string, explanation: string[]): RouteOutput {
   return { out: `${text}\n`, err: '', code: line === NO_ROUTE ? 1 : 0 };
 }
 
-function explainHigh(lines: RouteLines, usages: ProviderUsage[], ineligible: string[]): RouteOutput {
-  const decision = highDecision(usages, ineligible);
-  return withExplanation(highDecisionLine(lines, decision), [winnerText(decision.winner), skipsText(decision.skipped)]);
+function explainHigh(lines: RouteLines, usages: ProviderUsage[], ineligible: string[], { now, zone }: RouteRequest): RouteOutput {
+  const decision = highDecision(usages, now, ineligible, limitsOf(lines));
+  return withExplanation(highDecisionLine(lines, decision), [winnerText(decision.winner), skipsText(decision, now, zone)]);
 }
 
 function explainHeadroom(lines: RouteLines, usages: ProviderUsage[], ineligible: string[], { now, zone }: RouteRequest): RouteOutput {
-  const decision = routeDecision(usages, now, nextLocalMidnight(zone, now), ineligible);
+  const decision = routeDecision(usages, now, nextLocalMidnight(zone, now), ineligible, limitsOf(lines));
   return withExplanation(routeDecisionLine(lines, decision), [choiceText(decision, zone, usages), skippedText(decision.skipped, now, zone, usages)]);
 }
 
 function explained(lines: RouteLines, usages: ProviderUsage[], ineligible: string[], request: RouteRequest): RouteOutput {
   switch (request.mode) {
     case 'high':
-      return explainHigh(lines, usages, ineligible);
+      return explainHigh(lines, usages, ineligible, request);
     case 'headroom':
       return explainHeadroom(lines, usages, ineligible, request);
     default:
@@ -123,7 +139,7 @@ function headroomLine(lines: RouteLines, usages: ProviderUsage[], ineligible: st
 function lineFor(lines: RouteLines, usages: ProviderUsage[], ineligible: string[], request: RouteRequest): string {
   switch (request.mode) {
     case 'high':
-      return highRouteLine(lines, usages, ineligible);
+      return highRouteLine(lines, usages, request.now, ineligible);
     case 'headroom':
       return headroomLine(lines, usages, ineligible, request);
     default:
@@ -169,7 +185,7 @@ function providerEntry(usage: ProviderUsage, ineligible: string[], now: string):
 function routeFields(routes: Routes, usages: ProviderUsage[], ineligible: string[], { now, zone }: SnapshotRequest): Record<string, unknown> {
   const { lines, fault } = routes;
   if (fault !== undefined) return { route: null, routeHigh: null, routesError: `${fault.path}: ${fault.problem}` };
-  return { route: routeLine(lines, usages, now, nextLocalMidnight(zone, now), ineligible), routeHigh: highRouteLine(lines, usages, ineligible) };
+  return { route: routeLine(lines, usages, now, nextLocalMidnight(zone, now), ineligible), routeHigh: highRouteLine(lines, usages, now, ineligible) };
 }
 
 export function renderSnapshot(routes: Routes, usages: ProviderUsage[], ineligible: string[], request: SnapshotRequest): string {

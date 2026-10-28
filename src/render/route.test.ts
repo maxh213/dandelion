@@ -127,6 +127,21 @@ describe('renderRoute', () => {
       });
     });
 
+    it('lists accounts at their limit ahead of tripped ones, with the limit and when they come back', () => {
+      const lines = { ...LINES, route: { ...LINES.route, 'claude-animus': { ...LINES.route['claude-animus'], limit: 75 } } };
+      const usages = [usage('claude-animus', ['session', 'rolling', 10], ['weekly', 'weekly', 76, LATER]), usage('claude-work', ['session', 'rolling', 92]), usage('agy', ['weekly', 'weekly', 30, LATER])];
+      expect(renderRoute(lines, usages, [], { mode: 'headroom', now: NOW, zone: 'Etc/GMT+7', why: true }).out).toBe(
+        'model-c high agy\nheadroom: agy binding 70% left\nlimited: claude-animus (weekly 76%, limit 75%, back Sat 17:00); tripped: claude-work (session 92%); unavailable: claude, claude-deepseek, claude-ollama, kimi, grok, codex, codex-animus, cursor, junie, hermes, kilo (balance unavailable)\n'
+      );
+      expect(renderRoute(lines, usages, [], { mode: 'high', now: NOW, zone: 'Etc/GMT+7', why: true }).out).toBe(
+        'model-c high agy\nrank 6 agy on agy: gating 30% used\nskipped: rank 1 fable tripped at 92%; rank 2 codex no open account; rank 3 cursor no open account; rank 4 opus tripped at 92%; rank 5 grok no open account; limited: claude-animus (weekly 76%, limit 75%, back Sat 17:00)\n'
+      );
+      expect(renderRoute(lines, [usage('claude-animus', ['weekly', 'weekly', 80])], [], { mode: 'high', now: NOW, zone: 'Etc/GMT+7', why: true }).out.split('\n')[2]).toMatch(/; limited: claude-animus \(weekly 80%, limit 75%\)$/);
+      expect(renderRoute(lines, [usage('claude', ['session', 'rolling', 5]), usage('claude-animus', ['weekly', 'weekly', 80])], [], { mode: 'high', now: NOW, zone: 'Etc/GMT+7', why: true }).out).toBe(
+        'model-h1 max claude\nrank 1 fable on claude: gating 5% used\nlimited: claude-animus (weekly 80%, limit 75%)\n'
+      );
+    });
+
     it('shows a month and day for a back time six or more days away', () => {
       const far = usage('claude', ['session', 'rolling', 92, '2026-09-25T04:00:00.000Z']);
       expect(why([far], [], 'headroom').out).toContain('tripped: claude (session 92%, back Sep 24 21:00)');
