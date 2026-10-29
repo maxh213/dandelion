@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { disableWarning, isEntryFile, processZone, routesWarning, runApp, runJson, runLine, runWaybar, isMaxAge, runLive, runRoute, runRun, realIo, realRunLauncher, type Keyboard, type ProbeIo, type RouteMode, type Screen } from './app/index.ts';
+import { disableWarning, isEntryFile, processZone, routesWarning, runApp, runJson, runLine, runWaybar, isMaxAge, runLive, runRoute, runRun, runSeats, realIo, realRunLauncher, type Keyboard, type ProbeIo, type RouteMode, type RouteOutput, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -30,11 +30,18 @@ function maxAgeOf(args: string[]): number | undefined {
   return args.includes('--max-age') && isMaxAge(value) ? Number(value) : undefined;
 }
 
-async function route(io: ProbeIo, proc: Proc): Promise<void> {
-  const { out, err, code } = await runRoute(io, proc.env, { mode: routeModeOf(proc.argv), now: new Date().toISOString(), zone: processZone(), why: proc.argv.slice(3).includes('--why'), maxAge: maxAgeOf(proc.argv.slice(3)) });
+function emit(proc: Proc, { out, err, code }: RouteOutput): void {
   proc.stdout.write(out);
   proc.stderr.write(err);
   if (code !== 0) proc.exit(code);
+}
+
+async function route(io: ProbeIo, proc: Proc): Promise<void> {
+  emit(proc, await runRoute(io, proc.env, { mode: routeModeOf(proc.argv), now: new Date().toISOString(), zone: processZone(), why: proc.argv.slice(3).includes('--why'), maxAge: maxAgeOf(proc.argv.slice(3)) }));
+}
+
+async function seats(io: ProbeIo, proc: Proc): Promise<void> {
+  emit(proc, await runSeats(io, proc.env, proc.argv.slice(3), { now: new Date().toISOString(), zone: processZone() }));
 }
 
 async function json(io: ProbeIo, proc: Proc): Promise<void> {
@@ -95,6 +102,9 @@ const USAGE = [
   '  dandelion route --max-age <seconds>  print the route from the live snapshot if at most <seconds> old',
   '  dandelion run                        launch the CLI for the routed subscription',
   '  dandelion run --high                 launch the CLI for the strongest model that still has quota',
+  '  dandelion seats <N>                  print N swarm seats spread across accounts, one route-style line each',
+  '  dandelion seats <N> --spread         give every --high rank a seat before any rank gets two',
+  '  dandelion seats <N> --json           print the seats and every account as one JSON object',
   '  dandelion --help                     print this usage',
   '',
   'See README.md for keys, environment variables and the other commands.',
@@ -121,7 +131,7 @@ async function unknownOption(_io: ProbeIo, proc: Proc): Promise<void> {
   proc.exit(2);
 }
 
-const SUBCOMMANDS = new Map([['route', route], ['run', run], ['help', help], ['--help', help], ['-h', help]]);
+const SUBCOMMANDS = new Map([['route', route], ['run', run], ['seats', seats], ['help', help], ['--help', help], ['-h', help]]);
 
 function isUnknownCommand(argv: string[]): boolean {
   return argv.length > 2 && !argv[2].startsWith('-');

@@ -35,6 +35,7 @@ import {
   renderDashboard,
   renderRoute,
   renderRoutesFault,
+  renderSeats,
   renderLine,
   renderWaybar,
   renderSnapshot,
@@ -55,6 +56,7 @@ import {
 } from '../render/index.ts';
 import { openClipboard, type CommandTry } from './clipboard.ts';
 import { extraArgs, launchOf, type RunSpawner } from './launch.ts';
+import { parseSeatsArgs } from './seats.ts';
 import { startLive, type FixRunner, type Keyboard, type Notifier, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
@@ -340,6 +342,17 @@ export async function runRoute(io: ProbeIo, env: Record<string, string | undefin
   const { lines, fault } = routesOf(env);
   if (fault !== undefined) return renderRoutesFault(fault);
   return renderRoute(lines, await cachedUsages(io, env, request), eligibilityOf(io, env).ineligible(), request);
+}
+
+export type Clock = { now: string; zone: string };
+
+export async function runSeats(io: ProbeIo, env: Record<string, string | undefined>, args: string[], clock: Clock): Promise<RouteOutput> {
+  const parsed = parseSeatsArgs(args);
+  if (parsed.problem !== undefined) return { out: '', err: `dandelion: seats: ${parsed.problem}\n`, code: 2 };
+  const { lines, fault } = routesOf(env);
+  if (fault !== undefined) return renderRoutesFault(fault);
+  const usages = await cachedUsages(io, env, { now: clock.now, maxAge: parsed.args.maxAge });
+  return renderSeats(lines, usages, eligibilityOf(io, env).ineligible(), { ...parsed.args, ...clock });
 }
 
 type Rendered = (routes: Routes, usages: ProviderUsage[], ineligible: string[], request: SnapshotRequest) => string;

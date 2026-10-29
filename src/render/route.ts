@@ -10,6 +10,7 @@ import {
   routeDecision,
   routeDecisionLine,
   routeLine,
+  seatsDecision,
   usageClass,
   type ChainSkip,
   type ChainWin,
@@ -19,6 +20,10 @@ import {
   type RouteLines,
   type Routes,
   type RoutesFault,
+  type SeatAccount,
+  type SeatSkip,
+  type SeatsDecision,
+  type SeatsRequest,
   type Skipped,
   type UsageWindow
 } from '../domain/index.ts';
@@ -223,4 +228,43 @@ export function renderWaybar(routes: Routes, usages: ProviderUsage[], ineligible
     class: usageClass(worst),
     percentage: worst
   })}\n`;
+}
+
+export type SeatsOutputRequest = SeatsRequest & { now: string; zone: string; json: boolean; why: boolean };
+
+function skipText({ text, backAt }: SeatSkip, now: string, zone: string): string {
+  return `${text}${backText(backAt, now, zone)}`;
+}
+
+function seatsWindow({ label, kind, usedPct, resetsAt }: UsageWindow): Record<string, unknown> {
+  return { label, kind, usedPct: Math.round(usedPct), resetsAt };
+}
+
+function skipEntry(skip: SeatSkip | null, now: string, zone: string): Record<string, unknown> | null {
+  return skip === null ? null : { reason: skip.reason, text: skipText(skip, now, zone), backAt: skip.backAt ?? null };
+}
+
+function seatsAccountEntry(account: SeatAccount, { now, zone }: SeatsOutputRequest): Record<string, unknown> {
+  return { ...account, skip: skipEntry(account.skip, now, zone), windows: account.windows.map(seatsWindow) };
+}
+
+function seatsJson({ trip, seats, accounts }: SeatsDecision, request: SeatsOutputRequest): string {
+  const object = { generatedAt: request.now, mode: request.mode, requested: request.requested, trip, seats, accounts: accounts.map((account) => seatsAccountEntry(account, request)) };
+  return `${JSON.stringify(object)}\n`;
+}
+
+function skipLines(accounts: SeatAccount[], { why, now, zone }: SeatsOutputRequest): string[] {
+  if (!why) return [];
+  return accounts.flatMap(({ id, skip }) => (skip === null ? [] : [`# skip ${id}: ${skipText(skip, now, zone)}`]));
+}
+
+function seatsText({ seats, accounts }: SeatsDecision, request: SeatsOutputRequest): string {
+  const lines = seats.length === 0 ? [NO_ROUTE] : seats.map((seat) => seat.line);
+  return `${[...lines, ...skipLines(accounts, request)].join('\n')}\n`;
+}
+
+export function renderSeats(lines: RouteLines, usages: ProviderUsage[], ineligible: string[], request: SeatsOutputRequest): RouteOutput {
+  const decision = seatsDecision(lines, usages, request, ineligible, request.now, nextLocalMidnight(request.zone, request.now));
+  const out = request.json ? seatsJson(decision, request) : seatsText(decision, request);
+  return { out, err: '', code: decision.seats.length === 0 ? 1 : 0 };
 }

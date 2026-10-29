@@ -392,6 +392,402 @@ export function highRouteLine(lines: RouteLines, usages: RoutableUsage[], now: s
   return highDecisionLine(lines, highDecision(usages, now, ineligible, limitsOf(lines)));
 }
 
+export const ACCOUNT_IDS: readonly string[] = ROUTED_IDS;
+
+type SeatsMode = 'pack' | 'spread';
+
+export type SeatsRequest = { mode: SeatsMode; requested: number; held: Counts; include: string[]; exclude: string[]; trip?: number; cap: Counts };
+
+type SkipReason = 'excluded' | 'ineligible' | 'unavailable' | 'limited' | 'tripped' | 'no-headless' | 'not-in-chain' | 'spent' | 'balance';
+
+export type SeatSkip = { reason: SkipReason; text: string; backAt?: string };
+
+type SeatKind = 'evaporating' | 'headroom' | 'balance' | 'chain';
+
+type Seat = {
+  account: string;
+  line: string;
+  model: string;
+  effort: string | null;
+  command: string;
+  lab: string;
+  kind: SeatKind;
+  rank: number | null;
+  rankName: string | null;
+  held: boolean;
+};
+
+export type SeatAccount = {
+  id: string;
+  command: string;
+  cap: number;
+  held: number;
+  target: number;
+  score: number | null;
+  evaporating: boolean;
+  balance: number | null;
+  skip: SeatSkip | null;
+  windows: RoutableWindow[];
+};
+
+export type SeatsDecision = { trip: number; seats: Seat[]; accounts: SeatAccount[] };
+
+type SeatContext = {
+  lines: RouteLines;
+  usages: RoutableUsage[];
+  request: SeatsRequest;
+  swarm: SwarmSettings;
+  trip: number;
+  excluded: string[];
+  ineligible: string[];
+  limits: Limits;
+  tonight: Tonight;
+};
+
+type Facts = {
+  id: string;
+  usage: RoutableUsage | undefined;
+  windows: RoutableWindow[];
+  command: string;
+  cap: number;
+  burn: number;
+  reported: RoutableWindow[];
+  binding: number | null;
+  evaporation: number | undefined;
+  ranks: ChainEntry[];
+};
+
+type Seatable = Facts & { skip: SeatSkip | null; allowed: number };
+
+type Allocation = { given: Map<string, number>; turns: Map<string, number>; seats: Seat[] };
+
+function wholePercent(value: number): string {
+  return `${Math.round(value)}%`;
+}
+
+function countOf(counts: Counts, id: string): number {
+  return Number(counts[id] ?? counts[DEFAULT_KEY]);
+}
+
+function capOf(id: string, { request, swarm }: SeatContext): number {
+  return request.cap[id] ?? countOf(swarm.cap, id);
+}
+
+function routedWindows(id: string, usage: RoutableUsage | undefined): RoutableWindow[] {
+  return isRoutable(usage) ? onRoute(id, usage.windows) : [];
+}
+
+function bindingOf(windows: RoutableWindow[]): number | null {
+  return windows.length === 0 ? null : bindingLeft(windows);
+}
+
+function evaporationOf(candidate: Candidate, tonight: Tonight): number | undefined {
+  if (!(bindingLeft(sharedWindows(candidate)) > 0)) return undefined;
+  const lefts = evaporatingOf(candidate, tonight).map((chosen) => chosen.left);
+  return lefts.length === 0 ? undefined : Math.max(...lefts);
+}
+
+function isRankOpen(entry: ChainEntry, usage: RoutableUsage, trip: number): boolean {
+  return entry.providers.includes(usage.id) && highestUsed(gatingWindows(entry, usage)) < trip;
+}
+
+function ranksOf(usage: RoutableUsage | undefined, trip: number): ChainEntry[] {
+  return isRoutable(usage) ? HIGH_CHAIN.filter((entry) => isRankOpen(entry, usage, trip)) : [];
+}
+
+function factsOf(id: string, ctx: SeatContext): Facts {
+  const usage = ctx.usages.find((each) => each.id === id);
+  const windows = routedWindows(id, usage);
+  return {
+    id,
+    usage,
+    windows,
+    command: COMMANDS[id],
+    reported: usage?.windows ?? [],
+    cap: capOf(id, ctx),
+    burn: countOf(ctx.swarm.burnPerSeatHour, id),
+    binding: bindingOf(windows),
+    evaporation: evaporationOf({ id, windows }, ctx.tonight),
+    ranks: ranksOf(usage, ctx.trip)
+  };
+}
+
+function skipped(reason: SkipReason, text: string): SeatSkip {
+  return { reason, text };
+}
+
+function heldText(held: Tripped, text: string): string {
+  return `${text} at ${wholePercent(held.usedPct)}`;
+}
+
+function backOf(reason: SkipReason, held: Tripped, text: string): SeatSkip {
+  return held.backAt === undefined ? skipped(reason, text) : { reason, text, backAt: held.backAt };
+}
+
+function excludedSkip({ id }: Facts, { excluded }: SeatContext): SeatSkip | undefined {
+  return excluded.includes(id) ? skipped('excluded', 'excluded') : undefined;
+}
+
+function ineligibleSkip({ id }: Facts, { ineligible }: SeatContext): SeatSkip | undefined {
+  return ineligible.includes(id) ? skipped('ineligible', 'routing off') : undefined;
+}
+
+function isUnavailable({ id, usage, windows }: Facts): boolean {
+  return id === 'kilo' ? usage?.status !== 'ok' : windows.length === 0;
+}
+
+function unavailableSkip(facts: Facts): SeatSkip | undefined {
+  if (!isUnavailable(facts)) return undefined;
+  return skipped('unavailable', facts.usage?.status === 'ok' ? 'no usage windows' : 'unavailable');
+}
+
+function limitedSkip({ id, windows }: Facts, { limits, tonight }: SeatContext): SeatSkip | undefined {
+  const limit = limits[id] ?? Infinity;
+  const [held] = heldBack(id, windowsAtLimit({ id, windows }, limit), tonight.nowMs);
+  return held === undefined ? undefined : backOf('limited', held, `${heldText(held, 'limited')} (limit ${limit}%)`);
+}
+
+function swarmTripping(windows: RoutableWindow[], trip: number): RoutableWindow[] {
+  return windows.filter((window) => window.kind === 'rolling' && window.usedPct >= trip).sort(mostUsedFirst);
+}
+
+function trippedSkip({ id, windows }: Facts, { trip, tonight }: SeatContext): SeatSkip | undefined {
+  const [held] = heldBack(id, swarmTripping(windows, trip), tonight.nowMs);
+  return held === undefined ? undefined : backOf('tripped', held, heldText(held, 'tripped'));
+}
+
+function headlessSkip({ command }: Facts, { swarm }: SeatContext): SeatSkip | undefined {
+  return Object.hasOwn(swarm.headless, command) ? undefined : skipped('no-headless', `no headless template for ${command}`);
+}
+
+function chainText(id: string, trip: number): string {
+  return HIGH_CHAIN.some((entry) => entry.providers.includes(id)) ? `no --high rank under ${trip}%` : 'not in the --high chain';
+}
+
+function chainSkip({ id, ranks }: Facts, { request, trip }: SeatContext): SeatSkip | undefined {
+  return request.mode === 'spread' && ranks.length === 0 ? skipped('not-in-chain', chainText(id, trip)) : undefined;
+}
+
+function seatsUnder(facts: Facts, minLeft: number): number {
+  const binding = Number(facts.binding);
+  return Array.from({ length: facts.cap }, (_, index) => index + 1).filter((count) => binding - count * facts.burn >= minLeft).length;
+}
+
+function allowedOf(facts: Facts, { swarm }: SeatContext): number {
+  return facts.id === 'kilo' ? facts.cap : seatsUnder(facts, swarm.minLeft);
+}
+
+function spentText(facts: Facts, { swarm }: SeatContext): string {
+  if (facts.cap === 0) return 'cap 0';
+  return `spent: ${wholePercent(Number(facts.binding))} left, one seat needs ${wholePercent(facts.burn + swarm.minLeft)}`;
+}
+
+function spentSkip(facts: Facts, ctx: SeatContext): SeatSkip | undefined {
+  return allowedOf(facts, ctx) === 0 ? skipped('spent', spentText(facts, ctx)) : undefined;
+}
+
+function balanceText({ usages }: SeatContext): string {
+  const balance = kiloBalance(usages);
+  return balance === undefined ? 'balance unavailable' : `balance ${balance.currency}${balance.amount.toFixed(2)}, needs above $${KILO_MINIMUM_BALANCE.toFixed(2)}`;
+}
+
+function balanceSkip({ id }: Facts, ctx: SeatContext): SeatSkip | undefined {
+  return id !== 'kilo' || usableKilo(ctx.usages) ? undefined : skipped('balance', balanceText(ctx));
+}
+
+const SKIP_RULES: ((facts: Facts, ctx: SeatContext) => SeatSkip | undefined)[] = [
+  excludedSkip,
+  ineligibleSkip,
+  unavailableSkip,
+  limitedSkip,
+  trippedSkip,
+  headlessSkip,
+  chainSkip,
+  spentSkip,
+  balanceSkip
+];
+
+function seatableOf(facts: Facts, ctx: SeatContext): Seatable {
+  const skip = SKIP_RULES.reduce<SeatSkip | undefined>((found, rule) => found ?? rule(facts, ctx), undefined) ?? null;
+  return { ...facts, skip, allowed: skip === null ? allowedOf(facts, ctx) : 0 };
+}
+
+function labOf(lab: Record<string, string>, model: string): string {
+  const [prefix] = Object.keys(lab).filter((each) => model.slice(0, each.length) === each).sort((a, b) => b.length - a.length);
+  return prefix === undefined ? 'unknown' : lab[prefix];
+}
+
+function rankFields(rank: ChainEntry | undefined): { rank: number | null; rankName: string | null } {
+  return rank === undefined ? { rank: null, rankName: null } : { rank: rank.rank, rankName: rank.name };
+}
+
+type SeatChoice = { account: Seatable; kind: SeatKind; rank?: ChainEntry };
+
+type RankChoice = SeatChoice & { rank: ChainEntry };
+
+function lineOf({ account, kind, rank }: SeatChoice, lines: RouteLines): string {
+  if (rank !== undefined) return lines.high[rank.name];
+  return kind === 'evaporating' ? lines.route[account.id].max : lines.route[account.id].standard;
+}
+
+function seatOf(choice: SeatChoice, ctx: SeatContext, held: boolean): Seat {
+  const line = lineOf(choice, ctx.lines);
+  const [model, effort] = line.split(' ');
+  const { id, command } = choice.account;
+  return { account: id, line: onAccount(line, id), model, effort: effort ?? null, command, lab: labOf(ctx.swarm.lab, model), kind: choice.kind, ...rankFields(choice.rank), held };
+}
+
+function givenTo(allocation: Allocation, id: string): number {
+  return allocation.given.get(id) ?? 0;
+}
+
+function hasRoom(account: Seatable, allocation: Allocation): boolean {
+  return givenTo(allocation, account.id) < account.allowed;
+}
+
+function nextScore(account: Seatable, seats: number): number {
+  return account.binding === null ? -Infinity : account.binding - (seats + 1) * account.burn;
+}
+
+function give(allocation: Allocation, choice: SeatChoice, ctx: SeatContext, held: boolean): void {
+  allocation.given.set(choice.account.id, givenTo(allocation, choice.account.id) + 1);
+  allocation.seats.push(seatOf(choice, ctx, held));
+}
+
+function bestBy<T>(items: T[], score: (item: T) => number): T | undefined {
+  return items.reduce<T | undefined>((best, item) => (best === undefined || score(item) > score(best) ? item : best), undefined);
+}
+
+function packKind(account: Seatable): SeatKind {
+  if (account.id === 'kilo') return 'balance';
+  return account.evaporation === undefined ? 'headroom' : 'evaporating';
+}
+
+function withRoom(accounts: Seatable[], allocation: Allocation): Seatable[] {
+  return accounts.filter((account) => hasRoom(account, allocation));
+}
+
+function evaporatingChoice(open: Seatable[]): SeatChoice | undefined {
+  const account = bestBy(open.filter((each) => each.evaporation !== undefined), (each) => Number(each.evaporation));
+  return account === undefined ? undefined : { account, kind: 'evaporating' };
+}
+
+function packHeadroomChoice(open: Seatable[], allocation: Allocation): SeatChoice | undefined {
+  const account = bestBy(open.filter((each) => each.id !== 'kilo'), (each) => nextScore(each, givenTo(allocation, each.id)));
+  return account === undefined ? undefined : { account, kind: 'headroom' };
+}
+
+function kiloChoice(open: Seatable[]): SeatChoice | undefined {
+  const account = open.find((each) => each.id === 'kilo');
+  return account === undefined ? undefined : { account, kind: 'balance' };
+}
+
+function nextPackSeat(accounts: Seatable[], allocation: Allocation): SeatChoice | undefined {
+  const open = withRoom(accounts, allocation);
+  return evaporatingChoice(open) ?? packHeadroomChoice(open, allocation) ?? kiloChoice(open);
+}
+
+function turnsOf(allocation: Allocation, entry: ChainEntry): number {
+  return allocation.turns.get(entry.name) ?? 0;
+}
+
+function rankChoice(entry: ChainEntry, open: Seatable[], allocation: Allocation): RankChoice | undefined {
+  const account = bestBy(open.filter((each) => each.ranks.includes(entry)), (each) => nextScore(each, givenTo(allocation, each.id)));
+  return account === undefined ? undefined : { account, kind: 'chain', rank: entry };
+}
+
+function nextSpreadSeat(accounts: Seatable[], allocation: Allocation): SeatChoice | undefined {
+  const open = withRoom(accounts, allocation);
+  const choices = HIGH_CHAIN.flatMap((entry) => rankChoice(entry, open, allocation) ?? []);
+  return bestBy(choices, (choice) => -turnsOf(allocation, choice.rank));
+}
+
+function countTurn(allocation: Allocation, choice: SeatChoice): void {
+  if (choice.rank !== undefined) allocation.turns.set(choice.rank.name, turnsOf(allocation, choice.rank) + 1);
+}
+
+function keptChoice(account: Seatable, mode: SeatsMode): SeatChoice {
+  return mode === 'spread' ? { account, kind: 'chain', rank: account.ranks[0] } : { account, kind: packKind(account) };
+}
+
+function heldOn(held: Counts, id: string): number {
+  return held[id] ?? 0;
+}
+
+function keptCounts(accounts: Seatable[], held: Counts): Map<string, number> {
+  return new Map(accounts.map((account) => [account.id, Math.min(heldOn(held, account.id), account.allowed)]));
+}
+
+function lastKeptScore(account: Seatable, kept: Map<string, number>): number {
+  return -nextScore(account, Number(kept.get(account.id)) - 1);
+}
+
+function trimKept(accounts: Seatable[], kept: Map<string, number>, requested: number): Map<string, number> {
+  for (let total = [...kept.values()].reduce((sum, count) => sum + count, 0); total > requested; total -= 1) {
+    const victim = bestBy([...accounts].reverse().filter((account) => Number(kept.get(account.id)) > 0), (account) => lastKeptScore(account, kept)) as Seatable;
+    kept.set(victim.id, Number(kept.get(victim.id)) - 1);
+  }
+  return kept;
+}
+
+function keepHeld(accounts: Seatable[], allocation: Allocation, ctx: SeatContext): void {
+  const kept = trimKept(accounts, keptCounts(accounts, ctx.request.held), ctx.request.requested);
+  for (const account of accounts) {
+    for (let count = 0; count < Number(kept.get(account.id)); count += 1) {
+      const choice = keptChoice(account, ctx.request.mode);
+      give(allocation, choice, ctx, true);
+      countTurn(allocation, choice);
+    }
+  }
+}
+
+function allocate(accounts: Seatable[], ctx: SeatContext): Allocation {
+  const allocation: Allocation = { given: new Map(), turns: new Map(), seats: [] };
+  keepHeld(accounts, allocation, ctx);
+  const next = ctx.request.mode === 'spread' ? nextSpreadSeat : nextPackSeat;
+  for (let choice = next(accounts, allocation); choice !== undefined && allocation.seats.length < ctx.request.requested; choice = next(accounts, allocation)) {
+    give(allocation, choice, ctx, false);
+    countTurn(allocation, choice);
+  }
+  return allocation;
+}
+
+function dollarsOf(usages: RoutableUsage[], id: string): number | null {
+  const balance = id === 'kilo' ? kiloBalance(usages) : undefined;
+  return balance?.currency === '$' ? balance.amount : null;
+}
+
+function accountOf(account: Seatable, allocation: Allocation, ctx: SeatContext): SeatAccount {
+  return {
+    id: account.id,
+    command: account.command,
+    cap: account.cap,
+    held: heldOn(ctx.request.held, account.id),
+    target: givenTo(allocation, account.id),
+    score: account.binding,
+    evaporating: account.evaporation !== undefined,
+    balance: dollarsOf(ctx.usages, account.id),
+    skip: account.skip,
+    windows: account.reported
+  };
+}
+
+function excludedOf(swarm: SwarmSettings, request: SeatsRequest): string[] {
+  return [...swarm.exclude, ...request.exclude].filter((id) => !request.include.includes(id));
+}
+
+function seatContext(lines: RouteLines, usages: RoutableUsage[], request: SeatsRequest, ineligible: string[], tonight: Tonight): SeatContext {
+  const swarm = swarmOf(lines);
+  return { lines, usages, request, swarm, trip: request.trip ?? swarm.trip, excluded: excludedOf(swarm, request), ineligible, limits: limitsOf(lines), tonight };
+}
+
+export function seatsDecision(lines: RouteLines, usages: RoutableUsage[], request: SeatsRequest, ineligible: string[], now: string, midnight: string): SeatsDecision {
+  const ctx = seatContext(lines, usages, request, ineligible, { nowMs: Date.parse(now), midnightMs: Date.parse(midnight) });
+  const accounts = ROUTED_IDS.map((id) => seatableOf(factsOf(id, ctx), ctx));
+  const allocation = allocate(accounts, ctx);
+  return { trip: ctx.trip, seats: allocation.seats, accounts: accounts.map((account) => accountOf(account, allocation, ctx)) };
+}
+
 type Leaf = 'line' | 'limit' | 'swarm' | 'lab' | 'headless' | 'trip' | 'minLeft' | 'ids' | 'caps' | 'cap' | 'burns' | 'burn' | 'template' | 'args' | 'flag';
 
 type Shape = Leaf | { readonly [key: string]: Shape };

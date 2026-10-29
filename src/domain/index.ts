@@ -29,6 +29,7 @@ export {
 } from './ports.ts';
 
 export {
+  ACCOUNT_IDS,
   HIGH_CHAIN,
   NO_ROUTE,
   highDecision,
@@ -40,6 +41,7 @@ export {
   routeDecision,
   routeDecisionLine,
   routeLine,
+  seatsDecision,
   swarmOf,
   type ChainSkip,
   type ChainWin,
@@ -50,6 +52,10 @@ export {
   type Routes,
   type RoutesFault,
   type RoutesFile,
+  type SeatAccount,
+  type SeatSkip,
+  type SeatsDecision,
+  type SeatsRequest,
   type Skipped,
   type WindowKind
 } from './route.ts';

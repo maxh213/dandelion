@@ -1179,3 +1179,59 @@ describe('main', () => {
     expect(commands).toMatch(/^- `npm start` - .*fits the terminal: the `route` and `route --high` boxes stay at the top, and the provider list scrolls with `↑↓\/jk` so earlier panels, personal `claude` included, stay reachable/m);
   });
 });
+
+describe('runIfMain seats', () => {
+  const seatsIo: ProbeIo = {
+    ...routeIo,
+    runner: { run: async (command) => ({ stdout: command === 'claude' ? 'Current session: 10% used\nCurrent week (all models): 10% used' : '', stderr: '', ...(command === 'claude' ? {} : { failure: 'missing' as const }) }) }
+  };
+
+  function headlessRoutes(): { dir: string; file: string } {
+    const dir = mkdtempSync(join(tmpdir(), 'dandelion-seats-main-'));
+    const file = join(dir, 'routes.json');
+    writeFileSync(file, JSON.stringify({ ...LINES, headless: { claude: { before: [], after: ['-p'], stdin: true } } }));
+    return { dir, file };
+  }
+
+  it('prints the seats JSON for seats 3 --json, not the dashboard JSON', async () => {
+    const { dir, file } = headlessRoutes();
+    try {
+      const { proc, output, errors } = procOf(['node', MAIN, 'seats', '3', '--json'], true, true, { DANDELION_ROUTES_FILE: file, DANDELION_STATE_FILE: join(dir, 'state.json') });
+      await runIfMain(MAIN_URL, MAIN, seatsIo, proc);
+      const object = JSON.parse(output());
+      expect(Object.keys(object)).toEqual(['generatedAt', 'mode', 'requested', 'trip', 'seats', 'accounts']);
+      expect(object.providers).toBeUndefined();
+      expect(object.seats.map((seat: { line: string }) => seat.line)).toEqual(['model-a high claude', 'model-a high claude']);
+      expect(errors()).toBe('');
+      expect(proc.exit).not.toHaveBeenCalled();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('prints none and exits 1 when no account can take a seat', async () => {
+    const { proc, output } = procOf(['node', MAIN, 'seats', '2', '--why'], false, false);
+    await runIfMain(MAIN_URL, MAIN, seatsIo, proc);
+    expect(output().split('\n')[0]).toBe('none');
+    expect(output()).toContain('# skip claude: no headless template for claude\n');
+    expect(proc.exit).toHaveBeenCalledExactlyOnceWith(1);
+  });
+
+  it.each<[string[]]>([[['0']], [['3', '--pack', '--spread']], [['3', '--bogus']]])('seats %j prints a dandelion: seats: line, exits 2 and runs no probe', async (args) => {
+    const run = vi.fn(async () => ({ stdout: '', stderr: '' }));
+    const { proc, output, errors } = procOf(['node', MAIN, 'seats', ...args], true, true);
+    await runIfMain(MAIN_URL, MAIN, { ...routeIo, runner: { run } }, proc);
+    expect(output()).toBe('');
+    expect(errors()).toMatch(/^dandelion: seats: [^\n]+\n$/);
+    expect(proc.exit).toHaveBeenCalledExactlyOnceWith(2);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('lists seats in the usage text', async () => {
+    const { proc, output } = procOf(['node', MAIN, '--help'], true, true);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    for (const command of ['dandelion seats <N>', 'dandelion seats <N> --spread', 'dandelion seats <N> --json']) {
+      expect(output()).toMatch(new RegExp(`^  ${command.replace(/[-<>]/g, '\\$&')} +\\S`, 'm'));
+    }
+  });
+});
