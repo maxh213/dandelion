@@ -123,7 +123,7 @@ Route --why: `dandelion route --why` and `dandelion route --high --why` print th
 
 ## routes.json
 
-To change a routed model, edit routes.json. The lines `route` and `route --high` print are data in `routes.json` at the repo root; the per-account `limit` is data there too; the rules, the tie order, the `--high` chain order, its providers, the `fable` matcher and the 90% trip stay in code, so the order of keys in the file means nothing. dandelion finds the file from the real path of `src/main.ts` after following symlinks, never from the working directory, so `dandelion route` through an `npm link` symlink reads the checkout's file from any folder. `DANDELION_ROUTES_FILE` points at a different file.
+To change a routed model, edit routes.json. The lines `route` and `route --high` print are data in `routes.json` at the repo root; the per-account `limit` is data there too, and so are the optional `swarm`, `lab` and `headless` sections; the rules, the tie order, the `--high` chain order, its providers, the `fable` matcher and the 90% trip stay in code, so the order of keys in the file means nothing. dandelion finds the file from the real path of `src/main.ts` after following symlinks, never from the working directory, so `dandelion route` through an `npm link` symlink reads the checkout's file from any folder. `DANDELION_ROUTES_FILE` points at a different file.
 
 ```json
 {
@@ -143,13 +143,24 @@ To change a routed model, edit routes.json. The lines `route` and `route --high`
     "hermes": { "standard": "<line>", "max": "<line>" },
     "kilo": { "standard": "<line>", "max": "<line>" }
   },
-  "high": { "fable": "<line>", "codex": "<line>", "cursor": "<line>", "opus": "<line>", "grok": "<line>", "agy": "<line>" }
+  "high": { "fable": "<line>", "codex": "<line>", "cursor": "<line>", "opus": "<line>", "grok": "<line>", "agy": "<line>" },
+  "swarm": {
+    "trip": 80,
+    "minLeft": 5,
+    "exclude": ["<account id>"],
+    "cap": { "<account id>": 3, "default": 2 },
+    "burnPerSeatHour": { "<account id>": 12, "default": 10 }
+  },
+  "lab": { "<model prefix>": "<lab>" },
+  "headless": { "<command>": { "before": ["<arg>"], "after": ["<arg>"], "stdin": true } }
 }
 ```
 
 `route` holds one entry per routed provider: `standard` for the headroom rule and the Kilo balance fallback, and `max` for evaporation. Every entry but `kilo` may also hold `limit`, a whole number from 1 to 100, such as `"claude-animus": { "standard": "<line>", "max": "<line>", "limit": 75 }` (see Limits under Route); leave it out for no limit. `high` holds one line per `--high` rank, named `fable`, `codex`, `cursor`, `opus`, `grok` and `agy` for ranks 1 to 6. A line is `<model>` or `<model> <effort>`: one or two words, one space apart. dandelion prints lines as written and never checks model names.
 
-`route`, `route --high` and `--once` read and check the whole file once per run; the live dashboard reads it once at start. A bad file is an error, never a fallback: when the file is missing, unreadable or not valid JSON, or when an entry is missing, a key is unknown (including `limit` on `kilo`), a line is not a non-empty string, a line has the wrong shape, or a `limit` is not a whole number from 1 to 100, `route` and `route --high` print nothing on stdout, print `dandelion: routes file <path>: <what is wrong>` on stderr and exit 2, even when nothing could be routed. Exit 1 stays reserved for `none`. `--once` prints its dashboard as usual, the same line on stderr, and exits 0. The live dashboard keeps every panel, and both route boxes show `routes file error` over the start of what is wrong.
+`swarm`, `lab` and `headless` are optional, and so is every key inside `swarm`; a missing one takes its default. `swarm.trip` is the swarm trip line, a whole percent from 50 to 90 (default 80). `swarm.minLeft` is the binding every seat must leave behind, a number from 0 to 100 (default 5). `swarm.exclude` lists account ids that get no seats unless a call names them in `--include` (default none). `swarm.cap` holds the most seats an account may hold, a whole number from 0 to 20 per account id or `default` (default 2, and 1 for `kilo` when it has no key of its own). `swarm.burnPerSeatHour` holds how many percent of its binding one seat is expected to use, a number from 0 to 100 per account id or `default` (default 10). `lab` maps a model-name prefix to a lab name made of `a-z`, `0-9` and `-` (default none). `headless` maps a CLI command (`claude`, `codex`, `cursor-agent`, `agy`, `kimi`, `grok`, `junie`, `hermes` or `kilo`, not an account id) to a template with exactly `before` and `after`, each a list of strings, and `stdin`, `true` or `false` (default none).
+
+`route`, `route --high` and `--once` read and check the whole file once per run; the live dashboard reads it once at start. A bad file is an error, never a fallback: when the file is missing, unreadable or not valid JSON, or when an entry is missing, a key is unknown (including `limit` on `kilo`, a `swarm.cap` key that is not an account id or `default`, and a `headless` key that is not a CLI command), a line is not a non-empty string, a line has the wrong shape, a `limit` is not a whole number from 1 to 100, or a `swarm`, `lab` or `headless` value breaks the rules above, `route` and `route --high` print nothing on stdout, print `dandelion: routes file <path>: <what is wrong>` on stderr and exit 2, even when nothing could be routed. Exit 1 stays reserved for `none`. `--once` prints its dashboard as usual, the same line on stderr, and exits 0. The live dashboard keeps every panel, and both route boxes show `routes file error` over the start of what is wrong.
 
 ## Env-var Ledger
 

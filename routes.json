@@ -22,5 +22,17 @@
     "opus":   "claude-opus-5-5 max",
     "grok":   "grok-4.7 xhigh",
     "agy":    "gemini-4-argon-high high"
-  }
+  },
+  "swarm": {
+    "trip": 80,
+    "minLeft": 5,
+    "exclude": ["claude-work", "claude-animus", "codex-animus"],
+    "cap": { "claude": 4, "codex": 3, "cursor": 3, "agy": 3, "kilo": 1, "default": 2 },
+    "burnPerSeatHour": { "default": 10 }
+  },
+  "lab": {
+    "claude-": "anthropic", "gpt-": "openai", "gemini-": "google", "grok-": "xai", "x-ai/": "xai",
+    "kimi": "moonshot", "deepseek": "deepseek", "glm-": "zhipu", "auto": "cursor"
+  },
+  "headless": {}
 }

@@ -6,7 +6,19 @@ type RoutableUsage = { id: string; status: string; windows: RoutableWindow[]; ba
 
 type RouteEntry = { standard: string; max: string; limit?: number };
 
-export type RouteLines = { route: Record<string, RouteEntry>; high: Record<string, string> };
+type HeadlessTemplate = { before: string[]; after: string[]; stdin: boolean };
+
+type Counts = Partial<Record<string, number>>;
+
+type SwarmSection = { trip?: number; minLeft?: number; exclude?: string[]; cap?: Counts; burnPerSeatHour?: Counts };
+
+export type RouteLines = {
+  route: Record<string, RouteEntry>;
+  high: Record<string, string>;
+  swarm?: SwarmSection;
+  lab?: Record<string, string>;
+  headless?: Partial<Record<string, HeadlessTemplate>>;
+};
 
 export type Limits = Partial<Record<string, number>>;
 
@@ -19,11 +31,36 @@ export interface RoutesFile {
 }
 
 const ROUTED_IDS = ['claude', 'claude-work', 'claude-animus', 'claude-deepseek', 'claude-ollama', 'agy', 'kimi', 'grok', 'codex', 'codex-animus', 'cursor', 'junie', 'hermes', 'kilo'];
+const COMMANDS: Record<string, string> = {
+  claude: 'claude',
+  'claude-work': 'claude',
+  'claude-animus': 'claude',
+  'claude-deepseek': 'claude',
+  'claude-ollama': 'claude',
+  agy: 'agy',
+  kimi: 'kimi',
+  grok: 'grok',
+  codex: 'codex',
+  'codex-animus': 'codex',
+  cursor: 'cursor-agent',
+  junie: 'junie',
+  hermes: 'hermes',
+  kilo: 'kilo'
+};
+const HEADLESS_COMMANDS = [...new Set(Object.values(COMMANDS))];
 const WINDOWED_IDS = ROUTED_IDS.filter((id) => id !== 'kilo');
 export const NO_ROUTE = 'none';
 const UNTOUCHED_LEFT = 97;
 const FULL_LEFT = 100;
 const TRIP_PCT = 90;
+const MIN_SWARM_TRIP = 50;
+const MAX_CAP = 20;
+const DEFAULT_KEY = 'default';
+const DEFAULT_SWARM_TRIP = 80;
+const DEFAULT_MIN_LEFT = 5;
+const DEFAULT_CAP = 2;
+const DEFAULT_KILO_CAP = 1;
+const DEFAULT_BURN = 10;
 const KILO_MINIMUM_BALANCE = 10;
 const OFF_ROUTE_LABELS: Record<string, readonly string[]> = { cursor: ['api'] };
 const CREDIT_ACCOUNTS = new Set(['junie', 'hermes']);
@@ -228,6 +265,29 @@ export function limitsOf(lines: RouteLines | undefined): Limits {
   return lines === undefined ? {} : Object.fromEntries(limitEntries(lines.route));
 }
 
+type SwarmSettings = {
+  trip: number;
+  minLeft: number;
+  exclude: string[];
+  cap: Counts;
+  burnPerSeatHour: Counts;
+  lab: Record<string, string>;
+  headless: Partial<Record<string, HeadlessTemplate>>;
+};
+
+export function swarmOf(lines: RouteLines): SwarmSettings {
+  const swarm = { trip: DEFAULT_SWARM_TRIP, minLeft: DEFAULT_MIN_LEFT, exclude: [], ...lines.swarm };
+  return {
+    trip: swarm.trip,
+    minLeft: swarm.minLeft,
+    exclude: swarm.exclude,
+    cap: { [DEFAULT_KEY]: DEFAULT_CAP, kilo: DEFAULT_KILO_CAP, ...swarm.cap },
+    burnPerSeatHour: { [DEFAULT_KEY]: DEFAULT_BURN, ...swarm.burnPerSeatHour },
+    lab: { ...lines.lab },
+    headless: { ...lines.headless }
+  };
+}
+
 export function routeLine(lines: RouteLines, usages: RoutableUsage[], now: string, midnight: string, ineligible: string[]): string {
   return routeDecisionLine(lines, routeDecision(usages, now, midnight, ineligible, limitsOf(lines)));
 }
@@ -332,7 +392,11 @@ export function highRouteLine(lines: RouteLines, usages: RoutableUsage[], now: s
   return highDecisionLine(lines, highDecision(usages, now, ineligible, limitsOf(lines)));
 }
 
-type Shape = 'line' | 'limit' | { readonly [key: string]: Shape };
+type Leaf = 'line' | 'limit' | 'swarm' | 'lab' | 'headless' | 'trip' | 'minLeft' | 'ids' | 'caps' | 'cap' | 'burns' | 'burn' | 'template' | 'args' | 'flag';
+
+type Shape = Leaf | { readonly [key: string]: Shape };
+
+const OPTIONAL = new Set<Shape>(['limit', 'swarm', 'lab', 'headless', 'trip', 'minLeft', 'ids', 'caps', 'cap', 'burns', 'burn', 'template']);
 
 function keyed(keys: readonly string[], shape: Shape): Record<string, Shape> {
   return Object.fromEntries(keys.map((key) => [key, shape]));
@@ -341,9 +405,16 @@ function keyed(keys: readonly string[], shape: Shape): Record<string, Shape> {
 function routesShape(): Shape {
   return {
     route: { ...keyed(WINDOWED_IDS, { standard: 'line', max: 'line', limit: 'limit' }), kilo: { standard: 'line', max: 'line' } },
-    high: keyed(HIGH_CHAIN.map((entry) => entry.name), 'line')
+    high: keyed(HIGH_CHAIN.map((entry) => entry.name), 'line'),
+    swarm: 'swarm',
+    lab: 'lab',
+    headless: 'headless'
   };
 }
+
+const SWARM_SHAPE: Record<string, Shape> = { trip: 'trip', minLeft: 'minLeft', exclude: 'ids', cap: 'caps', burnPerSeatHour: 'burns' };
+
+const TEMPLATE_SHAPE: Record<string, Shape> = { before: 'args', after: 'args', stdin: 'flag' };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === '[object Object]';
@@ -358,12 +429,58 @@ function lineProblem(value: unknown, at: string): string | undefined {
   return /^\S+( \S+)?$/.test(value) ? undefined : `${at} is not "<model>" or "<model> <effort>"`;
 }
 
-function isWholePercent(value: unknown): boolean {
-  return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= FULL_LEFT;
+function isWholeIn(value: unknown, low: number, high: number): boolean {
+  return Number.isInteger(value) && Number(value) >= low && Number(value) <= high;
+}
+
+function isNumberIn(value: unknown, low: number, high: number): boolean {
+  return Number.isFinite(value) && Number(value) >= low && Number(value) <= high;
 }
 
 function limitProblem(value: unknown, at: string): string | undefined {
-  return isWholePercent(value) ? undefined : `${at} is not a whole percent from 1 to 100`;
+  return isWholeIn(value, 1, FULL_LEFT) ? undefined : `${at} is not a whole percent from 1 to 100`;
+}
+
+function tripProblem(value: unknown, at: string): string | undefined {
+  return isWholeIn(value, MIN_SWARM_TRIP, TRIP_PCT) ? undefined : `${at} is not a whole percent from ${MIN_SWARM_TRIP} to ${TRIP_PCT}`;
+}
+
+function percentProblem(value: unknown, at: string): string | undefined {
+  return isNumberIn(value, 0, FULL_LEFT) ? undefined : `${at} is not a number from 0 to 100`;
+}
+
+function capProblem(value: unknown, at: string): string | undefined {
+  return isWholeIn(value, 0, MAX_CAP) ? undefined : `${at} is not a whole number from 0 to ${MAX_CAP}`;
+}
+
+function isListOf(value: unknown, isItem: (item: unknown) => boolean): boolean {
+  return Array.isArray(value) && value.every(isItem);
+}
+
+function isAccountId(item: unknown): boolean {
+  return typeof item === 'string' && ROUTED_IDS.includes(item);
+}
+
+function idsProblem(value: unknown, at: string): string | undefined {
+  return isListOf(value, isAccountId) ? undefined : `${at} is not a list of account ids`;
+}
+
+function argsProblem(value: unknown, at: string): string | undefined {
+  return isListOf(value, (item) => typeof item === 'string') ? undefined : `${at} is not a list of strings`;
+}
+
+function flagProblem(value: unknown, at: string): string | undefined {
+  return typeof value === 'boolean' ? undefined : `${at} is not true or false`;
+}
+
+function labEntryProblem([prefix, name]: [string, unknown], at: string): string | undefined {
+  if (prefix === '') return `${at} has an empty model prefix`;
+  return typeof name === 'string' && /^[a-z0-9-]+$/.test(name) ? undefined : `${keyPath(at, prefix)} is not a lab name of a-z, 0-9 and -`;
+}
+
+function labProblem(value: unknown, at: string): string | undefined {
+  if (!isPlainObject(value)) return `${at} is not a JSON object`;
+  return Object.entries(value).map((entry) => labEntryProblem(entry, at)).find((problem) => problem !== undefined);
 }
 
 function unknownKeyProblem(value: Record<string, unknown>, shape: Record<string, Shape>, at: string): string | undefined {
@@ -374,7 +491,7 @@ function unknownKeyProblem(value: Record<string, unknown>, shape: Record<string,
 function keyProblem(value: Record<string, unknown>, key: string, shape: Shape, at: string): string | undefined {
   const path = keyPath(at, key);
   if (Object.hasOwn(value, key)) return problemIn(value[key], shape, path);
-  return shape === 'limit' ? undefined : `${path} is missing`;
+  return OPTIONAL.has(shape) ? undefined : `${path} is missing`;
 }
 
 function childProblem(value: Record<string, unknown>, shape: Record<string, Shape>, at: string): string | undefined {
@@ -386,7 +503,27 @@ function objectProblem(value: unknown, shape: Record<string, Shape>, at: string)
   return unknownKeyProblem(value, shape, at) ?? childProblem(value, shape, at);
 }
 
-const LEAF_PROBLEMS = { line: lineProblem, limit: limitProblem };
+function sectionOf(shape: Record<string, Shape>): (value: unknown, at: string) => string | undefined {
+  return (value, at) => objectProblem(value, shape, at);
+}
+
+const LEAF_PROBLEMS: Record<Leaf, (value: unknown, at: string) => string | undefined> = {
+  line: lineProblem,
+  limit: limitProblem,
+  swarm: sectionOf(SWARM_SHAPE),
+  lab: labProblem,
+  headless: sectionOf(keyed(HEADLESS_COMMANDS, 'template')),
+  trip: tripProblem,
+  minLeft: percentProblem,
+  ids: idsProblem,
+  caps: sectionOf(keyed([...ROUTED_IDS, DEFAULT_KEY], 'cap')),
+  cap: capProblem,
+  burns: sectionOf(keyed([...ROUTED_IDS, DEFAULT_KEY], 'burn')),
+  burn: percentProblem,
+  template: sectionOf(TEMPLATE_SHAPE),
+  args: argsProblem,
+  flag: flagProblem
+};
 
 function problemIn(value: unknown, shape: Shape, at: string): string | undefined {
   return typeof shape === 'string' ? LEAF_PROBLEMS[shape](value, at) : objectProblem(value, shape, at);

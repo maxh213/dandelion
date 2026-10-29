@@ -40,6 +40,7 @@ export {
   routeDecision,
   routeDecisionLine,
   routeLine,
+  swarmOf,
   type ChainSkip,
   type ChainWin,
   type HighDecision,
