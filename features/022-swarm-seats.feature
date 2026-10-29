@@ -28,10 +28,12 @@ Feature: 022 - hand out swarm seats, and launch one seat headless
     `projectedFullAt`.
   - `seats` usage errors are checked before routes.json is read and before any probe. `--held`, `--include`, `--exclude` and
     `--cap` may repeat; a later value for the same account wins. `--trip` may repeat; the last wins.
-  - For `run --headless`, usage errors, the prompt file, `--cwd`, the account, the line and the template are checked before any
-    probe or launch. `--cwd` and `--prompt-file` are required. `--timeout` is a positive whole number of seconds. Arguments after
-    `run --headless` that it does not know, a literal `--` included, are usage errors. Without `"stdin": true` the child's stdin is
-    empty (`/dev/null`). Exit-2 messages start `dandelion: run: `.
+  - For `run --headless`, usage errors, routes.json, the prompt file, `--cwd`, the account and the line are checked before any probe
+    or launch, and with `--seat` the template too (without it, the template of the routed command is checked after routing).
+    `--cwd` and `--prompt-file` are required. `--timeout` is a positive whole number of seconds. Arguments after `run --headless`
+    that it does not know, a literal `--` included, are usage errors. Without `"stdin": true` the child's stdin is empty
+    (`/dev/null`). The child's `PWD` is set to `--cwd`, because some CLIs (kilo) take their working directory from `PWD`. Exit-2
+    messages start `dandelion: run: `, except the usual routes file line.
 
   Background:
     Given a fixture routes file "F" through DANDELION_ROUTES_FILE with the lines of qa/routes.fixture.json, no `swarm` section
@@ -186,7 +188,8 @@ Feature: 022 - hand out swarm seats, and launch one seat headless
     Given the template { "before": ["exec"], "after": ["--yes", "{promptFile}", "{prompt}"], "stdin": true } for codex
     When the user runs `dandelion run --headless --seat "model-i high codex-animus" --prompt-file p --cwd d`
     Then codex runs in d as `codex exec --model model-i -c model_reasoning_effort=high --yes <absolute p> <contents of p>`
-    And its stdin is the prompt file, its env has CODEX_HOME set to the animus home, and its stdout and stderr pass through
+    And its stdin is the prompt file, its env has CODEX_HOME set to the animus home and PWD set to d, and its stdout and stderr
+      pass through
 
   Scenario: run --headless without --seat launches what plain run would
     Given claude routable and `run` would launch "model-a high claude"
