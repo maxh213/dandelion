@@ -63,7 +63,7 @@ describe('headlessLaunchOf and promptProblem', () => {
     expect(headlessLaunchOf(base, template, PROMPT, { cwd: '/repo', timeoutMs: 5000 })).toEqual({
       command: 'codex',
       args: ['exec', '--model', 'model-i', '-c', 'model_reasoning_effort=high', '--yes', '/abs/prompt.md', 'do $& the {promptFile} thing', 'x=do $& the {promptFile} thing;/abs/prompt.md'],
-      env: { CODEX_HOME: '/h/.codex-animus' },
+      env: { CODEX_HOME: '/h/.codex-animus', PWD: '/repo' },
       cwd: '/repo',
       stdin: undefined,
       timeoutMs: 5000
@@ -131,7 +131,7 @@ describe('runHeadless', () => {
   it('launches the seat as given, without probing, and exits with the child code', async () => {
     const { spawn, spawner } = fakeSpawner(3);
     expect(await runHeadless(ioWith(missing), env, seatArgs('model-x high claude-deepseek', '--timeout', '60'), CLOCK, spawner)).toEqual({ err: '', code: 3 });
-    expect(spawn).toHaveBeenCalledExactlyOnceWith({ command: 'claude', args: ['--model', 'model-x', '--effort', 'high', '-p'], env: { CLAUDE_CONFIG_DIR: '/cfg/deepseek' }, cwd: scratch, stdin: prompt, timeoutMs: 60000 });
+    expect(spawn).toHaveBeenCalledExactlyOnceWith({ command: 'claude', args: ['--model', 'model-x', '--effort', 'high', '-p'], env: { CLAUDE_CONFIG_DIR: '/cfg/deepseek', PWD: scratch }, cwd: scratch, stdin: prompt, timeoutMs: 60000 });
     expect(missing).not.toHaveBeenCalled();
   });
 
@@ -208,6 +208,7 @@ describe('realHeadlessSpawner', () => {
     realHeadlessSpawner.spawn({ command: process.execPath, args: ['-e', script], env: extra.env ?? {}, cwd: scratch, stdin: extra.stdin, timeoutMs: extra.timeoutMs });
 
   it('runs in cwd with the env merged over the process env and resolves the exit code', async () => {
+    expect(await node(`process.exit(process.env.PWD === ${JSON.stringify(scratch)} ? 4 : 3)`, { env: { PWD: scratch } })).toBe(4);
     expect(await node(`process.exit(process.cwd() === ${JSON.stringify(scratch)} && process.env.flag === "yes" && process.env.PATH !== undefined ? 5 : 6)`, { env: { flag: 'yes' } })).toBe(5);
     expect(await node('process.kill(process.pid, "SIGTERM")')).toBe(143);
   });

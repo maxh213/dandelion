@@ -34,5 +34,11 @@
     "claude-": "anthropic", "gpt-": "openai", "gemini-": "google", "grok-": "xai", "x-ai/": "xai",
     "kimi": "moonshot", "deepseek": "deepseek", "glm-": "zhipu", "auto": "cursor"
   },
-  "headless": {}
+  "headless": {
+    "claude": { "before": [],       "after": ["-p", "--output-format", "json", "--dangerously-skip-permissions"], "stdin": true },
+    "codex":  { "before": ["exec"], "after": ["--dangerously-bypass-approvals-and-sandbox", "-"], "stdin": true },
+    "agy":    { "before": [],       "after": ["--dangerously-skip-permissions", "-p", "{prompt}"], "stdin": false },
+    "kimi":   { "before": [],       "after": ["-p", "{prompt}"], "stdin": false },
+    "grok":   { "before": [],       "after": ["--always-approve", "--output-format", "plain", "--prompt-file", "{promptFile}"], "stdin": false }
+  }
 }

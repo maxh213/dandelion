@@ -153,7 +153,7 @@ export function headlessLaunchOf(launch: Launch, template: HeadlessTemplate, pro
   return {
     command: launch.command,
     args: [...template.before, ...launch.args, ...template.after.map((arg) => filled(arg, prompt))],
-    env: launch.env,
+    env: { ...launch.env, PWD: where.cwd },
     cwd: where.cwd,
     stdin: template.stdin ? prompt.path : undefined,
     timeoutMs: where.timeoutMs

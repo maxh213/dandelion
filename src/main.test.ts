@@ -1253,7 +1253,7 @@ describe('runIfMain run --headless', () => {
       vi.mocked(runRun).mockClear();
       const { proc, output, errors } = procOf(['node', MAIN, 'run', '--headless', '--seat', 'model-a high claude', '--prompt-file', prompt, '--cwd', dir], true, true, env);
       await runIfMain(MAIN_URL, MAIN, routeIo, proc);
-      expect(spawn).toHaveBeenCalledExactlyOnceWith({ command: 'claude', args: ['--model', 'model-a', '--effort', 'high', '-p'], env: {}, cwd: dir, stdin: prompt, timeoutMs: undefined });
+      expect(spawn).toHaveBeenCalledExactlyOnceWith({ command: 'claude', args: ['--model', 'model-a', '--effort', 'high', '-p'], env: { PWD: dir }, cwd: dir, stdin: prompt, timeoutMs: undefined });
       expect([output(), errors()]).toEqual(['', '']);
       expect(proc.exit).toHaveBeenCalledExactlyOnceWith(6);
       expect(runRun).not.toHaveBeenCalled();

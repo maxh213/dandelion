@@ -231,10 +231,20 @@ dandelion run --headless [--seat "<model> [effort] <account>"] --prompt-file <pa
 
 - With `--seat` there is no probing or routing: that line, exactly as `seats` prints it, is launched. Without it the route is resolved as plain `run` resolves it, `--high`, `--max-age`, the eligibility state file and the Kilo launch freshness check included.
 - The command and the model and effort flags are the ones `dandelion run` uses for the account (see Account token under Route). argv is `<command> ...before ...model and effort flags ...after` from the command's `headless` template in `routes.json`. `before` exists for subcommands (`codex exec`, `kilo run`). In `after`, `{prompt}` is replaced by the prompt file's contents and `{promptFile}` by its absolute path, wherever they appear in an argument and taken literally. With `"stdin": true` the prompt file is the CLI's stdin; otherwise its stdin is empty (`/dev/null`).
-- The CLI runs in `--cwd` with the current environment plus the account's (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`, as for `dandelion run`). Its stdout and stderr pass through unchanged.
+- The CLI runs in `--cwd` with the current environment plus the account's (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`, as for `dandelion run`) and `PWD` set to `--cwd`, since some CLIs (kilo) take their working directory from `PWD` rather than from the process. Its stdout and stderr pass through unchanged.
 - A `--seat` on kilo runs another `kilo profile --json` first; at or below $10 it prints `dandelion: kilo balance at or below $10` on stderr and exits 1 without launching.
 - `--timeout <seconds>` (a positive whole number) sends SIGTERM when the time is up, SIGKILL 5s later if the CLI is still running, and exits 124 once it has exited. While the CLI runs, SIGTERM, SIGHUP and SIGINT are forwarded to it and dandelion exits with its status only after it has exited; the handlers exist only while it runs.
 - Exit codes: the CLI's own exit code (128 plus the signal number when a signal ended it); 124 on `--timeout`; 127 with `dandelion: <command>: command not found` when the CLI is not on `PATH`; 1 with `none` when nothing routes, or for the kilo check; 2 for a usage error, a prompt file that cannot be read, a `--cwd` that is not a directory, an unknown account, a `--seat` that is not `<model> [effort] <account>`, a bad `routes.json` (the usual `dandelion: routes file …` line), a command without a template (`dandelion: run: no headless template for <command>`), or a `{prompt}` template with a prompt file over 120000 bytes (`dandelion: run: prompt too long for <command>; use a stdin or {promptFile} template`). Every other exit-2 line starts `dandelion: run: `, and an argument `run --headless` does not know, a literal `--` included, is a usage error.
+
+The shipped `headless` section holds only templates proven on this machine (2026-10-29) by launching each account's `standard` line headless in a fresh git repo with a prompt to create `ok.txt`; a template ships only when the exit code was 0 and `ok.txt` said `ok`:
+
+- claude: `-p --output-format json --dangerously-skip-permissions` after the model flags, with the prompt on stdin.
+- codex: `exec` before the model flags and `--dangerously-bypass-approvals-and-sandbox -` after them, with the prompt on stdin (`-` makes `codex exec` read it).
+- agy: `--dangerously-skip-permissions -p {prompt}`; agy's `-p` takes the prompt as its value and does not read stdin.
+- kimi: `-p {prompt}`; kimi's prompt mode edits files by itself and refuses `--yolo` and `--auto`.
+- grok: `--always-approve --output-format plain --prompt-file {promptFile}`.
+
+Left out, so those accounts get the `no-headless` skip until a template is proven: `cursor-agent` (the cursor account was at its usage limit, so no run could succeed; the candidate is `-p --force --output-format text {prompt}`), `junie` (its balance was spent; candidate `--skip-update-check {prompt}`), `hermes` (its Nous Portal credits were exhausted; candidate `--yolo -z {prompt}`) and `kilo` (`kilo run` answers `Model not found` for the model id in the shipped `route.kilo` lines; `run` before and `--auto {prompt}` after worked when the same model was written with kilo's own prefix, as `kilo/deepseek/...`).
 
 ## Env-var Ledger
 
