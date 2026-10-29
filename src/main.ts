@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { disableWarning, isEntryFile, processZone, routesWarning, runApp, runJson, runLine, runWaybar, isMaxAge, runLive, runRoute, runRun, runSeats, realIo, realRunLauncher, type Keyboard, type ProbeIo, type RouteMode, type RouteOutput, type Screen } from './app/index.ts';
+import { disableWarning, isEntryFile, processZone, routesWarning, runApp, runJson, runLine, runWaybar, isMaxAge, runLive, runRoute, runHeadless, runRun, runSeats, realHeadlessSpawner, realIo, realRunLauncher, type Keyboard, type ProbeIo, type RouteMode, type RouteOutput, type Screen } from './app/index.ts';
 
 type Terminal = { isTTY?: boolean };
 
@@ -62,9 +62,16 @@ async function waybar(io: ProbeIo, proc: Proc): Promise<void> {
   proc.stderr.write(err);
 }
 
+async function headless(io: ProbeIo, proc: Proc, args: string[]): Promise<void> {
+  const { err, code } = await runHeadless(io, proc.env, args, { now: new Date().toISOString(), zone: processZone() }, realHeadlessSpawner);
+  proc.stderr.write(err);
+  proc.exit(code);
+}
+
 async function run(io: ProbeIo, proc: Proc): Promise<void> {
   const args = proc.argv.slice(3);
   const own = runOwnArgs(args);
+  if (own.includes('--headless')) return headless(io, proc, args);
   const { err, code } = await runRun(io, proc.env, { mode: runModeOf(own), now: new Date().toISOString(), zone: processZone(), maxAge: maxAgeOf(own) }, args, realRunLauncher);
   proc.stderr.write(err);
   proc.exit(code);
@@ -102,6 +109,8 @@ const USAGE = [
   '  dandelion route --max-age <seconds>  print the route from the live snapshot if at most <seconds> old',
   '  dandelion run                        launch the CLI for the routed subscription',
   '  dandelion run --high                 launch the CLI for the strongest model that still has quota',
+  '  dandelion run --headless --prompt-file <path> --cwd <dir>',
+  '                                       launch a seat or the routed CLI without a terminal (see README.md Seats)',
   '  dandelion seats <N>                  print N swarm seats spread across accounts, one route-style line each',
   '  dandelion seats <N> --spread         give every --high rank a seat before any rank gets two',
   '  dandelion seats <N> --json           print the seats and every account as one JSON object',

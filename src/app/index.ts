@@ -1,9 +1,9 @@
 import { execFile, spawn, type ChildProcess, type ChildProcessByStdio, type ExecException } from 'node:child_process';
 import { once } from 'node:events';
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { constants as osConstants, homedir, tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { PassThrough, pipeline, type Readable, type Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +40,7 @@ import {
   renderWaybar,
   renderSnapshot,
   openView,
+  swarmOf,
   type ClaudeStatus,
   type Eligibility,
   type Hidden,
@@ -51,18 +52,19 @@ import {
   type Snapshot,
   type SnapshotRequest,
   type Routes,
+  type RoutesFault,
   type RoutesFile,
   type StateFile
 } from '../render/index.ts';
 import { openClipboard, type CommandTry } from './clipboard.ts';
-import { extraArgs, launchOf, type RunSpawner } from './launch.ts';
+import { extraArgs, headlessLaunchOf, launchOf, parseHeadlessArgs, promptProblem, type HeadlessArgs, type HeadlessSpawner, type Prompt, type RunSpawner } from './launch.ts';
 import { parseSeatsArgs } from './seats.ts';
 import { startLive, type FixRunner, type Keyboard, type Notifier, type Screen } from './live.ts';
 
 export type { ProbeIo } from '../probes/index.ts';
 export type { RouteMode, RouteOutput } from '../render/index.ts';
 export type { Keyboard, Screen } from './live.ts';
-export type { RunSpawner } from './launch.ts';
+export type { HeadlessSpawner, RunSpawner } from './launch.ts';
 export { isMaxAge } from './launch.ts';
 
 export type JsonOutput = { out: string; err: string };
@@ -462,6 +464,128 @@ export async function runRun(io: ProbeIo, env: Record<string, string | undefined
   const launch = launchOf(routed.out.trimEnd(), extraArgs(args), env, io.reader.homeDir());
   const status = await spawner.spawn(launch);
   return status === 'missing' ? missingCommand(launch.command) : { err: '', code: status };
+}
+
+const HEADLESS_SIGNALS: NodeJS.Signals[] = ['SIGTERM', 'SIGHUP', 'SIGINT'];
+const TIMEOUT_STATUS = 124;
+
+function stdinOf(path: string | undefined): 'ignore' | number {
+  return path === undefined ? 'ignore' : openSync(path, 'r');
+}
+
+function closeInput(input: 'ignore' | number): void {
+  if (input !== 'ignore') closeSync(input);
+}
+
+function deadlineOf(child: ChildProcess, timeoutMs: number | undefined, timer: { timedOut: boolean }): NodeJS.Timeout | undefined {
+  if (timeoutMs === undefined) return undefined;
+  return setTimeout(() => {
+    timer.timedOut = true;
+    void terminate(child);
+  }, timeoutMs);
+}
+
+function supervised(child: ChildProcess, timeoutMs: number | undefined): Promise<number | 'missing' | 'timeout'> {
+  const forwarders = HEADLESS_SIGNALS.map((signal) => [signal, () => child.kill(signal)] as const);
+  forwarders.forEach(([signal, forward]) => process.on(signal, forward));
+  const timer = { timedOut: false };
+  const deadline = deadlineOf(child, timeoutMs, timer);
+  return new Promise((resolveStatus) => {
+    const finish = (status: number | 'missing' | 'timeout') => {
+      clearTimeout(deadline);
+      forwarders.forEach(([signal, forward]) => process.off(signal, forward));
+      resolveStatus(status);
+    };
+    child.once('error', () => finish('missing'));
+    child.once('close', (code, signal) => finish(timer.timedOut ? 'timeout' : statusOf(code, signal)));
+  });
+}
+
+export const realHeadlessSpawner: HeadlessSpawner = {
+  spawn({ command, args, env, cwd, stdin, timeoutMs }) {
+    const input = stdinOf(stdin);
+    const child = spawn(command, args, { cwd, env: { ...process.env, ...env }, stdio: [input, 'inherit', 'inherit'] });
+    closeInput(input);
+    return supervised(child, timeoutMs);
+  }
+};
+
+type HeadlessPlan = HeadlessArgs & { lines: NonNullable<Routes['lines']>; prompt: Prompt };
+
+type Prepared = { plan: HeadlessPlan; output?: undefined } | { plan?: undefined; output: RunOutput };
+
+const NOT_ROUTED: RunOutput = { err: 'none\n', code: 1 };
+const KILO_REFUSED: RunOutput = { err: `dandelion: kilo balance at or below $${KILO_BALANCE_FLOOR}\n`, code: 1 };
+
+function usageOutput(problem: string): RunOutput {
+  return { err: `dandelion: run: ${problem}\n`, code: 2 };
+}
+
+function faultOutput(fault: RoutesFault): RunOutput {
+  return { err: renderRoutesFault(fault).err, code: 2 };
+}
+
+function readPrompt(path: string): Prompt | undefined {
+  try {
+    const bytes = readFileSync(path);
+    return { path: resolve(path), text: bytes.toString('utf8'), bytes: bytes.length };
+  } catch {
+    return undefined;
+  }
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function preparedInputs(args: HeadlessArgs, lines: HeadlessPlan['lines']): Prepared {
+  const prompt = readPrompt(args.promptFile);
+  if (prompt === undefined) return { output: usageOutput(`prompt file ${args.promptFile} cannot be read`) };
+  return isDirectory(args.cwd) ? { plan: { ...args, cwd: resolve(args.cwd), lines, prompt } } : { output: usageOutput(`--cwd ${args.cwd} is not a directory`) };
+}
+
+function prepareHeadless(env: Record<string, string | undefined>, args: string[]): Prepared {
+  const parsed = parseHeadlessArgs(args);
+  if (parsed.problem !== undefined) return { output: usageOutput(parsed.problem) };
+  const { lines, fault } = routesOf(env);
+  return fault === undefined ? preparedInputs(parsed.args, lines) : { output: faultOutput(fault) };
+}
+
+async function headlessLine(io: ProbeIo, env: Record<string, string | undefined>, plan: HeadlessPlan, clock: Clock): Promise<string | RunOutput> {
+  if (plan.seat !== undefined) return plan.seat;
+  const request: CachedRouteRequest = { mode: plan.high ? 'high' : 'headroom', ...clock, maxAge: plan.maxAge };
+  const routed = await authorizedRoute(io, env, request, { lines: plan.lines }, await cachedUsages(io, env, request));
+  return routed.code === 0 ? routed.out.trimEnd() : NOT_ROUTED;
+}
+
+async function kiloRefused(io: ProbeIo, plan: HeadlessPlan, line: string): Promise<boolean> {
+  return plan.seat !== undefined && line.endsWith(' kilo') && !launchableKilo(await freshKiloBalance(io.runner));
+}
+
+function statusOutput(status: number | 'missing' | 'timeout', command: string): RunOutput {
+  if (status === 'missing') return missingCommand(command);
+  return { err: '', code: status === 'timeout' ? TIMEOUT_STATUS : status };
+}
+
+async function launchHeadless(io: ProbeIo, env: Record<string, string | undefined>, plan: HeadlessPlan, line: string, spawner: HeadlessSpawner): Promise<RunOutput> {
+  const base = launchOf(line, [], env, io.reader.homeDir());
+  const template = swarmOf(plan.lines).headless[base.command];
+  if (template === undefined) return usageOutput(`no headless template for ${base.command}`);
+  const problem = promptProblem(base.command, template, plan.prompt);
+  if (problem !== undefined) return usageOutput(problem);
+  if (await kiloRefused(io, plan, line)) return KILO_REFUSED;
+  return statusOutput(await spawner.spawn(headlessLaunchOf(base, template, plan.prompt, plan)), base.command);
+}
+
+export async function runHeadless(io: ProbeIo, env: Record<string, string | undefined>, args: string[], clock: Clock, spawner: HeadlessSpawner): Promise<RunOutput> {
+  const prepared = prepareHeadless(env, args);
+  if (prepared.output !== undefined) return prepared.output;
+  const line = await headlessLine(io, env, prepared.plan, clock);
+  return typeof line === 'string' ? launchHeadless(io, env, prepared.plan, line, spawner) : line;
 }
 
 export function processZone(): string {

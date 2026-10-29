@@ -45,6 +45,7 @@ export {
   swarmOf,
   type ChainSkip,
   type ChainWin,
+  type HeadlessTemplate,
   type HighDecision,
   type Limits,
   type RouteDecision,

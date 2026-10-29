@@ -1,60 +1,19 @@
 import { ACCOUNT_IDS, type SeatsOutputRequest } from '../render/index.ts';
+import { tokenize, valuesOf, type Tokens } from './args.ts';
 import { isMaxAge } from './launch.ts';
 
 type SeatsArgs = Omit<SeatsOutputRequest, 'now' | 'zone'> & { maxAge?: number };
 
 type Parsed = { args: SeatsArgs; problem?: undefined } | { args?: undefined; problem: string };
 
-type Tokens = { switches: string[]; values: [string, string][]; positionals: string[]; problems: string[]; maxAge?: string };
-
 const SWITCHES = ['--pack', '--spread', '--json', '--why'];
 const VALUED = ['--held', '--include', '--exclude', '--trip', '--cap'];
-const NUMBER = /^-?\d+(\.\d+)?$/;
 const WHOLE = /^\d+$/;
 const MAX_REQUESTED = 200;
 const MAX_HELD = 200;
 const MAX_CAP = 20;
 const MIN_TRIP = 50;
 const MAX_TRIP = 90;
-
-function takeValue(args: string[], index: number, tokens: Tokens): number {
-  const [flag, value] = [args[index], args[index + 1]];
-  if (value === undefined) tokens.problems.push(`${flag} needs a value`);
-  else tokens.values.push([flag, value]);
-  return index + 2;
-}
-
-function takeMaxAge(args: string[], index: number, tokens: Tokens): number {
-  const value = args[index + 1];
-  if (!NUMBER.test(String(value))) return index + 1;
-  tokens.maxAge = value;
-  return index + 2;
-}
-
-function takeOther(arg: string, index: number, tokens: Tokens): number {
-  if (arg.startsWith('-') && !NUMBER.test(arg)) tokens.problems.push(`unknown option ${arg}`);
-  else tokens.positionals.push(arg);
-  return index + 1;
-}
-
-function takeSwitch(arg: string, index: number, tokens: Tokens): number {
-  tokens.switches.push(arg);
-  return index + 1;
-}
-
-function take(args: string[], index: number, tokens: Tokens): number {
-  const arg = args[index];
-  if (SWITCHES.includes(arg)) return takeSwitch(arg, index, tokens);
-  if (arg === '--max-age') return takeMaxAge(args, index, tokens);
-  return VALUED.includes(arg) ? takeValue(args, index, tokens) : takeOther(arg, index, tokens);
-}
-
-function tokenize(args: string[]): Tokens {
-  const tokens: Tokens = { switches: [], values: [], positionals: [], problems: [] };
-  let index = 0;
-  while (index < args.length) index = take(args, index, tokens);
-  return tokens;
-}
 
 function isWholeIn(value: string, low: number, high: number): boolean {
   return WHOLE.test(value) && Number(value) >= low && Number(value) <= high;
@@ -109,10 +68,6 @@ function firstProblem(tokens: Tokens): string | undefined {
   return [tokens.problems[0], countProblem(tokens), modeProblem(tokens), valuesProblem(tokens)].find((problem) => problem !== undefined);
 }
 
-function valuesOf(tokens: Tokens, flag: string): string[] {
-  return tokens.values.filter(([each]) => each === flag).map(([, value]) => value);
-}
-
 function countsOf(tokens: Tokens, flag: string): Record<string, number> {
   const items = valuesOf(tokens, flag).flatMap((value) => value.split(','));
   return Object.fromEntries(items.map((item) => item.split('=')).map(([id, count]) => [id, Number(count)]));
@@ -143,7 +98,7 @@ function seatsArgsOf(tokens: Tokens): SeatsArgs {
 }
 
 export function parseSeatsArgs(args: string[]): Parsed {
-  const tokens = tokenize(args);
+  const tokens = tokenize(args, { switches: SWITCHES, valued: VALUED });
   const problem = firstProblem(tokens);
   return problem === undefined ? { args: seatsArgsOf(tokens) } : { problem };
 }

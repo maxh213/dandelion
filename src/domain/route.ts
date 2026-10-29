@@ -6,7 +6,7 @@ type RoutableUsage = { id: string; status: string; windows: RoutableWindow[]; ba
 
 type RouteEntry = { standard: string; max: string; limit?: number };
 
-type HeadlessTemplate = { before: string[]; after: string[]; stdin: boolean };
+export type HeadlessTemplate = { before: string[]; after: string[]; stdin: boolean };
 
 type Counts = Partial<Record<string, number>>;
 

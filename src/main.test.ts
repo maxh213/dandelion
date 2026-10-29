@@ -26,7 +26,7 @@ vi.mock('./app/index.ts', async (importOriginal) => {
 });
 
 const { main, runIfMain } = await import('./main.ts');
-const { runJson, runLine, runWaybar, runRoute, runRun, realRunSpawner } = await import('./app/index.ts');
+const { runJson, runLine, runWaybar, runRoute, runRun, realRunSpawner, realHeadlessSpawner } = await import('./app/index.ts');
 const { highRouteLine, routeLine } = await import('./domain/index.ts');
 
 const routeIo: ProbeIo = {
@@ -1233,5 +1233,57 @@ describe('runIfMain seats', () => {
     for (const command of ['dandelion seats <N>', 'dandelion seats <N> --spread', 'dandelion seats <N> --json']) {
       expect(output()).toMatch(new RegExp(`^  ${command.replace(/[-<>]/g, '\\$&')} +\\S`, 'm'));
     }
+  });
+});
+
+describe('runIfMain run --headless', () => {
+  function headlessScratch(): { dir: string; env: Record<string, string>; prompt: string } {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'dandelion-headless-main-')));
+    const file = join(dir, 'routes.json');
+    writeFileSync(file, JSON.stringify({ ...LINES, headless: { claude: { before: [], after: ['-p'], stdin: true } } }));
+    const prompt = join(dir, 'prompt.md');
+    writeFileSync(prompt, 'Create ok.txt');
+    return { dir, env: { DANDELION_ROUTES_FILE: file, DANDELION_STATE_FILE: join(dir, 'state.json') }, prompt };
+  }
+
+  it('launches the seat headless in --cwd and exits with the child code', async () => {
+    const { dir, env, prompt } = headlessScratch();
+    const spawn = vi.spyOn(realHeadlessSpawner, 'spawn').mockResolvedValue(6);
+    try {
+      vi.mocked(runRun).mockClear();
+      const { proc, output, errors } = procOf(['node', MAIN, 'run', '--headless', '--seat', 'model-a high claude', '--prompt-file', prompt, '--cwd', dir], true, true, env);
+      await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+      expect(spawn).toHaveBeenCalledExactlyOnceWith({ command: 'claude', args: ['--model', 'model-a', '--effort', 'high', '-p'], env: {}, cwd: dir, stdin: prompt, timeoutMs: undefined });
+      expect([output(), errors()]).toEqual(['', '']);
+      expect(proc.exit).toHaveBeenCalledExactlyOnceWith(6);
+      expect(runRun).not.toHaveBeenCalled();
+    } finally {
+      spawn.mockRestore();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('prints a dandelion: run: line and exits 2 for a usage error', async () => {
+    const spawn = vi.spyOn(realHeadlessSpawner, 'spawn').mockResolvedValue(0);
+    const { proc, output, errors } = procOf(['node', MAIN, 'run', '--headless', '--cwd', '.'], true, true);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect([output(), errors()]).toEqual(['', 'dandelion: run: --prompt-file is required\n']);
+    expect(proc.exit).toHaveBeenCalledExactlyOnceWith(2);
+    expect(spawn).not.toHaveBeenCalled();
+    spawn.mockRestore();
+  });
+
+  it('leaves run -- --headless to plain run, which passes it to the CLI', async () => {
+    const spawn = vi.spyOn(realRunSpawner, 'spawn').mockResolvedValue(0);
+    const { proc } = procOf(['node', MAIN, 'run', '--', '--headless'], true, true);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(spawn.mock.calls[0][0].args).toEqual(['--model', 'model-a', '--effort', 'high', '--headless']);
+    spawn.mockRestore();
+  });
+
+  it('lists run --headless in the usage text', async () => {
+    const { proc, output } = procOf(['node', MAIN, '--help'], true, true);
+    await runIfMain(MAIN_URL, MAIN, routeIo, proc);
+    expect(output().split('\n')).toContain('  dandelion run --headless --prompt-file <path> --cwd <dir>');
   });
 });
