@@ -1103,7 +1103,7 @@ describe('main', () => {
     const route = readme.split('## Route')[1].split('## ')[0];
     for (const row of [
       '| 1 | claude, claude-work, claude-animus | `fable`: the Fable weekly window plus session | `high.fable` |',
-      '| 2 | codex | (all) | `high.codex` |',
+      '| 2 | codex, codex-animus | (all) | `high.codex` |',
       '| 3 | cursor | (all) | `high.cursor` |',
       '| 4 | claude, claude-work, claude-animus | (all) | `high.opus` |',
       '| 5 | grok | (all) | `high.grok` |',
@@ -1112,7 +1112,7 @@ describe('main', () => {
     expect(route).toMatch(/except the windows another entry of the same provider matches/);
     expect(route).toMatch(/every gating window is under 90% used; at 90% it pops down/);
     expect(route).toMatch(/Ineligible, unavailable and failed providers are skipped/);
-    expect(route).toContain('`--high` does not use codex-animus');
+    expect(route).toContain('between `codex` and `codex-animus` at rank 2 the same rule applies and a tie goes to `codex`');
     expect(route).toMatch(/both `route` and `route --high` print `<line> <provider id>`/);
     expect(route).toMatch(/`claude-work` means launching claude with `CLAUDE_CONFIG_DIR` set to `DANDELION_CLAUDE_WORK_CONFIG_DIR` \(default `~\/\.claude-work`\)/);
   });

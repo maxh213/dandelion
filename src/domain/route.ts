@@ -296,7 +296,7 @@ type ChainEntry = { rank: number; name: string; providers: readonly string[]; ma
 
 export const HIGH_CHAIN: readonly ChainEntry[] = [
   { rank: 1, name: 'fable', providers: ['claude', 'claude-work', 'claude-animus'], matcher: 'fable' },
-  { rank: 2, name: 'codex', providers: ['codex'] },
+  { rank: 2, name: 'codex', providers: ['codex', 'codex-animus'] },
   { rank: 3, name: 'cursor', providers: ['cursor'] },
   { rank: 4, name: 'opus', providers: ['claude', 'claude-work', 'claude-animus'] },
   { rank: 5, name: 'grok', providers: ['grok'] },

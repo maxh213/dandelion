@@ -586,7 +586,7 @@ describe('highRouteLine', () => {
   it('pins the chain entry by entry', () => {
     expect(HIGH_CHAIN).toEqual([
       { rank: 1, name: 'fable', providers: ['claude', 'claude-work', 'claude-animus'], matcher: 'fable' },
-      { rank: 2, name: 'codex', providers: ['codex'] },
+      { rank: 2, name: 'codex', providers: ['codex', 'codex-animus'] },
       { rank: 3, name: 'cursor', providers: ['cursor'] },
       { rank: 4, name: 'opus', providers: ['claude', 'claude-work', 'claude-animus'] },
       { rank: 5, name: 'grok', providers: ['grok'] },
@@ -610,9 +610,10 @@ describe('highRouteLine', () => {
     ['kimi and kilo are never in the chain', 'kimi: 5h rolling 0; kilo: no windows', [], 'none'],
     ['codex is rank 2, gated on every window', 'codex: 5h rolling 10, weekly weekly 50; cursor: total weekly 10', [], 'model-i xhigh codex'],
     ['codex trips at 90 on its 5h and cursor takes rank 3', 'codex: 5h rolling 90, weekly weekly 10; cursor: total weekly 10', [], 'model-f cursor'],
-    ['codex-animus is never in the chain', 'codex-animus: 5h rolling 10', [], 'none'],
-    ['codex-animus does not take rank 2 when codex is tripped', 'codex: 5h rolling 95; codex-animus: 5h rolling 10; cursor: total weekly 10', [], 'model-f cursor'],
-    ['a less used codex-animus does not take rank 2', 'codex: 5h rolling 60; codex-animus: 5h rolling 20', [], 'model-i xhigh codex'],
+    ['codex-animus is rank 2 too', 'codex-animus: 5h rolling 10', [], 'model-i xhigh codex-animus'],
+    ['codex-animus takes rank 2 when codex is tripped', 'codex: 5h rolling 95; codex-animus: 5h rolling 10; cursor: total weekly 10', [], 'model-i xhigh codex-animus'],
+    ['a less used codex-animus takes rank 2', 'codex: 5h rolling 60; codex-animus: 5h rolling 20', [], 'model-i xhigh codex-animus'],
+    ['equal use at rank 2 goes to codex', 'codex: 5h rolling 20; codex-animus: 5h rolling 20', [], 'model-i xhigh codex'],
     ['resetsAt is ignored', 'grok: credits weekly 50 resetting 1 h from now; cursor: total weekly 60', [], 'model-f cursor'],
     ['a missing Fable window counts as 0', 'claude: session rolling 10, weekly weekly 50', [], 'model-h1 max claude'],
     ['all-models does not gate fable', 'claude: session rolling 10, weekly weekly 95, weekly Fable weekly 10', [], 'model-h1 max claude'],
